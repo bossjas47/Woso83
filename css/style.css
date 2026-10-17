@@ -1,0 +1,93 @@
+/* ========================================================
+   TACTICAL STORE — Apple Design System Master Stylesheet
+   Reference: DESIGN.MD (Gallery White & Studio Mist)
+   ======================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden !important;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Prompt', sans-serif !important;
+  background-color: #ffffff;
+  color: #1d1d1f;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.224px;
+}
+
+body, input, textarea, select, button, table, td, th {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Prompt', sans-serif !important;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Outfit', 'Prompt', sans-serif !important;
+}
+
+.font-mono, code, pre {
+  font-family: 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Subtle Apple Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f5f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d6d6d6;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #86868b;
+}
+
+/* Apple Studio Cards & Badges */
+.apple-card {
+  background-color: #ffffff !important;
+  border: 1px solid #d6d6d6 !important;
+  border-radius: 28px !important;
+  box-shadow: none !important;
+}
+
+.apple-pricing-pill {
+  background-color: #0071e3 !important;
+  color: #ffffff !important;
+  border-radius: 9999px !important;
+  border: none !important;
+  font-weight: 500 !important;
+  transition: opacity 0.2s ease !important;
+}
+.apple-pricing-pill:hover {
+  opacity: 0.9 !important;
+}
+
+.apple-explore-pill {
+  background-color: transparent !important;
+  color: #1d1d1f !important;
+  border: 1px solid #d6d6d6 !important;
+  border-radius: 9999px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+.apple-explore-pill:hover {
+  background-color: #f5f5f7 !important;
+  border-color: #86868b !important;
+}
+
+/* Clean Input Fields */
+input:focus, textarea:focus, select:focus {
+  outline: none !important;
+  border-color: #0071e3 !important;
+}

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>เติมเงินเข้าระบบ (Topup Wallet) — TACTICAL STORE</title>
+  
+  <!-- Fonts: SF Pro Display / SF Pro Text Fallbacks & Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gallery: '#ffffff',
+            mist: '#f5f5f7',
+            frost: '#fafafc',
+            hairline: '#d6d6d6',
+            control: '#e6e6e8',
+            ink: '#1d1d1f',
+            slate: '#707070',
+            steel: '#86868b',
+            appleBlue: '#0066cc',
+            pricingBlue: '#0071e3',
+            launchOrange: '#b64400'
+          },
+          fontFamily: {
+            heading: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Outfit', 'Prompt', 'sans-serif'],
+            body: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Prompt', 'sans-serif'],
+            mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace']
+          },
+          borderRadius: {
+            'card': '28px',
+            'links': '10px',
+            'pill': '36px',
+            'images': '28px',
+            'input': '980px',
+            'button': '9999px',
+            'nav': '20px'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --color-gallery-white: #ffffff;
+      --color-studio-mist: #f5f5f7;
+      --color-paper-frost: #fafafc;
+      --color-hairline-silver: #d6d6d6;
+      --color-control-gray: #e6e6e8;
+      --color-ink: #1d1d1f;
+      --color-slate: #707070;
+      --color-steel: #86868b;
+      --color-apple-blue: #0066cc;
+      --color-pricing-blue: #0071e3;
+      --color-launchOrange: #b64400;
+
+      --font-sf-pro-display: 'SF Pro Display', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-sf-pro-text: 'SF Pro Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+      --radius-cards: 28px;
+      --radius-links: 10px;
+      --radius-pills: 36px;
+      --radius-images: 28px;
+      --radius-inputs: 980px;
+      --radius-buttons: 9999px;
+      --radius-navigation: 20px;
+    }
+
+    body {
+      background-color: var(--color-gallery-white);
+      color: var(--color-ink);
+      font-family: var(--font-sf-pro-text);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.224px;
+    }
+
+    .apple-card {
+      background-color: var(--color-gallery-white);
+      border-radius: var(--radius-cards);
+      border: 1px solid var(--color-hairline-silver);
+      box-shadow: none;
+    }
+
+    .apple-pricing-pill {
+      background-color: var(--color-pricing-blue) !important;
+      color: var(--color-gallery-white) !important;
+      border-radius: var(--radius-buttons);
+      font-size: 13px;
+      line-height: 18px;
+      letter-spacing: -0.12px;
+      font-weight: 500;
+      transition: opacity 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .apple-pricing-pill:hover {
+      opacity: 0.92;
+    }
+
+    .apple-explore-pill {
+      background-color: transparent !important;
+      color: var(--color-ink) !important;
+      border: 1px solid var(--color-hairline-silver) !important;
+      border-radius: var(--radius-buttons);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .apple-explore-pill:hover {
+      background-color: var(--color-studio-mist) !important;
+      border-color: var(--color-steel) !important;
+    }
+
+    .apple-input {
+      background-color: var(--color-gallery-white);
+      border: 1px solid var(--color-hairline-silver);
+      border-radius: 14px;
+      color: var(--color-ink);
+      font-size: 13px;
+      transition: border-color 0.2s ease;
+    }
+    .apple-input:focus {
+      outline: none;
+      border-color: var(--color-pricing-blue);
+    }
+  </style>
+
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/transition.css">
+  <link rel="stylesheet" href="../css/theme.css">
+  <script src="../js/theme.js"></script>
+  <script src="../js/transition.js" defer></script>
+  <script type="module" src="../js/shell.js"></script>
+</head>
+<body class="selection:bg-pricingBlue/20 selection:text-ink pb-24 md:pb-16 min-h-screen">
+
+  <!-- Toast Notification Wrapper -->
+  <div id="toast-box" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 scale-95 flex items-center gap-3 bg-gallery border border-hairline text-ink px-5 py-2.5 rounded-pill shadow-sm">
+    <span class="w-2 h-2 rounded-full bg-appleBlue shrink-0"></span>
+    <span id="toast-text" class="text-xs font-medium tracking-tight">ข้อความแจ้งเตือน</span>
+  </div>
+
+  <!-- Global Store Navigation (Apple 48px Gallery Navigation Bar) -->
+  <header class="sticky top-0 z-40 bg-gallery/90 backdrop-blur-xl border-b border-hairline">
+    <nav class="max-w-[1200px] mx-auto px-4 sm:px-6 h-12 flex justify-between items-center text-xs">
+      
+      <!-- Brand Logo -->
+      <a href="../index.html" class="flex items-center gap-2 group cursor-pointer">
+        <div class="w-6 h-6 rounded-full bg-ink text-gallery flex items-center justify-center font-bold text-xs group-hover:bg-pricingBlue transition-colors">
+          <svg class="w-3.5 h-3.5 stroke-gallery fill-none" stroke-width="2.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+          </svg>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span class="font-heading font-semibold text-sm tracking-tight text-ink">TACTICAL</span>
+          <span class="text-[10px] text-slate font-normal uppercase tracking-wider">Store</span>
+        </div>
+      </a>
+
+      <!-- Center Desktop Navigation Links -->
+      <div class="hidden md:flex items-center gap-7 text-[12px] tracking-[-0.12px]">
+        <a href="../index.html" class="text-slate hover:text-ink transition-colors">หน้าแรก</a>
+        <a href="category.html" class="text-slate hover:text-ink transition-colors">สินค้า</a>
+        <a href="topup.html" class="text-ink font-semibold flex items-center gap-1.5 transition-colors">
+          <span>เติมเงิน</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-pricingBlue"></span>
+        </a>
+        <a href="account.html" class="text-slate hover:text-ink transition-colors">บัญชีผู้ใช้</a>
+      </div>
+
+      <!-- Action Area -->
+      <div class="flex items-center gap-3">
+        <!-- Auth Area -->
+        <div id="auth-logged-out" class="flex items-center gap-2">
+          <a href="login.html?mode=login" class="text-slate hover:text-ink text-[12px] px-2 py-1 transition-colors">เข้าสู่ระบบ</a>
+          <a href="login.html?mode=register" class="apple-pricing-pill px-3.5 py-1 text-xs">สมัครสมาชิก</a>
+        </div>
+
+        <div id="auth-logged-in" class="hidden items-center gap-2">
+          <span id="user-display-name" class="font-medium text-xs max-w-[80px] truncate text-ink">Agent</span>
+          <button onclick="handleSignOut()" class="text-steel hover:text-red-500 p-1 transition-colors" title="ออกจากระบบ">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          </button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Apple Breadcrumbs Strip -->
+  <div class="bg-mist border-b border-hairline py-2.5 px-4 text-xs text-slate">
+    <div class="max-w-[1200px] mx-auto flex items-center gap-2">
+      <a href="../index.html" class="hover:text-ink transition-colors">หน้าแรก</a>
+      <span class="text-steel font-mono">/</span>
+      <span class="text-ink font-medium">เติมเงินเข้าระบบ (Topup Wallet)</span>
+    </div>
+  </div>
+
+  <!-- MAIN TOPUP CONTAINER -->
+  <main class="max-w-[1100px] mx-auto px-4 sm:px-6 py-10 space-y-10">
+
+    <!-- HERO SECTION: WALLET BALANCE CARD (Apple 28px Card) -->
+    <div class="apple-card p-6 sm:p-8 bg-gallery border border-hairline relative overflow-hidden">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <span class="text-launchOrange text-[11px] font-semibold tracking-wider uppercase block mb-1">
+            TACTICAL STORE WALLET VAULT
+          </span>
+          <h1 class="text-2xl sm:text-3xl font-heading font-semibold text-ink tracking-tight">
+            กระเป๋าเงินและเครดิตคงเหลือ
+          </h1>
+          <p class="text-slate text-xs mt-1">
+            เติมเครดิตด้วยพร้อมเพย์หรือซองของขวัญ TrueMoney แอดมินจะตรวจสอบและเติมเข้ากระเป๋าให้
+          </p>
+        </div>
+
+        <!-- Big Balance Display -->
+        <div class="bg-mist p-5 rounded-2xl border border-hairline text-right shrink-0 min-w-[200px]">
+          <span class="text-[11px] text-slate font-medium block">ยอดเครดิตพร้อมใช้:</span>
+          <div id="hero-wallet-balance" class="text-3xl sm:text-4xl font-heading font-bold text-pricingBlue tracking-tight">
+            ฿0.00
+          </div>
+          <span class="text-[10px] text-steel font-mono mt-0.5 block">1 เครดิต = 1.00 บาท (THB)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-COLUMN SECTION: PACKAGE PRESETS & PAYMENT GATEWAY -->
+    <div class="grid lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- LEFT: TOPUP PACKAGES PRESET GRID (col-span-7) -->
+      <div class="lg:col-span-7 space-y-5">
+        <div class="flex items-center justify-between pb-2 border-b border-hairline">
+          <div>
+            <h2 class="text-base sm:text-lg font-heading font-semibold text-ink">
+              1. เลือกจำนวนเงินที่ต้องการเติม
+            </h2>
+            <p class="text-xs text-slate">เติมตามแพ็กเกจรับโบนัสเครดิตพิเศษเพิ่มฟรี</p>
+          </div>
+          <span class="text-[10px] text-appleBlue font-medium">มีโบนัสพิเศษ</span>
+        </div>
+
+        <!-- Preset Cards Grid (Apple 28px Cards) -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          
+          <!-- Pack 50 -->
+          <button type="button" onclick="selectTopupAmount(50, 0)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border border-hairline" data-amt="50">
+            <span class="text-xs font-bold text-ink block mb-0.5">฿50.00</span>
+            <span class="text-[11px] text-slate block font-medium">ได้รับ 50 เครดิต</span>
+            <span class="text-[10px] text-steel block mt-2">ยอดนิยม</span>
+          </button>
+
+          <!-- Pack 100 -->
+          <button type="button" onclick="selectTopupAmount(100, 0)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border border-hairline" data-amt="100">
+            <span class="text-xs font-bold text-ink block mb-0.5">฿100.00</span>
+            <span class="text-[11px] text-slate block font-medium">ได้รับ 100 เครดิต</span>
+            <span class="text-[10px] text-steel block mt-2">เริ่มต้น</span>
+          </button>
+
+          <!-- Pack 300 -->
+          <button type="button" onclick="selectTopupAmount(300, 0)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border border-hairline" data-amt="300">
+            <span class="text-xs font-bold text-ink block mb-0.5">฿300.00</span>
+            <span class="text-[11px] text-slate block font-medium">ได้รับ 300 เครดิต</span>
+            <span class="text-[10px] text-steel block mt-2">สายฟาร์ม</span>
+          </button>
+
+          <!-- Pack 500 + Bonus 25 -->
+          <button type="button" onclick="selectTopupAmount(500, 25)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border-2 border-pricingBlue shadow-sm" data-amt="500">
+            <span class="absolute top-2 right-2 bg-pricingBlue text-gallery text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+              +25 โบนัส
+            </span>
+            <span class="text-xs font-bold text-ink block mb-0.5">฿500.00</span>
+            <span class="text-[11px] text-pricingBlue font-bold block">ได้รับ 525 เครดิต</span>
+            <span class="text-[10px] text-launchOrange font-medium block mt-2"><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-9-1 2-2 3-3 3 0-3-1-5-3-7-1 4-4 6-4 10 0 5 3 10 7 10z"/></svg> สุดคุ้ม</span>
+          </button>
+
+          <!-- Pack 1,000 + Bonus 80 -->
+          <button type="button" onclick="selectTopupAmount(1000, 80)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border border-hairline" data-amt="1000">
+            <span class="absolute top-2 right-2 bg-launchOrange text-gallery text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+              +80 โบนัส
+            </span>
+            <span class="text-xs font-bold text-ink block mb-0.5">฿1,000.00</span>
+            <span class="text-[11px] text-pricingBlue font-bold block">ได้รับ 1,080 เครดิต</span>
+            <span class="text-[10px] text-steel block mt-2"><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z"/></svg> เซียนเกม</span>
+          </button>
+
+          <!-- Pack 2,000 + Bonus 200 -->
+          <button type="button" onclick="selectTopupAmount(2000, 200)" class="topup-pack-card apple-card p-4 text-left hover:border-pricingBlue transition-all rounded-2xl relative border border-hairline" data-amt="2000">
+            <span class="absolute top-2 right-2 bg-emerald-600 text-gallery text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+              +200 โบนัส
+            </span>
+            <span class="text-xs font-bold text-ink block mb-0.5">฿2,000.00</span>
+            <span class="text-[11px] text-pricingBlue font-bold block">ได้รับ 2,200 เครดิต</span>
+            <span class="text-[10px] text-steel block mt-2">VIP ระดับสูง</span>
+          </button>
+
+        </div>
+
+        <!-- Custom Amount Input -->
+        <div class="bg-mist p-4 rounded-2xl border border-hairline flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="text-left w-full sm:w-auto">
+            <label class="block text-xs font-semibold text-ink">หรือระบุยอดเงินที่ต้องการเอง:</label>
+            <span class="text-[10px] text-slate">ขั้นต่ำ 20.00 บาท</span>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <input 
+              id="custom-amount-input" 
+              type="number" 
+              min="20" 
+              step="1" 
+              placeholder="เช่น 150" 
+              oninput="handleCustomAmount(this.value)"
+              class="w-full sm:w-40 apple-input px-3.5 py-2 text-xs font-mono font-bold text-ink"
+            />
+            <span class="text-xs text-slate font-medium">บาท</span>
+          </div>
+        </div>
+
+        <!-- Live Calculation Summary Card -->
+        <div class="apple-card p-4 bg-mist border-hairline flex items-center justify-between text-xs">
+          <div>
+            <span class="text-slate">ยอดเงินที่ต้องชำระ:</span>
+            <strong id="summary-pay-amount" class="text-ink font-bold text-sm ml-1">฿500.00</strong>
+          </div>
+          <div>
+            <span class="text-slate">เครดิตที่จะได้รับ:</span>
+            <strong id="summary-get-credit" class="text-pricingBlue font-bold text-sm ml-1">525.00 เครดิต</strong>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: PAYMENT HUB & SUBMIT (col-span-5) -->
+      <div class="lg:col-span-5 space-y-5">
+        <div class="apple-card p-6 sm:p-7 space-y-5 bg-gallery">
+          
+          <div class="border-b border-hairline pb-3">
+            <h2 class="text-base sm:text-lg font-heading font-semibold text-ink">
+              2. ช่องทางชำระเงิน
+            </h2>
+            <p class="text-xs text-slate">แจ้งการชำระเงิน แล้วรอแอดมินตรวจสอบ</p>
+          </div>
+
+          <!-- Payment Mode Switcher Tabs -->
+          <div class="bg-mist p-1 rounded-button border border-hairline flex items-center text-xs">
+            <button type="button" id="tab-topup-promptpay" onclick="switchTopupPaymentTab('promptpay')" class="flex-1 py-1.5 rounded-button font-medium transition-all bg-gallery text-ink shadow-sm flex items-center justify-center gap-1.5">
+              <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7zM11 18h2"/></svg></span>
+              <span>PromptPay QR</span>
+            </button>
+            <button type="button" id="tab-topup-truemoney" onclick="switchTopupPaymentTab('truemoney')" class="flex-1 py-1.5 rounded-button font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5">
+              <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v13H3zM3 8l9 6 9-6M12 8V4"/></svg></span>
+              <span>ซอง TrueMoney</span>
+            </button>
+          </div>
+
+          <!-- TAB 1: PROMPTPAY QR & SLIP INPUT -->
+          <div id="panel-topup-promptpay" class="space-y-4 text-center">
+            
+            <!-- Dynamic QR Code Frame -->
+            <div class="bg-gallery p-3 rounded-2xl border border-hairline w-44 h-44 mx-auto flex items-center justify-center relative">
+              <img id="topup-qr-image" alt="PromptPay QR" class="w-full h-full object-contain">
+              <span id="topup-qr-empty" class="hidden text-xs text-slate text-center px-2">ยังไม่ได้ตั้งค่า QR<br>กรุณาติดต่อแอดมิน</span>
+            </div>
+
+            <div class="text-[11px] text-slate space-y-1">
+              <div>บัญชี: <strong id="topup-promptpay-name" class="text-ink">-</strong></div>
+              <div>ยอดที่ต้องโอน: <strong id="qr-exact-amount" class="text-pricingBlue font-bold text-sm">฿500.00</strong></div>
+            </div>
+
+            <div id="slip-upload-block" class="hidden text-left space-y-1.5 pt-2 border-t border-hairline">
+              <label for="topup-slip-file" class="block text-[11px] font-semibold text-ink">แนบรูปสลิปการโอน:</label>
+              <input id="topup-slip-file" type="file" accept="image/*" class="block w-full text-xs text-slate file:mr-3 file:rounded-full file:border-0 file:bg-mist file:px-4 file:py-2 file:text-xs file:text-ink" />
+              <span class="text-[10px] text-steel block">ระบบตรวจสลิปอัตโนมัติ ผ่านแล้วได้เครดิตทันที โอนตามยอดที่แสดงด้านบนเท่านั้น</span>
+            </div>
+
+            <div id="slip-ref-block" class="text-left space-y-1.5 pt-2 border-t border-hairline">
+              <label class="block text-[11px] font-semibold text-ink">
+                กรอกเลขอ้างอิงสลิป หรือ รหัสทำรายการ:
+              </label>
+              <input 
+                id="topup-slip-ref" 
+                type="text" 
+                placeholder="เช่น 2026101349810294 หรือ อัปโหลดสลิป" 
+                class="w-full apple-input px-3.5 py-2 text-xs font-mono"
+              />
+              <span class="text-[10px] text-steel block">
+                แอดมินตรวจสอบยอดก่อนเติมเครดิต โดยปกติใช้เวลาไม่นาน
+              </span>
+            </div>
+
+
+            <button 
+              id="btn-confirm-topup-pp" 
+              onclick="executeTopup('promptpay')" 
+              type="button" 
+              class="w-full apple-pricing-pill py-3.5 text-sm font-bold flex items-center justify-center gap-2 ">
+              <span>แจ้งการโอนเงิน</span>
+            </button>
+          </div>
+
+          <!-- TAB 2: TRUEMONEY VOUCHER LINK -->
+          <div id="panel-topup-truemoney" class="hidden space-y-4">
+            <div class="bg-mist p-3.5 rounded-2xl border border-hairline text-xs text-slate space-y-1">
+              <div class="font-semibold text-ink">วิธีเติมด้วยซองของขวัญ TrueMoney:</div>
+              <p>1. เข้าแอป TrueMoney > โอนเงิน > ส่งซองของขวัญ</p>
+              <p>2. ใส่ยอดเงิน <strong id="voucher-exact-note" class="text-pricingBlue font-bold">฿500.00</strong> (แบ่ง 1 คน)</p>
+              <p>3. คัดลอกลิงก์ซองของขวัญนำมาวางในช่องด้านล่าง</p>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-ink mb-1">
+                ลิงก์ซองของขวัญ TrueMoney:
+              </label>
+              <input 
+                id="topup-voucher-link" 
+                type="url" 
+                placeholder="https://gift.truemoney.com/campaign/?v=..." 
+                class="w-full apple-input px-3.5 py-2 text-xs font-mono"
+              />
+            </div>
+
+            <button 
+              id="btn-confirm-topup-tm" 
+              onclick="executeTopup('truemoney')" 
+              type="button" 
+              class="w-full apple-pricing-pill py-3.5 text-sm font-bold flex items-center justify-center gap-2 ">
+              <span>ส่งซองของขวัญเพื่อตรวจสอบ</span>
+            </button>
+          </div>
+
+          <p class="text-[11px] text-slate">เครดิตจะเข้ากระเป๋าหลังแอดมินตรวจสอบการชำระเงินแล้วเท่านั้น</p>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RECENT TRANSACTIONS LEDGER (Apple Studio Mist Section) -->
+    <div class="apple-card p-6 sm:p-8 space-y-4 bg-gallery border border-hairline">
+      <div class="flex items-center justify-between border-b border-hairline pb-3">
+        <div>
+          <h3 class="text-base font-heading font-semibold text-ink">
+            ประวัติการทำรายการเติมเงินของคุณ
+          </h3>
+          <p class="text-slate text-xs">รายการเติมเครดิตของคุณและสถานะการตรวจสอบ</p>
+        </div>
+        <button onclick="renderTopupHistory()" class="text-xs text-appleBlue hover:underline font-medium">
+          <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-3-6.2M20 4v5h-5"/></svg> รีเฟรช
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[520px] text-left text-xs whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-hairline text-slate uppercase text-[10px]">
+              <th class="py-2.5 px-3">เลขที่รายการ</th>
+              <th class="py-2.5 px-3">ช่องทาง</th>
+              <th class="py-2.5 px-3">ยอดเงินโอน</th>
+              <th class="py-2.5 px-3">เครดิตที่ได้</th>
+              <th class="py-2.5 px-3">สถานะ</th>
+              <th class="py-2.5 px-3 text-right">เวลา</th>
+            </tr>
+          </thead>
+          <tbody id="topup-history-tbody" class="divide-y divide-hairline">
+            <!-- Rendered via JS -->
+          </tbody>
+        </table>
+        
+        <div id="topup-history-empty" class="py-8 text-center text-slate text-xs">
+          ยังไม่มีประวัติการเติมเงินในบัญชีของคุณ
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module" src="../js/topup.js"></script>
+</body>
+</html>

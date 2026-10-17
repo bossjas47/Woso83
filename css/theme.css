@@ -1,0 +1,3 @@
+/* Dark mode by inverting the light design; media is inverted back so photos keep their colours. */
+html[data-theme="dark"] { filter: invert(1) hue-rotate(180deg); background: #fff; }
+html[data-theme="dark"] img, html[data-theme="dark"] video, html[data-theme="dark"] iframe { filter: invert(1) hue-rotate(180deg); }
