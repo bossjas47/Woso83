@@ -49,6 +49,16 @@ let CATS = DEFAULT_CATEGORIES;
 let CATS_FROM_DB = false;
 let toastTimeout = null;
 
+// ฟังก์ชันช่วยเติม https:// ให้อัตโนมัติหากผู้ใช้ไม่ได้พิมพ์มา
+const formatUrl = (url) => {
+  if (!url) return '';
+  let str = String(url).trim();
+  if (str && !/^https?:\/\//i.test(str) && !str.startsWith('/') && !str.startsWith('#') && !str.startsWith('data:')) {
+    return 'https://' + str;
+  }
+  return str;
+};
+
 // ==========================================
 // 2. TOAST NOTIFICATION UTILITY
 // ==========================================
@@ -109,11 +119,24 @@ function generateRandomSalt() {
 
 async function checkSecurityPinState() {
   const gate = document.getElementById('admin-auth-gate');
-  if (!gate) return; // ไม่ได้เปิดหน้า admin
+  if (!gate) return;
 
   const loadingState = document.getElementById('pin-state-loading');
   const setupState = document.getElementById('pin-state-setup');
   const unlockState = document.getElementById('pin-state-unlock');
+
+  // ตรวจสอบสิทธิ์ Admin จาก Firebase Auth (Custom Claims) แจ้งเตือนใน Console
+  onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      console.warn("⚠️ [Security] ยังไม่ได้ Login ด้วย Firebase Auth ระบบจะไม่สามารถเซฟข้อมูลลงฐานข้อมูลได้");
+    } else {
+      user.getIdTokenResult().then(idTokenResult => {
+        if (!idTokenResult.claims.admin) {
+          console.warn("⚠️ [Security] Login แล้วแต่ไม่มีสิทธิ์ 'admin: true' (Firestore Rules จะบล็อกการเขียนข้อมูลทั้งหมด)");
+        }
+      });
+    }
+  });
 
   if (sessionStorage.getItem('tactical_admin_pin_unlocked') === 'true') {
     unlockDashboardUI();
@@ -177,11 +200,11 @@ async function handlePinSetupSubmit(event) {
       await setDoc(doc(db, 'system_settings', 'admin_pin'), payload);
     } catch (e) {
       console.warn('Firestore set PIN error, saved locally:', e);
+      triggerToast('บันทึก PIN ลง Firebase ไม่สำเร็จ (บันทึกในเครื่องแทน)');
     }
     localStorage.setItem('tactical_admin_pin_vault', JSON.stringify(payload));
     
     currentSecurityDoc = payload;
-    triggerToast('บันทึกรหัส PIN ลงฐานข้อมูลสำเร็จ');
     sessionStorage.setItem('tactical_admin_pin_unlocked', 'true');
     setTimeout(() => unlockDashboardUI(), 600);
   } catch (err) {
@@ -272,8 +295,14 @@ function initPinDigitBoxes() {
   inputs[0]?.focus();
 }
 
-function promptResetPin() {
-  if (confirm('คุณต้องการรีเซ็ตรหัส PIN เพื่อตั้งใหม่ใช่หรือไม่?')) {
+// แก้บัค: ให้ลบ PIN ออกจาก Firestore ด้วย ไม่ใช่แค่ LocalStorage
+async function promptResetPin() {
+  if (confirm('คุณต้องการรีเซ็ตรหัส PIN เพื่อตั้งใหม่ใช่หรือไม่? (ระบบจะลบรหัสในฐานข้อมูลด้วย)')) {
+    try {
+      await deleteDoc(doc(db, 'system_settings', 'admin_pin'));
+    } catch (e) {
+      console.warn('Cannot delete PIN from Firestore:', e);
+    }
     sessionStorage.removeItem('tactical_admin_pin_unlocked');
     localStorage.removeItem('tactical_admin_pin_vault');
     location.reload();
@@ -360,7 +389,7 @@ function renderAdminProducts(customList = null) {
         </td>
         <td class="py-3 px-4 text-right">
           <div class="inline-flex items-center gap-1.5 justify-end">
-            <!-- ปุ่มสต็อก (Stock Replenishment Button) -->
+            <!-- ปุ่มสต็อก -->
             <button 
               onclick='openStockModal(${adminEsc(JSON.stringify(product.id))})' 
               title="เติมสต็อกไอดีชุดใหญ่" 
@@ -399,6 +428,27 @@ function filterAdminProducts(queryText) {
     p.tags.some(t => t.toLowerCase().includes(q))
   );
   renderAdminProducts(filtered);
+}
+
+// ฟังก์ชันสำหรับเปลี่ยนโหมด (Account / Service)
+function setProductType(type) {
+  const targetKind = type === 'service' ? 'service' : 'account';
+  const currentCatId = document.getElementById('prod-category').value;
+  const currentCat = categoryOf(CATS, currentCatId);
+  
+  if (!currentCat || currentCat.kind !== targetKind) {
+    const firstMatch = CATS.find(c => c.kind === targetKind);
+    if (firstMatch) {
+      document.getElementById('prod-category').value = firstMatch.id;
+    }
+  }
+  handleCategoryChange(document.getElementById('prod-category').value);
+}
+
+// ฟังก์ชันเปลี่ยนชื่อหัวข้อ Koen
+function setKoenLabelPreset(label) {
+  const el = document.getElementById('prod-koen-label');
+  if (el) el.value = label;
 }
 
 function openProductModal(productId = null) {
@@ -443,8 +493,10 @@ function openProductModal(productId = null) {
     document.getElementById('prod-service-min').value = '';
     updateImagePreview('');
   }
+  
   fillProductCategorySelect();
   if (productId) document.getElementById('prod-category').value = PRODUCTS.find(it => it.id === productId).category;
+  
   handleCategoryChange(document.getElementById('prod-category').value);
 
   modal.classList.remove('hidden');
@@ -470,9 +522,11 @@ async function handleProductFormSubmit(event) {
   const serviceUnit = document.getElementById('prod-service-unit').value.trim();
   const serviceMin = Math.floor(Number(document.getElementById('prod-service-min').value)) || 0;
   const stock = parseInt(document.getElementById('prod-stock').value, 10) || 0;
-  const image = document.getElementById('prod-image').value.trim();
+  
+  const image = formatUrl(document.getElementById('prod-image').value.trim());
   const galleryText = document.getElementById('prod-gallery').value.trim();
-  const gallery = galleryText ? galleryText.split('\n').map(s => s.trim()).filter(Boolean) : [image];
+  const gallery = galleryText ? galleryText.split('\n').map(s => formatUrl(s.trim())).filter(Boolean) : [image];
+  
   const tagsText = document.getElementById('prod-tags').value.trim();
   const tags = tagsText ? tagsText.split(',').map(s => s.trim()).filter(Boolean) : [];
   const desc = document.getElementById('prod-desc').value.trim();
@@ -494,7 +548,7 @@ async function handleProductFormSubmit(event) {
     name,
     category,
     koen,
-    price: farmModes ? Math.min(fId, fSelf) : price, // card shows the cheaper mode
+    price: farmModes ? Math.min(fId, fSelf) : price,
     stock,
     image,
     gallery,
@@ -502,7 +556,6 @@ async function handleProductFormSubmit(event) {
     desc,
     specs,
     productType: isSrv ? 'service' : 'account',
-    // blank = inherit the category default; deleteField clears an old override
     serviceUnit: isSrv && serviceUnit ? serviceUnit : deleteField(),
     serviceMin: isSrv && serviceMin > 0 ? serviceMin : deleteField(),
     packages: packages.length ? packages : deleteField(),
@@ -551,7 +604,10 @@ function setImagePreset(presetKey) {
 
 function updateImagePreview(url) {
   const el = document.getElementById('image-preview-element');
-  if (el) el.src = url || 'https://placehold.co/800x500/f5f5f7/86868b?text=Image+Preview';
+  if (el) {
+    const safeUrl = formatUrl(url);
+    el.src = safeUrl || 'https://placehold.co/800x500/f5f5f7/86868b?text=Image+Preview';
+  }
 }
 
 function openStockModalQuick() {
@@ -660,7 +716,7 @@ async function submitBulkStockImport() {
     return;
   }
   if (parsedStockItems.length === 0) {
-    triggerToast('กรุณาวางรายการไอดีอย่างน้อย 1 บรรทัด (เช่น email ... password ...)');
+    triggerToast('กรุณาวางรายการไอดีอย่างน้อย 1 บรรทัด');
     return;
   }
 
@@ -668,31 +724,37 @@ async function submitBulkStockImport() {
   if (btn) btn.disabled = true;
 
   try {
-    const batch = writeBatch(db);
     const prodRef = doc(db, 'products', currentStockProductId);
+    const CHUNK_SIZE = 400; 
 
-    parsedStockItems.forEach(item => {
-      const itemRef = doc(collection(prodRef, 'stock_items'));
-      batch.set(itemRef, {
-        username: item.username,
-        password: item.password,
-        status: 'available',
-        addedAt: serverTimestamp(),
-        addedBy: 'atest'
+    for (let i = 0; i < parsedStockItems.length; i += CHUNK_SIZE) {
+      const chunk = parsedStockItems.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+
+      chunk.forEach(item => {
+        const itemRef = doc(collection(prodRef, 'stock_items'));
+        batch.set(itemRef, {
+          username: item.username,
+          password: item.password,
+          status: 'available',
+          addedAt: serverTimestamp(),
+          addedBy: 'atest'
+        });
       });
-    });
 
-    batch.update(prodRef, {
-      stock: increment(parsedStockItems.length)
-    });
+      // แก้บัค: ให้บวกยอดสต็อกทุกรอบที่บันทึกสำเร็จ ป้องกันการพังกลางคัน
+      batch.update(prodRef, {
+        stock: increment(chunk.length)
+      });
 
-    await batch.commit();
+      await batch.commit();
+    }
 
     triggerToast(`นำเข้าไอดีสำเร็จเรียบร้อย (${parsedStockItems.length} ชิ้น)`);
     document.getElementById('bulk-stock-textarea').value = '';
     handleStockTextareaInput('');
-    
     loadAvailableStockItems(currentStockProductId);
+    
   } catch (err) {
     console.warn('Stock import fallback (local):', err);
     const key = 'tactical_stock_' + currentStockProductId;
@@ -706,7 +768,6 @@ async function submitBulkStockImport() {
     }))];
     localStorage.setItem(key, JSON.stringify(updated));
 
-    // Update local product stock
     const p = PRODUCTS.find(it => it.id === currentStockProductId);
     if (p) p.stock = (p.stock || 0) + parsedStockItems.length;
 
@@ -803,18 +864,40 @@ function fillProductCategorySelect() {
   const sel = document.getElementById('prod-category');
   if (!sel) return;
   const keep = sel.value;
+  // แก้บัค: Fallback กรณีไม่มีหมวดหมู่เลย
+  const safeCats = CATS.length > 0 ? CATS : [{ id: 'general', name: 'สินค้าทั่วไป', kind: 'account' }];
+  
   sel.innerHTML = ['account', 'service'].map(kind => {
-    const opts = CATS.filter(c => c.kind === kind).map(c => `<option value="${adminEsc(c.id)}">${adminEsc(c.name)}</option>`).join('');
-    return opts ? `<optgroup label="${adminEsc(KIND_LABEL[kind])}">${opts}</optgroup>` : '';
+    const opts = safeCats.filter(c => c.kind === kind).map(c => `<option value="${adminEsc(c.id)}">${adminEsc(c.name)}</option>`).join('');
+    return opts ? `<optgroup label="${adminEsc(KIND_LABEL[kind] || kind)}">${opts}</optgroup>` : '';
   }).join('');
-  if (keep && CATS.some(c => c.id === keep)) sel.value = keep;
+  if (keep && safeCats.some(c => c.id === keep)) sel.value = keep;
 }
 
-// Show the service box for service categories; the minimum and unit default to the category's.
 function handleCategoryChange(catId) {
-  const cat = categoryOf(CATS, catId);
-  const isSrv = cat?.kind === 'service';
+  // แก้บัค: Fallback กรณีไม่มีหมวดหมู่เลย
+  const fallbackCat = { id: 'general', name: 'สินค้าทั่วไป', kind: 'account' };
+  const cat = categoryOf(CATS, catId) || fallbackCat;
+  
+  const isSrv = cat.kind === 'service';
+  const type = isSrv ? 'service' : 'account';
+  
+  const btnAcc = document.getElementById('btn-type-account');
+  const btnSrv = document.getElementById('btn-type-service');
+  if (document.getElementById('prod-type')) document.getElementById('prod-type').value = type;
+  
+  if (btnAcc && btnSrv) {
+    if (type === 'account') {
+      btnAcc.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all bg-gallery text-ink shadow-sm border border-hairline/50 flex items-center justify-center gap-1.5';
+      btnSrv.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5';
+    } else {
+      btnSrv.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all bg-gallery text-ink shadow-sm border border-hairline/50 flex items-center justify-center gap-1.5';
+      btnAcc.className = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5';
+    }
+  }
+
   document.getElementById('service-config-box')?.classList.toggle('hidden', !isSrv);
+  
   if (!isSrv) return;
   const unit = document.getElementById('prod-service-unit');
   const min = document.getElementById('prod-service-min');
@@ -895,7 +978,6 @@ function toggleCategoryKind() {
   document.getElementById('cat-service-fields')?.classList.toggle('hidden', !isSrv);
 }
 
-// Writing the first category into an empty collection would hide the built-in ones, so copy them first.
 async function seedDefaultCategories() {
   if (CATS_FROM_DB) return;
   const batch = writeBatch(db);
@@ -910,7 +992,9 @@ async function handleCategorySubmit(event) {
   const editId = document.getElementById('cat-edit-id').value;
   const id = editId || 'cat_' + Date.now().toString(36);
   const minQty = Math.max(1, Math.floor(Number(document.getElementById('cat-min').value)) || 1);
-  const data = { name, kind, order: Number(document.getElementById('cat-order').value) || 0, image: document.getElementById('cat-image').value.trim() || deleteField(), updatedAt: serverTimestamp() };
+  
+  const data = { name, kind, order: Number(document.getElementById('cat-order').value) || 0, image: formatUrl(document.getElementById('cat-image').value.trim()) || deleteField(), updatedAt: serverTimestamp() };
+  
   if (kind === 'service') {
     data.unit = document.getElementById('cat-unit').value.trim() || 'กอง';
     data.minQty = minQty;
@@ -970,7 +1054,6 @@ async function renderAdminOrders() {
   }
   orders.sort((a, b) => (tsToDate(b.createdAt)?.getTime() || 0) - (tsToDate(a.createdAt)?.getTime() || 0));
 
-  // Revenue counts only orders whose payment was verified.
   const done = orders.filter(o => o.status === 'completed');
   const rev = done.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
   const promptPayCount = orders.filter(o => o.paymentMethod === 'promptpay').length;
@@ -1021,9 +1104,6 @@ async function renderAdminOrders() {
   }).join('');
 }
 
-// Admin verifies the payment (slip / voucher) by hand, then this hands the goods over. The stock
-// item, stock count and order status change in one transaction so two admins cannot deliver the
-// same account twice.
 async function approveOrder(orderId) {
   if (!confirm('ยืนยันว่าตรวจสอบการชำระเงินแล้ว และต้องการส่งมอบออเดอร์นี้?')) return;
   try {
@@ -1047,12 +1127,12 @@ async function approveOrder(orderId) {
       const iSnap = itemRef ? await txn.get(itemRef) : null;
       if (oSnap.data().status !== 'pending_payment') throw new Error('NOT_PENDING');
       const qty = isService ? (Number(order.quantity) || 1) : 1;
-      // services go into the work queue; accounts are delivered right away
       const update = isService ? { status: 'processing', queuedAt: serverTimestamp() } : { status: 'completed', completedAt: serverTimestamp() };
       if (iSnap) {
         if (!iSnap.exists() || iSnap.data().status !== 'available') throw new Error('ITEM_TAKEN');
         const cred = iSnap.data();
-        txn.update(itemRef, { status: 'sold', orderId: order.orderId, soldAt: serverTimestamp() });
+        // แก้บัค: เปลี่ยน order.orderId เป็น orderId (Document ID)
+        txn.update(itemRef, { status: 'sold', orderId: orderId, soldAt: serverTimestamp() });
         update.accountDelivered = { username: cred.username, password: cred.password, stockItemId: itemRef.id };
       }
       if (pSnap.exists()) {
@@ -1086,7 +1166,6 @@ async function cancelOrder(orderId) {
   renderAdminOrders();
 }
 
-// Service orders carry the customer's game login only while the job is open.
 async function clearGamePassword(orderId) {
   if (!confirm('ลบรหัสผ่านเกมของออเดอร์นี้ออกจากระบบ? (ทำหลังงานเสร็จแล้วเท่านั้น)')) return;
   try {
@@ -1103,7 +1182,6 @@ async function setQueueStatus(orderId, status) {
     triggerToast('อัปเดตคิวแล้ว');
   } catch (e) { triggerToast('อัปเดตไม่สำเร็จ ตรวจสอบสิทธิ์แอดมิน'); }
 }
-// Job done: order completes, queue shows done, the customer's game password is wiped.
 async function finishServiceOrder(orderId) {
   if (!confirm('งานเสร็จแล้ว? ระบบจะลบรหัสผ่านเกมของลูกค้าออกด้วย')) return;
   try {
@@ -1120,12 +1198,6 @@ function refreshOrders() {
   renderAdminOrders();
   triggerToast('รีเฟรชข้อมูลคำสั่งซื้อเรียบร้อย');
 }
-
-// ==========================================
-// 3. PROMO CODE MANAGEMENT (Moved to js/back/code.js)
-// ==========================================
-// Separate module js/back/code.js handles renderAdminPromos, openPromoModal,
-// closePromoModal, handlePromoTypeChange, handleSavePromoModal, deletePromo.
 
 async function loadAdminSettings() {
   try {
@@ -1148,7 +1220,6 @@ async function loadAdminSettings() {
 
     if (!data) data = {};
 
-    // Provider keys live in an admin-only document, never in the public system/settings.
     let secrets = {};
     try {
       const secSnap = await getDoc(doc(db, 'system_private', 'secrets'));
@@ -1198,7 +1269,6 @@ async function handleSaveSettings(event) {
 
   const getVal = (id) => (document.getElementById(id)?.value || '').trim();
 
-  // Only storefront-safe fields go to the public system/settings document.
   const payload = {
     marqueeText: getVal('setting-marquee-text'),
     ribbonText: getVal('setting-ribbon-text'),
@@ -1212,13 +1282,12 @@ async function handleSaveSettings(event) {
     stat3Lbl: getVal('setting-stat3-lbl'),
     stat4Val: getVal('setting-stat4-val'),
     stat4Lbl: getVal('setting-stat4-lbl'),
-    discordLink: getVal('setting-discord-link'),
+    discordLink: formatUrl(getVal('setting-discord-link')),
     lineId: getVal('setting-line-id'),
-    promptpayQrUrl: getVal('setting-promptpay-qr-url'),
+    promptpayQrUrl: formatUrl(getVal('setting-promptpay-qr-url')),
     promptpayName: getVal('setting-promptpay-name'),
-    // Public flag only: tells the top-up page to offer slip upload. The key itself stays in system_private.
     slipAutoVerify: !!document.getElementById('setting-slip-auto')?.checked,
-    slipWorkerUrl: getVal('setting-slip-worker-url'),
+    slipWorkerUrl: formatUrl(getVal('setting-slip-worker-url')),
     updatedAt: serverTimestamp()
   };
   const secrets = {
@@ -1288,8 +1357,6 @@ async function renderAdminTopups() {
   }).join('');
 }
 
-// Credits the wallet only after the admin has checked the money really arrived. One transaction
-// flips the request and adds the credit, so a double click cannot pay twice.
 async function approveTopup(txnId) {
   if (!confirm('ยืนยันว่าได้รับเงินแล้ว และต้องการเติมเครดิตให้ผู้ใช้?')) return;
   try {
@@ -1353,9 +1420,6 @@ function switchAdminTab(tabName) {
 // ==========================================
 // 9. WINDOW ATTACHMENTS & INITIALIZER
 // ==========================================
-// Storefront methods
-
-// Admin methods
 window.handlePinSetupSubmit = handlePinSetupSubmit;
 window.handlePinUnlockSubmit = handlePinUnlockSubmit;
 window.promptResetPin = promptResetPin;
@@ -1369,6 +1433,8 @@ window.openProductModal = openProductModal;
 window.closeProductModal = closeProductModal;
 window.handleProductFormSubmit = handleProductFormSubmit;
 window.deleteAdminProduct = deleteAdminProduct;
+window.setProductType = setProductType;
+window.setKoenLabelPreset = setKoenLabelPreset;
 window.setImagePreset = setImagePreset;
 window.updateImagePreview = updateImagePreview;
 window.openStockModalQuick = openStockModalQuick;
