@@ -1,4 +1,4 @@
-# Tactical Store — System Specification & Security Architecture (skill.md)
+# ASTRAPHEX HUB — System Specification & Security Architecture (skill.md)
 
 ข้อกำหนดทางเทคนิค สถาปัตยกรรมความปลอดภัย และระบบการออกแบบสำหรับโปรเจกต์ Tactical Store (Arena Breakout Market)
 

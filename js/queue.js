@@ -6,10 +6,10 @@ import { loadCategories, isServiceProduct } from "./categories.js";
 /** Public work queue: per service product, who is waiting / working / done in the last 30 days. */
 const DAY30 = 30 * 864e5;
 const STATUS = {
-  pending_payment: ['รอตรวจชำระ', 'text-slate'],
-  waiting: ['รอทำ', 'text-launchOrange'],
-  working: ['กำลังทำ', 'text-appleBlue'],
-  done: ['เสร็จแล้ว', 'text-emerald-600']
+  pending_payment: ['รอตรวจสอบ', 'text-slate'],
+  waiting: ['รอคิว', 'text-launchOrange'],
+  working: ['กำลังดำเนินการ', 'text-appleBlue'],
+  done: ['ส่งมอบสำเร็จ', 'text-emerald-600']
 };
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const when = (v) => v?.toDate ? v.toDate() : (v ? new Date(v) : new Date());
@@ -34,7 +34,7 @@ function render() {
   const groups = services.map(p => ({ id: p.id, name: p.name, p }));
   // queue rows whose product was deleted still show
   rows.filter(q => !ids.has(q.productId)).forEach(q => { ids.add(q.productId); groups.push({ id: q.productId, name: q.productName, p: {} }); });
-  if (!groups.length) { el.innerHTML = '<p class="text-slate text-sm">ยังไม่มีบริการ</p>'; return; }
+  if (!groups.length) { el.innerHTML = '<div class="soft-card py-14 text-center"><p class="font-semibold">ยังไม่มีงานบริการ</p><p class="text-slate text-sm mt-1">เมื่อร้านเปิดบริการ คิวจะแสดงที่นี่</p></div>'; return; }
 
   el.innerHTML = groups.map(g => {
     const mine = rows.filter(q => q.productId === g.id).sort((a, b) => when(a.createdAt) - when(b.createdAt));
@@ -61,7 +61,7 @@ function render() {
         ${open === null ? '' : `<span class="text-xs font-medium whitespace-nowrap ${open ? 'text-emerald-600' : 'text-slate'}">${open ? 'อยู่ในเวลาทำงาน' : 'นอกเวลาทำงาน'}</span>`}
       </div>
       <p class="mt-4 text-lg font-semibold">${msg}</p>
-      <p class="text-sm text-slate">รอทำ ${n('waiting')} · กำลังทำ ${n('working')} · รอตรวจชำระ ${n('pending_payment')}</p>
+      <p class="text-sm text-slate">รอคิว ${n('waiting')} · กำลังดำเนินการ ${n('working')} · รอตรวจสอบ ${n('pending_payment')}</p>
       <h3 class="mt-5 mb-3 font-semibold">งานค้างและประวัติ 30 วัน</h3>
       <div class="space-y-2.5">${[...active, ...done].map(row).join('') || '<p class="text-sm text-slate">ยังไม่มีรายการ</p>'}</div>
     </section>`;

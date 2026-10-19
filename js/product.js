@@ -1,988 +1,417 @@
 import { db, auth } from "../firebase-config.js";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  writeBatch,
-  serverTimestamp,
-  query,
-  where,
-  onSnapshot
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { 
-  onAuthStateChanged, 
-  signOut 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
+import { esc, num, baht, money, toast, icon, ICONS, onSettings, workerBase, callWorker, notifyAdmin, maskName } from "./ui.js";
+import { deliveryBadge, productCardHtml } from "./card.js";
+import { mountPromptPay, promptpayReady, prepareSlip, slipErrorText } from "./pay.js";
+import { evaluatePromo } from "./promo.js";
+import { orderCardHtml } from "./orders-ui.js";
 
 /**
- * TACTICAL STORE — Product Detail & Direct Purchase Controller (js/product.js)
- * High-Precision Apple Design System, Service Quantity Stepper & Instant Checkout
+ * Product page: details, quantity / packages / farm modes, and checkout.
+ * Payment:
+ *  - เครดิตในบัญชี: the Worker (/buy) checks price, promo and balance, then delivers a game ID at once
+ *    (or queues a service) in one transaction. Needs the Worker URL in admin settings.
+ *  - พร้อมเพย์ (with slip image) / TrueMoney: files a pending_payment order for an admin to approve.
  */
+const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+let allProducts = [], CATS = [], P = null;
+let gallery = [], gIdx = 0;
+let qty = 1, farmMode = '';
+let promo = null, promoCode = null, discount = 0;
+let method = 'wallet';
+let balance = null, user = null;
+let submitting = false;
+let pp = null;
 
-let allProducts = [];
-let CATS = [];
-let currentProduct = null;
-let currentGallery = [];
-let currentGalleryIdx = 0;
-let currentQuantity = 1;
-let currentDiscount = 0;
-let appliedPromoCode = null;
-let promoRule = null; // {type:'fixed'|'percent', value}, re-applied whenever the quantity changes
-let isSubmittingOrder = false;
-let shopSettings = {};
-let currentPaymentMethod = 'promptpay';
-let lastFulfilledOrder = null;
+const $ = (id) => document.getElementById(id);
+const isSrv = () => isServiceProduct(P, CATS);
 
-// ==========================================
-// 1. INITIALIZATION & DATA FETCHING
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-  initAuthListener();
-  initShopSettings();
-  loadProductPage();
-});
-
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-// PromptPay QR / account name come from system/settings so no payment details are hard-coded in the page.
-function initShopSettings() {
-  try {
-    onSnapshot(doc(db, 'system', 'settings'), (snap) => {
-      shopSettings = snap.exists() ? snap.data() : {};
-      const qr = document.getElementById('product-qr-image');
-      const placeholder = document.getElementById('product-qr-placeholder');
-      const name = document.getElementById('product-promptpay-name');
-      const ok = /^https:\/\//.test(String(shopSettings.promptpayQrUrl || ''));
-      if (qr) { if (ok) qr.src = shopSettings.promptpayQrUrl; qr.classList.toggle('hidden', !ok); }
-      if (placeholder) placeholder.classList.toggle('hidden', ok);
-      if (name) name.innerText = shopSettings.promptpayName || '';
-    }, (err) => console.warn('Settings listener error:', err));
-  } catch (err) {
-    console.warn('Settings listener skipped:', err);
-  }
-}
-
-async function loadProductPage() {
-  const params = new URLSearchParams(window.location.search);
-  const targetId = params.get('id');
-  const shouldBuy = params.get('action') === 'buy' || params.get('buy') === 'true';
-
+// ---------- Load ----------
+async function load() {
+  const id = new URLSearchParams(location.search).get('id');
   CATS = await loadCategories();
-
-  // 1. Fetch live products from Firestore or fallback
-  try {
-    const snap = await getDocs(collection(db, "products"));
-    if (!snap.empty) {
-      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      allProducts = fetched;
-    }
-  } catch (err) {
-    console.warn("Firestore fetch products fallback:", err);
-  }
-
-  // 2. Identify target product
-  if (targetId) {
-    currentProduct = allProducts.find(p => String(p.id) === String(targetId));
-  }
-  if (!currentProduct && !targetId && allProducts.length > 0) {
-    currentProduct = allProducts[0];
-  }
-
-  const loadingEl = document.getElementById('product-loading-state');
-  const notFoundEl = document.getElementById('product-not-found');
-  const stageEl = document.getElementById('product-content-stage');
-
-  if (loadingEl) loadingEl.classList.add('hidden');
-
-  if (!currentProduct) {
-    if (notFoundEl) notFoundEl.classList.remove('hidden');
-    return;
-  }
-
-  if (stageEl) stageEl.classList.remove('hidden');
-
-  // 3. Render Product View
-  renderProductDetails(currentProduct);
-  renderRelatedProducts(currentProduct);
-
-  // 4. Auto scroll if buy action requested
-  if (shouldBuy) {
-    setTimeout(() => {
-      scrollToCheckoutForm();
-    }, 200);
-  }
+  try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })); }
+  catch (e) { console.warn('products:', e); }
+  P = allProducts.find(p => String(p.id) === String(id)) || null;
+  $('product-loading-state').classList.add('hidden');
+  if (!P) { $('product-not-found').classList.remove('hidden'); return; }
+  $('product-content-stage').classList.remove('hidden');
+  render();
+  renderRelated();
+  pp = mountPromptPay($('panel-pay-promptpay'), { getAmount: () => finalPrice(), idPrefix: 'pp' });
+  switchProductPaymentTab(defaultMethod(), true);
+  if (new URLSearchParams(location.search).get('action') === 'buy') setTimeout(scrollToCheckoutForm, 300);
 }
 
-// ==========================================
-// 2. RENDER PRODUCT DETAILS (Apple Design)
-// ==========================================
-function renderProductDetails(p) {
-  const isService = isServiceProduct(p, CATS);
-  const unit = unitOf(p, CATS);
-  const minOrder = minQtyOf(p, CATS);
-  const unitPrice = unitRateOf(p);
-
-  // Set quantity to at least minOrder
-  currentQuantity = minOrder;
-  currentDiscount = 0;
-  appliedPromoCode = null;
-  promoRule = null;
-
-  // Title, Headings & Breadcrumbs
-  document.title = `${p.name} — TACTICAL STORE`;
-  const nameBreadcrumb = document.getElementById('breadcrumb-product-name');
-  if (nameBreadcrumb) nameBreadcrumb.innerText = p.name;
-
-  const catBreadcrumb = document.getElementById('breadcrumb-category');
-  if (catBreadcrumb) {
-    catBreadcrumb.innerText = categoryOf(CATS, p.category)?.name || (isService ? 'งานบริการในเกม' : 'ไอดีเกม');
-  }
-
-  const titleHeading = document.getElementById('product-title-heading');
-  if (titleHeading) titleHeading.innerText = p.name;
-
-  // Media Gallery Setup
-  currentGallery = Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery : [p.image];
-  currentGalleryIdx = 0;
+function render() {
+  const srv = isSrv();
+  const unit = unitOf(P, CATS);
+  document.title = `${P.name} — ASTRAPHEX HUB`;
+  $('breadcrumb-product-name').textContent = P.name;
+  $('breadcrumb-category').textContent = categoryOf(CATS, P.category)?.name || (srv ? 'งานบริการ' : 'ไอดีเกม');
+  $('product-title-heading').textContent = P.name;
+  $('product-kicker-label').textContent = categoryOf(CATS, P.category)?.name || 'Arena Breakout';
+  gallery = (Array.isArray(P.gallery) && P.gallery.filter(Boolean).length ? P.gallery.filter(Boolean) : [P.image || FALLBACK]);
   updateGalleryView(0);
-  renderGalleryThumbnails();
+  $('product-thumbnail-strip').innerHTML = gallery.length > 1 ? gallery.map((u, i) => `<button type="button" onclick="updateGalleryView(${i})" class="gthumb w-16 h-12 rounded-xl overflow-hidden border shrink-0 ${i === 0 ? 'border-2 border-pricingBlue' : 'border-hairline opacity-70'}"><img src="${esc(u)}" alt="ภาพที่ ${i + 1}" class="w-full h-full object-cover"></button>`).join('') : '';
+  renderBadges();
+  const stock = Math.max(0, Math.floor(num(P.stock)));
+  $('product-stock-line').innerHTML = stock <= 0 ? `<span class="text-launchOrange font-medium">${srv ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด'}</span>`
+    : srv ? `<span class="text-emerald-600 font-medium">รับงานได้อีก ${stock} ${esc(unit)}</span>` : `<span class="${stock <= 3 ? 'text-launchOrange' : 'text-emerald-600'} font-medium">คงเหลือ ${stock} ไอดี</span>`;
+  $('product-desc-paragraph').textContent = P.desc || '';
+  $('product-full-desc').textContent = P.desc || '-';
+  const koen = String(P.koen || '').trim();
+  $('product-tags').innerHTML = (koen && koen !== '-' ? `<span class="bg-mist text-ink text-[13px] font-medium px-3.5 py-1.5 rounded-full">${esc(P.koenLabel ? `${P.koenLabel}: ${koen}` : koen)}</span>` : '') +
+    (P.tags || []).map(t => `<span class="bg-mist text-slate text-[13px] px-3 py-1.5 rounded-full">${esc(t)}</span>`).join('');
+  const specs = Array.isArray(P.specs) ? P.specs : [];
+  const kv = specs.filter(t => /^[^:：]{1,24}[:：]\s*\S/.test(t));
+  const plain = specs.filter(t => !kv.includes(t));
+  $('specs').classList.toggle('hidden', !specs.length);
+  $('product-specs-grid').innerHTML = (kv.length ? `<div class="grid grid-cols-2 gap-3">${kv.map(t => { const i = t.search(/[:：]/); return `<div class="rounded-2xl bg-gallery p-4"><p class="text-xs text-slate">${esc(t.slice(0, i).trim())}</p><p class="text-[15px] font-semibold mt-0.5">${esc(t.slice(i + 1).trim())}</p></div>`; }).join('')}</div>` : '')
+    + plain.map(t => `<div class="flex items-start gap-3"><span class="w-5 h-5 mt-0.5 rounded-full bg-appleBlue/10 text-appleBlue flex items-center justify-center shrink-0">${icon(ICONS.check, 'w-3 h-3', 3)}</span><span class="text-[15px]">${esc(t)}</span></div>`).join('');
+  const lines = [[ICONS.queue, P.serviceHours], ...String(P.infoLines || '').split('\n').map(t => [null, t.trim()])].filter(l => l[1]);
+  $('info-lines').innerHTML = lines.map(([ic, t]) => `<p class="flex gap-2 text-slate">${ic ? icon(ic, 'w-5 h-5 shrink-0', 1.8) : '<span>•</span>'}<span>${esc(t)}</span></p>`).join('');
+  $('product-howto').textContent = P.howTo || (srv ? 'ชำระเงินแล้วทีมงานจะทักไปทาง Facebook เพื่อนัดเวลา และอัปเดตสถานะในเมนูออเดอร์ของฉัน' : 'ชำระด้วยเครดิตรับไอดีทันทีในเมนูออเดอร์ของฉัน หากชำระผ่านพร้อมเพย์ ไอดีจะแสดงเมื่อแอดมินตรวจสอบสลิปแล้ว');
+  $('product-warranty').textContent = P.warrantyText || 'หากมีปัญหาเกี่ยวกับสินค้า ติดต่อทีมงานพร้อมเลขที่ออเดอร์';
 
-  // Badges
-  const typeBadgeText = document.getElementById('product-type-text');
-  if (typeBadgeText) {
-    typeBadgeText.innerText = isService ? 'งานบริการในเกม' : 'ไอดีเกมพร้อมส่ง';
-  }
+  // buyer fields: services ask Facebook instead of e-mail
+  $('email-field').classList.toggle('hidden', srv);
+  $('facebook-field').classList.toggle('hidden', !srv);
+  $('buyer-hint').textContent = srv ? 'ทีมงานใช้ Facebook ติดต่อเพื่อนัดเวลาทำงาน' : 'ใช้สำหรับติดต่อเรื่องไอดีที่ซื้อ ทีมงานจะไม่ขอรหัสผ่านอีเมลของคุณ';
 
-  const stockBadge = document.getElementById('product-stock-badge');
-  const stockText = document.getElementById('product-stock-text');
-  const isOutOfStock = Number(p.stock) <= 0;
-
-  if (stockBadge && stockText) {
-    if (isService) {
-      stockBadge.className = 'bg-gallery/95 text-appleBlue border border-hairline text-[11px] font-semibold px-3 py-1 rounded-full shadow-sm flex items-center gap-1';
-      stockText.innerText = `พร้อมรับงาน (${p.stock} ${unit})`;
-    } else if (isOutOfStock) {
-      stockBadge.className = 'bg-gallery/95 text-launchOrange border border-hairline text-[11px] font-semibold px-3 py-1 rounded-full shadow-sm flex items-center gap-1';
-      stockText.innerText = 'สินค้าหมด (Out of Stock)';
-    } else {
-      stockBadge.className = `bg-gallery/95 ${Number(p.stock) <= 3 ? 'text-launchOrange' : 'text-emerald-600'} border border-hairline text-[11px] font-semibold px-3 py-1 rounded-full shadow-sm flex items-center gap-1`;
-      stockText.innerText = Number(p.stock) <= 3 ? `เหลือ ${p.stock} ไอดี · ใกล้หมด` : `คงเหลือ ${p.stock} ไอดี`;
-    }
-  }
-
-  // Koen / Key Attribute Tag
-  const koenTag = document.getElementById('product-koen-tag');
-  if (koenTag) {
-    const label = p.koenLabel || (isService ? 'ข้อกำหนดบริการ' : 'มูลค่า Koen');
-    koenTag.innerText = `${label}: ${p.koen || '-'}`;
-  }
-
-  // Tags
-  const tagsContainer = document.getElementById('product-tags-container');
-  if (tagsContainer) {
-    const tagList = Array.isArray(p.tags) ? p.tags : [];
-    tagsContainer.innerHTML = tagList.map(t => `
-      <span class="bg-mist text-slate border border-hairline text-[11px] font-medium px-2.5 py-0.5 rounded-full">
-        ${escapeHtml(t)}
-      </span>
-    `).join('');
-  }
-
-  // Pricing Unit & Min Order
-  const unitPriceEl = document.getElementById('product-unit-price');
-  if (unitPriceEl) unitPriceEl.innerText = `฿${unitPrice.toFixed(2)}`;
-
-  const unitSuffixEl = document.getElementById('product-unit-suffix');
-  if (unitSuffixEl) unitSuffixEl.innerText = `/ ${unit}`;
-
-  const minBadgeEl = document.getElementById('product-min-badge');
-  const minTextEl = document.getElementById('product-min-text');
-  if (minBadgeEl && minTextEl) {
-    if (isService && minOrder > 1) {
-      minBadgeEl.classList.remove('hidden');
-      minTextEl.innerText = `ขั้นต่ำ ${minOrder} ${unit}`;
-    } else {
-      minBadgeEl.classList.add('hidden');
-    }
-  }
-
-  // Descriptions
-  const descEl = document.getElementById('product-desc-paragraph');
-  if (descEl) descEl.innerText = p.desc || '-';
-
-  const fullDescEl = document.getElementById('product-full-desc');
-  if (fullDescEl) fullDescEl.innerText = p.desc || '-';
-
-  // Specifications Grid (Apple Cards)
-  const specsGrid = document.getElementById('product-specs-grid');
-  if (specsGrid) {
-    const specItems = Array.isArray(p.specs) ? p.specs : [];
-    const kv = specItems.filter(t => /^[^:：]{1,24}[:：]\s*\S/.test(t));
-    const plain = specItems.filter(t => !kv.includes(t));
-    specsGrid.innerHTML = (kv.length ? `<div class="grid grid-cols-2 gap-3">${kv.map(t => {
-      const i = t.search(/[:：]/);
-      return `<div class="rounded-2xl bg-mist p-4"><p class="text-xs text-slate">${escapeHtml(t.slice(0, i).trim())}</p><p class="text-[15px] font-semibold mt-0.5">${escapeHtml(t.slice(i + 1).trim())}</p></div>`;
-    }).join('')}</div>` : '') + plain.map(item => `
-      <div class="flex items-start gap-3">
-        <span class="w-5 h-5 mt-0.5 rounded-full bg-appleBlue/10 text-appleBlue text-[11px] flex items-center justify-center font-bold shrink-0">✓</span>
-        <span class="text-[15px] text-ink">${escapeHtml(item)}</span>
-      </div>`).join('');
-  }
-
-  // Info lines + accordion (admin-configured, neutral fallbacks)
-  const lines = [['<svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>', p.serviceHours], ...String(p.infoLines || '').split('\n').map(t => ['•', t.trim()])].filter(l => l[1]);
-  const info = document.getElementById('info-lines');
-  if (info) info.innerHTML = lines.map(l => `<p class="flex gap-2 text-slate"><span>${l[0]}</span><span>${escapeHtml(l[1])}</span></p>`).join('');
-  const txt = (id, v, fb) => { const e = document.getElementById(id); if (e) e.innerText = v || fb; };
-  txt('product-howto', p.howTo, 'หลังชำระเงิน ทีมงานตรวจสอบยอดแล้วส่งมอบในเมนู ออเดอร์ของฉัน');
-  txt('product-warranty', p.warrantyText, 'หากมีปัญหาเกี่ยวกับสินค้า ติดต่อทีมงานพร้อมเลขที่ออเดอร์');
-
-  // Stepper Unit & Min constraints
-  const qtyInput = document.getElementById('order-quantity-input');
-  if (qtyInput) {
-    qtyInput.value = currentQuantity;
-    qtyInput.min = minOrder;
-  }
-  const stepperUnit = document.getElementById('stepper-unit-label');
-  if (stepperUnit) stepperUnit.innerText = unit;
-
-  const stepperHint = document.getElementById('stepper-helper-hint');
-  if (stepperHint) {
-    stepperHint.innerText = isService ? `ขั้นต่ำการโยน/ให้บริการ: ${minOrder} ${unit}` : 'ระบุจำนวนที่ต้องการสั่งซื้อ';
-  }
-
+  qty = minQtyOf(P, CATS);
+  $('order-quantity-input').value = qty;
+  $('order-quantity-input').min = qty;
+  $('stepper-unit-label').textContent = unit;
+  $('stepper-helper-hint').textContent = srv ? `ขั้นต่ำ ${qty} ${unit}` : 'ระบุจำนวนที่ต้องการ';
   farmMode = '';
-  renderFarmModes(p);
-  const rate0 = unitRateOf(p);
-  const up0 = document.getElementById('product-unit-price'); if (up0) up0.innerText = `฿${rate0.toFixed(2)}`;
-  // Render Recommended Value Packs
-  renderValuePacks(p);
-
-  // Pre-fill email if user is authenticated
-  if (auth?.currentUser?.email) {
-    const emailInput = document.getElementById('buyer-email');
-    if (emailInput && !emailInput.value) emailInput.value = auth.currentUser.email;
-  }
-
-  recalculatePrices();
+  renderFarmModes();
+  renderValuePacks();
+  recalc();
 }
 
-function updateGalleryView(idx) {
-  if (idx < 0 || idx >= currentGallery.length) return;
-  currentGalleryIdx = idx;
-  const mainImg = document.getElementById('product-main-image');
-  if (mainImg) mainImg.src = currentGallery[idx];
-
-  const counterPill = document.getElementById('gallery-counter-pill');
-  if (counterPill) {
-    counterPill.innerText = `ภาพ ${idx + 1} / ${currentGallery.length}`;
-  }
-
-  // Update active thumbnail borders
-  document.querySelectorAll('.gallery-thumb-btn').forEach((btn, i) => {
-    if (i === idx) {
-      btn.className = 'gallery-thumb-btn w-16 h-12 rounded-xl overflow-hidden border-2 border-pricingBlue shrink-0 transition-all';
-    } else {
-      btn.className = 'gallery-thumb-btn w-16 h-12 rounded-xl overflow-hidden border border-hairline opacity-70 hover:opacity-100 shrink-0 transition-all';
-    }
-  });
+function renderBadges() {
+  $('product-badges').innerHTML = deliveryBadge(isSrv(), !!workerBase()) + (P.featured ? `<span class="badge badge-featured">${icon(ICONS.star, 'w-3.5 h-3.5', 2)}แนะนำ</span>` : '');
 }
 
-function renderGalleryThumbnails() {
-  const container = document.getElementById('product-thumbnail-strip');
-  if (!container) return;
-  if (currentGallery.length <= 1) {
-    container.innerHTML = '';
-    return;
-  }
-
-  container.innerHTML = currentGallery.map((imgUrl, i) => `
-    <button 
-      type="button" 
-      onclick="updateGalleryView(${i})" 
-      class="gallery-thumb-btn w-16 h-12 rounded-xl overflow-hidden ${i === 0 ? 'border-2 border-pricingBlue' : 'border border-hairline opacity-70'} shrink-0 transition-all">
-      <img src="${imgUrl}" alt="Thumb" class="w-full h-full object-cover">
-    </button>
-  `).join('');
-}
-
-// ==========================================
-// 3. STEPPER & PRICE CALCULATION
-// ==========================================
-function changeQuantity(delta) {
-  if (!currentProduct) return;
-  const isService = isServiceProduct(currentProduct, CATS);
-  const minOrder = minQtyOf(currentProduct, CATS);
-  // For services: allow unlimited ordering above minOrder (e.g. 15, 20, 50, 100+ units)
-  const maxStock = isService ? 99999 : (Number(currentProduct.stock) > 0 ? Number(currentProduct.stock) : 999);
-
-  const input = document.getElementById('order-quantity-input');
-  let currentVal = input ? (parseInt(input.value, 10) || currentQuantity) : currentQuantity;
-  let next = currentVal + delta;
-  if (next < minOrder) next = minOrder;
-  if (next > maxStock) next = maxStock;
-
-  currentQuantity = next;
-  if (input) input.value = currentQuantity;
-
-  recalculatePrices();
-  updateValuePackHighlight();
-}
-
-function handleQuantityDirectInput(val) {
-  if (!currentProduct) return;
-  const isService = isServiceProduct(currentProduct, CATS);
-  const minOrder = minQtyOf(currentProduct, CATS);
-  const maxStock = isService ? 99999 : (Number(currentProduct.stock) > 0 ? Number(currentProduct.stock) : 999);
-
-  let num = parseInt(val, 10);
-  if (isNaN(num) || num < minOrder) num = minOrder;
-  if (num > maxStock) num = maxStock;
-
-  currentQuantity = num;
-  const input = document.getElementById('order-quantity-input');
-  if (input) input.value = currentQuantity;
-
-  recalculatePrices();
-  updateValuePackHighlight();
-}
-
-function selectValuePack(qty) {
-  currentQuantity = qty;
-  const input = document.getElementById('order-quantity-input');
-  if (input) input.value = currentQuantity;
-
-  recalculatePrices();
-  updateValuePackHighlight();
-}
-
-function updateValuePackHighlight() {
-  document.querySelectorAll('.value-pack-card').forEach(card => {
-    const on = parseInt(card.dataset.qty, 10) === currentQuantity;
-    card.classList.toggle('border-pricingBlue', on);
-    card.classList.toggle('border-2', on);
-    card.classList.toggle('border-hairline', !on);
-  });
-}
-
-// Packages: admin-defined rows [{qty, bonus}]. Bonus of the highest tier <= qty applies.
-function packagesOf(p) {
-  return (Array.isArray(p.packages) ? p.packages : [])
-    .map(k => ({ qty: Math.floor(Number(k.qty)), bonus: Math.floor(Number(k.bonus)) || 0 }))
-    .filter(k => k.qty > 0).sort((x, y) => x.qty - y.qty);
-}
-function bonusFor(p, qty) {
-  let b = 0;
-  for (const k of packagesOf(p)) if (qty >= k.qty) b = k.bonus;
-  return b;
-}
-
-function renderValuePacks(p) {
-  const box = document.getElementById('packages-section');
-  const grid = document.getElementById('value-packs-grid');
-  if (!box || !grid) return;
-  const pk = packagesOf(p);
-  box.classList.toggle('hidden', !pk.length);
-  const unit = unitOf(p, CATS);
-  const rate = unitRateOf(p);
-  grid.innerHTML = pk.map(k => `
-    <button type="button" data-qty="${k.qty}" onclick="selectValuePack(${k.qty})" class="value-pack-card text-left rounded-2xl p-4 bg-gallery border border-hairline transition">
-      <span class="block text-xs text-slate">ซื้อ ${k.qty} ${escapeHtml(unit)}</span>
-      <span class="block text-lg font-heading font-semibold">฿${(k.qty * rate).toLocaleString()}</span>
-      ${k.bonus ? `<span class="block text-xs text-appleBlue font-medium mt-0.5">แถม ${k.bonus} · ได้รวม ${k.qty + k.bonus}</span>` : ''}
-    </button>`).join('');
-  updateValuePackHighlight();
-}
-
-let farmMode = '';
-function unitRateOf(p) {
-  const m = (p.farmModes || []).find(x => x.key === farmMode);
-  if (m) return Number(m.price) || 0;
-  return isServiceProduct(p, CATS) ? (parseFloat(p.serviceRate) || parseFloat(p.price) || 0) : (parseFloat(p.price) || 0);
-}
-
-// Farm service: pick "ให้ไอดีไปยืน" (needs game login) or "ไปยืนเอง" (needs in-game name + time).
-function renderFarmModes(p) {
-  const modes = p.farmModes || [];
-  const box = document.getElementById('farm-modes-section');
-  box.classList.toggle('hidden', !modes.length);
-  farmMode = modes.length ? (modes.find(m => m.key === farmMode) || modes[0]).key : '';
-  const unit = unitOf(p, CATS);
-  document.getElementById('farm-modes-grid').innerHTML = modes.map(m => `
-    <button type="button" data-mode="${escapeHtml(m.key)}" onclick="selectFarmMode('${escapeHtml(m.key)}')" class="farm-mode-card text-left rounded-2xl p-4 bg-gallery border transition ${m.key === farmMode ? 'border-2 border-pricingBlue' : 'border-hairline'}">
-      <span class="block text-sm font-semibold">${escapeHtml(m.label)}</span>
-      <span class="block text-lg font-heading font-semibold mt-1">฿${Number(m.price).toLocaleString('th-TH')}<span class="text-xs text-slate font-normal"> / ${escapeHtml(unit)}</span></span>
-    </button>`).join('');
-  applyFieldMode(p);
-}
-function applyFieldMode(p) {
-  const modes = p.farmModes || [];
-  const isSrv = isServiceProduct(p, CATS);
-  const game = isSrv && (!modes.length || farmMode === 'with_id');
-  document.getElementById('service-extra-fields')?.classList.toggle('hidden', !game);
-  document.getElementById('self-fields')?.classList.toggle('hidden', !(isSrv && modes.length && farmMode === 'self'));
-  const note = document.getElementById('farm-mode-note');
-  if (note) note.innerText = farmMode === 'self' ? 'คุณเข้าเกมไปยืนเอง ร้านจะนัดเวลาและเชิญเข้าห้อง ไม่ต้องให้รหัสผ่าน' : farmMode === 'with_id' ? 'ให้อีเมลและรหัสผ่านเกม ทีมงานล็อกอินไปยืนให้ และลบรหัสเมื่องานเสร็จ' : '';
-}
-function selectFarmMode(key) {
-  farmMode = key;
-  renderFarmModes(currentProduct);
-  const rate = unitRateOf(currentProduct);
-  const u = document.getElementById('product-unit-price'); if (u) u.innerText = `฿${rate.toFixed(2)}`;
-  renderValuePacks(currentProduct);
-  recalculatePrices();
-}
-window.selectFarmMode = selectFarmMode;
-
-function recalculatePrices() {
-  if (!currentProduct) return;
-  const isService = isServiceProduct(currentProduct, CATS);
-  const unit = unitOf(currentProduct, CATS);
-  const minOrder = minQtyOf(currentProduct, CATS);
-  const unitRate = unitRateOf(currentProduct);
-
-  // Synchronize currentQuantity directly from input field if valid
-  const inputEl = document.getElementById('order-quantity-input');
-  if (inputEl) {
-    const parsedVal = parseInt(inputEl.value, 10);
-    if (!isNaN(parsedVal) && parsedVal >= minOrder) {
-      currentQuantity = parsedVal;
-    }
-  }
-
-  const subtotal = currentQuantity * unitRate;
-  if (promoRule) {
-    const raw = promoRule.type === 'percent' ? Math.round(subtotal * promoRule.value / 100) : promoRule.value;
-    currentDiscount = Math.min(raw, subtotal);
-  } else {
-    currentDiscount = 0;
-  }
-  let finalPrice = Math.max(0, subtotal - currentDiscount);
-
-  // Update DOM Line items
-  const qtyLabel = document.getElementById('calc-qty-label');
-  if (qtyLabel) qtyLabel.innerText = currentQuantity;
-
-  const unitLabel = document.getElementById('calc-unit-label');
-  if (unitLabel) unitLabel.innerText = unit;
-
-  const subtotalEl = document.getElementById('calc-subtotal');
-  if (subtotalEl) subtotalEl.innerText = `฿${subtotal.toFixed(2)}`;
-
-  const discountRow = document.getElementById('calc-discount-row');
-  const discountVal = document.getElementById('calc-discount-val');
-  if (discountRow && discountVal) {
-    if (currentDiscount > 0) {
-      discountRow.classList.remove('hidden');
-      discountRow.classList.add('flex');
-      discountVal.innerText = `-฿${currentDiscount.toFixed(2)}`;
-    } else {
-      discountRow.classList.add('hidden');
-      discountRow.classList.remove('flex');
-    }
-  }
-
-  const finalPriceEl = document.getElementById('calc-final-price');
-  if (finalPriceEl) finalPriceEl.innerText = `฿${finalPrice.toFixed(2)}`;
-
-  const btnPriceTag = document.getElementById('btn-final-price-tag');
-  if (btnPriceTag) btnPriceTag.innerText = `฿${finalPrice.toFixed(2)}`;
-
-  const mobileBarPrice = document.getElementById('mobile-bar-price');
-  if (mobileBarPrice) mobileBarPrice.innerText = `฿${finalPrice.toFixed(2)}`;
-
-  const bonus = bonusFor(currentProduct, currentQuantity);
-  const total = currentQuantity + bonus;
-  const set = (id, t) => { const e = document.getElementById(id); if (e) e.innerText = t; };
-  set('qty-buy-price', `฿${finalPrice.toFixed(2)}`);
-  set('mobile-bar-sub', bonus ? `${total} ${unit} (แถม ${bonus})` : 'ยอดสุทธิ');
-  set('package-summary', bonus ? `ซื้อ ${currentQuantity} · แถม ${bonus} · ได้รวม ${total} ${unit}` : `ซื้อ ${currentQuantity} ${unit}`);
-  const nxt = packagesOf(currentProduct).find(k => k.qty > currentQuantity);
-  set('package-next', nxt ? `เพิ่มอีก ${nxt.qty - currentQuantity} ${unit} รับแถมรวม ${nxt.bonus}` : '');
-  const rr = document.getElementById('real-rate');
-  if (rr) {
-    rr.classList.toggle('hidden', !bonus || !finalPrice);
-    rr.innerText = `จ่าย ฿${finalPrice.toLocaleString()} ได้ ${total} ${unit} ≈ ฿${(finalPrice / total).toFixed(2)}/${unit}`;
-  }
-  const voucherTotal = document.getElementById('voucher-exact-total');
-  if (voucherTotal) voucherTotal.innerText = `฿${finalPrice.toFixed(2)}`;
-
-}
-
-// ==========================================
-// 4. PROMO CODES & PAYMENT TABS
-// ==========================================
-async function applyProductPromo() {
-  const input = document.getElementById('product-promo-input');
-  const msg = document.getElementById('promo-status-msg');
-  if (!input || !msg || !currentProduct) return;
-
-  const code = input.value.trim().toUpperCase();
-  const show = (text, ok) => {
-    msg.innerText = text;
-    msg.className = `text-[11px] font-medium pt-1 block ${ok ? 'text-appleBlue' : 'text-launchOrange'}`;
-  };
-
-  if (!code) {
-    promoRule = null;
-    appliedPromoCode = null;
-    msg.className = 'hidden';
-    recalculatePrices();
-    return;
-  }
-
-  // Firestore promo_codes first (admin-managed), then the two public codes advertised on the site.
-  let promo = null;
-  try {
-    const snap = await getDoc(doc(db, 'promo_codes', code));
-    if (snap.exists()) promo = snap.data();
-  } catch (err) {
-    console.warn('Fetch promo fallback:', err);
-  }
-  if (!promo) {
-    if (code === 'TACTICAL') promo = { type: 'fixed', value: 50 };
-    else if (code === 'ARENA10') promo = { type: 'percent', value: 10 };
-  }
-
-  const value = Number(promo?.value);
-  const used = Number(promo?.usedCount) || 0;
-  const quota = Number(promo?.maxTotalUses) || 0;
-  if (!promo || !['fixed', 'percent'].includes(promo.type) || !(value > 0)) {
-    promoRule = null;
-    appliedPromoCode = null;
-    show('ไม่พบโค้ดส่วนลดนี้ หรือหมดอายุ', false);
-  } else if (quota > 0 && used >= quota) {
-    promoRule = null;
-    appliedPromoCode = null;
-    show('โค้ดนี้ถูกใช้ครบตามจำนวนโควต้าแล้ว', false);
-  } else {
-    promoRule = { type: promo.type, value };
-    appliedPromoCode = code;
-    show(promo.type === 'percent' ? `ใช้โค้ด ${code} สำเร็จ (ลด ${value}%)` : `ใช้โค้ด ${code} สำเร็จ (ลด ${value} บาท)`, true);
-  }
-  recalculatePrices();
-}
-
-function switchProductPaymentTab(method) {
-  currentPaymentMethod = method;
-  const tabPP = document.getElementById('tab-pay-promptpay');
-  const tabTM = document.getElementById('tab-pay-truemoney');
-  const panelPP = document.getElementById('panel-pay-promptpay');
-  const panelTM = document.getElementById('panel-pay-truemoney');
-
-  if (method === 'promptpay') {
-    if (tabPP) tabPP.className = 'flex-1 py-1.5 rounded-button font-medium transition-all bg-gallery text-ink shadow-sm flex items-center justify-center gap-1.5';
-    if (tabTM) tabTM.className = 'flex-1 py-1.5 rounded-button font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5';
-    if (panelPP) panelPP.classList.remove('hidden');
-    if (panelTM) panelTM.classList.add('hidden');
-  } else {
-    if (tabPP) tabPP.className = 'flex-1 py-1.5 rounded-button font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5';
-    if (tabTM) tabTM.className = 'flex-1 py-1.5 rounded-button font-medium transition-all bg-gallery text-ink shadow-sm flex items-center justify-center gap-1.5';
-    if (panelPP) panelPP.classList.add('hidden');
-    if (panelTM) panelTM.classList.remove('hidden');
-  }
-}
-
-// ==========================================
-// 5. PENDING ORDER SUBMISSION
-// ==========================================
-function isTrueMoneyVoucher(url) {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'https:' && u.hostname === 'gift.truemoney.com';
-  } catch {
-    return false;
-  }
-}
-
-// The browser only files a pending_payment order. An admin verifies the money and delivers the
-// credentials (accountDelivered), so nothing secret is ever readable or writable from here.
-async function executeProductPurchase() {
-  if (!currentProduct || isSubmittingOrder) return;
-  const user = auth?.currentUser;
-  if (!user) {
-    triggerToast('กรุณาเข้าสู่ระบบก่อนสั่งซื้อ');
-    setTimeout(() => { window.location.href = 'login.html?mode=login'; }, 1200);
-    return;
-  }
-
-  const btn = document.getElementById('btn-confirm-product-order');
-  const isService = isServiceProduct(currentProduct, CATS);
-  const unit = unitOf(currentProduct, CATS);
-
-  const emailInput = document.getElementById('buyer-email');
-  const contactInput = document.getElementById('buyer-contact');
-  const buyerEmail = emailInput ? emailInput.value.trim() : '';
-  const buyerContact = contactInput ? contactInput.value.trim() : '';
-  const gameEmail = document.getElementById('game-email')?.value.trim() || '';
-  const gamePassword = document.getElementById('game-password')?.value || '';
-
-  if (!buyerEmail || !buyerEmail.includes('@')) {
-    triggerToast('กรุณากรอก Email ที่ถูกต้อง');
-    emailInput?.focus();
-    return;
-  }
-  const modes = currentProduct.farmModes || [];
-  const needSelf = isService && modes.length && farmMode === 'self';
-  const needGame = isService && !needSelf;
-  const playTime = document.getElementById('play-time')?.value.trim() || '';
-  if (needGame && (!gameEmail.includes('@') || !gamePassword)) {
-    triggerToast('กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม');
-    document.getElementById(gameEmail.includes('@') ? 'game-password' : 'game-email')?.focus();
-    return;
-  }
-  if (needSelf && (!buyerContact || !playTime)) {
-    triggerToast('กรุณากรอกชื่อในเกม / UID และเวลาที่พร้อมเข้าเกม');
-    document.getElementById(buyerContact ? 'play-time' : 'buyer-contact')?.focus();
-    return;
-  }
-  if (Number(currentProduct.stock) <= 0) {
-    triggerToast('ขออภัย สินค้านี้หมดจากคลังสต็อกแล้ว');
-    return;
-  }
-  const minOrder = minQtyOf(currentProduct, CATS);
-  if (isService && currentQuantity < minOrder) {
-    triggerToast(`รายการนี้สั่งขั้นต่ำ ${minOrder} ${unit}`);
-    return;
-  }
-
-  let paymentProof;
-  if (currentPaymentMethod === 'truemoney') {
-    paymentProof = document.getElementById('product-voucher-input')?.value.trim() || '';
-    if (!isTrueMoneyVoucher(paymentProof)) {
-      triggerToast('กรุณากรอกลิงก์ซองของขวัญ TrueMoney ให้ถูกต้อง (https://gift.truemoney.com/...)');
-      return;
-    }
-  } else {
-    if (document.getElementById('product-qr-image')?.classList.contains('hidden')) {
-      triggerToast('ร้านยังไม่เปิดรับชำระผ่านพร้อมเพย์ กรุณาเลือกช่องทางอื่น');
-      return;
-    }
-    paymentProof = document.getElementById('product-payment-ref')?.value.trim() || '';
-    if (!paymentProof) {
-      triggerToast('กรุณากรอกเวลาที่โอนหรือเลขอ้างอิงรายการ');
-      document.getElementById('product-payment-ref')?.focus();
-      return;
-    }
-  }
-
-  isSubmittingOrder = true;
-  btn.disabled = true;
-  btn.innerText = 'กำลังส่งคำสั่งซื้อ...';
-
-  const unitRate = unitRateOf(currentProduct);
-  const subtotal = currentQuantity * unitRate;
-  const discount = Math.min(currentDiscount, subtotal);
-  const finalPrice = Math.round((subtotal - discount) * 100) / 100;
-
-  try {
-    const orderRef = doc(collection(db, 'orders'));
-    const orderId = `ORD-${orderRef.id.slice(0, 8).toUpperCase()}`;
-    const orderPayload = {
-      orderNumber: orderId,
-      orderId,
-      productId: currentProduct.id,
-      productName: modes.length ? `${currentProduct.name} (${modes.find(m => m.key === farmMode)?.label})` : currentProduct.name,
-      productType: isService ? 'service' : 'account',
-      quantity: currentQuantity,
-      bonusQty: bonusFor(currentProduct, currentQuantity),
-      receiveQty: currentQuantity + bonusFor(currentProduct, currentQuantity),
-      unit,
-      unitPrice: unitRate,
-      subtotal,
-      discount,
-      promoCode: appliedPromoCode || null,
-      amount: finalPrice,
-      finalPrice,
-      paymentMethod: currentPaymentMethod,
-      paymentProof,
-      buyerEmail,
-      buyerContact: needGame ? gameEmail : buyerContact,
-      ...(needGame ? { gameEmail, gamePassword } : {}),
-      ...(modes.length ? { farmMode, ...(needSelf ? { playTime } : {}) } : {}),
-      status: 'pending_payment',
-      userEmail: user.email || '',
-      userId: user.uid,
-      createdAt: serverTimestamp()
-    };
-    const batch = writeBatch(db);
-    batch.set(orderRef, orderPayload);
-    if (isService) {
-      const nm = String(user.displayName || (user.email || '').split('@')[0] || 'user');
-      batch.set(doc(db, 'queue', orderRef.id), {
-        orderNumber: orderId, productId: currentProduct.id, productName: currentProduct.name, unit,
-        quantity: currentQuantity, nameMask: nm.slice(0, 2) + '**', uid: user.uid,
-        status: 'pending_payment', createdAt: serverTimestamp()
-      });
-    }
-    await batch.commit();
-    lastFulfilledOrder = orderPayload;
-    displayOrderSuccessCard(orderPayload);
-    triggerToast('ส่งคำสั่งซื้อแล้ว ทีมงานกำลังตรวจสอบการชำระเงิน');
-  } catch (err) {
-    console.error('Order submit error:', err);
-    triggerToast('ส่งคำสั่งซื้อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-  } finally {
-    isSubmittingOrder = false;
-    btn.disabled = false;
-    btn.innerHTML = `<span>แจ้งชำระเงิน (฿${finalPrice.toFixed(2)})</span>`;
-  }
-}
-
-function displayOrderSuccessCard(order) {
-  const successCard = document.getElementById('product-order-success-card');
-  if (!successCard) return;
-  const orderNumEl = document.getElementById('order-result-id');
-  if (orderNumEl) orderNumEl.innerText = `#${order.orderId}`;
-  const nameEl = document.getElementById('order-result-product');
-  if (nameEl) nameEl.innerText = order.productName;
-  document.getElementById('btn-view-queue')?.classList.toggle('hidden', order.productType !== 'service');
-  document.getElementById('btn-view-queue')?.classList.toggle('flex', order.productType === 'service');
-  successCard.classList.remove('hidden');
-  successCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-function copyOrderResultCredentials() {
-  if (!lastFulfilledOrder) return;
-  const o = lastFulfilledOrder;
-  const text = `เลขที่ออเดอร์: #${o.orderId}\nสินค้า: ${o.productName}\nยอดชำระ: ฿${o.finalPrice.toFixed(2)}`;
-  navigator.clipboard.writeText(text).then(() => {
-    triggerToast('คัดลอกเลขที่ออเดอร์เรียบร้อย');
-  }).catch(() => {
-    triggerToast('คัดลอกไม่สำเร็จ กรุณาจดเลขที่ออเดอร์ไว้');
-  });
-}
-
-// ==========================================
-// 6. RELATED PRODUCTS (Apple 28px Cards)
-// ==========================================
-function renderRelatedProducts(currentP) {
-  const container = document.getElementById('related-products-grid');
-  if (!container) return;
-
-  const others = allProducts.filter(p => p.id !== currentP.id).slice(0, 3);
-  if (others.length === 0) return;
-
-  container.innerHTML = others.map(p => {
-    const isSrv = isServiceProduct(p, CATS);
-    const unit = unitOf(p, CATS);
-
-    return `
-      <div class="apple-card p-5 flex flex-col h-full">
-        <a href="product.html?id=${encodeURIComponent(p.id)}" class="relative aspect-[16/10] rounded-2xl overflow-hidden bg-gallery cursor-pointer mb-4 block">
-          <img 
-            src="${escapeHtml(p.image)}" 
-            alt="${escapeHtml(p.name)}" 
-            class="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-            onerror="this.onerror=null;this.src='https://placehold.co/800x500/f5f5f7/86868b?text=Arena+Breakout'"
-          />
-          <div class="absolute top-2.5 left-2.5 z-10">
-            <span class="bg-gallery/95 text-ink border border-hairline text-[10px] font-semibold px-2 py-0.5 rounded-full">
-              ${isSrv ? 'บริการ' : 'ไอดี'}
-            </span>
-          </div>
-        </a>
-
-        <div class="flex flex-col flex-grow">
-          <a href="product.html?id=${encodeURIComponent(p.id)}" class="text-sm font-semibold text-ink line-clamp-1 hover:text-appleBlue transition-colors mb-1">
-            ${escapeHtml(p.name)}
-          </a>
-          <p class="text-slate text-xs line-clamp-2 leading-relaxed mb-3">
-            ${escapeHtml(p.desc || '-')}
-          </p>
-
-          <div class="mt-auto flex items-center justify-between pt-3 border-t border-hairline">
-            <div class="flex flex-col">
-              <span class="text-[10px] text-slate font-medium">ราคา</span>
-              <div class="text-base font-semibold text-pricingBlue font-heading">
-                ฿${Number(p.price).toFixed(2)}
-                ${isSrv ? `<span class="text-[11px] text-slate font-normal font-sans"> / ${unit}</span>` : ''}
-              </div>
-            </div>
-            
-            <a href="product.html?id=${encodeURIComponent(p.id)}" class="apple-explore-pill px-3 py-1 text-xs">
-              ดูรายละเอียด
-            </a>
-          </div>
-        </div>
-      </div>
-    `;
+function renderRelated() {
+  const others = allProducts.filter(p => p.id !== P.id).sort((a, b) => (b.category === P.category) - (a.category === P.category)).slice(0, 4);
+  $('related-products-grid').innerHTML = others.map(p => {
+    const srv = isServiceProduct(p, CATS);
+    return productCardHtml({ p, isService: srv, unit: unitOf(p, CATS), min: minQtyOf(p, CATS), price: num(p.price) || num(p.serviceRate), stock: Math.floor(num(p.stock)), koen: '', categoryName: categoryOf(CATS, p.category)?.name, fallback: FALLBACK, instant: !!workerBase() });
   }).join('');
+  $('related-products-grid').parentElement.classList.toggle('hidden', !others.length);
 }
 
-// ==========================================
-// 7. UTILITIES & MODALS
-// ==========================================
-function openImageFull() {
-  const lb = document.getElementById('lightbox');
-  document.getElementById('lightbox-img').src = currentGallery[currentGalleryIdx];
-  lb.classList.remove('hidden'); lb.classList.add('flex');
+// ---------- Gallery ----------
+function updateGalleryView(i) {
+  if (i < 0 || i >= gallery.length) return;
+  gIdx = i;
+  $('product-main-image').src = gallery[i];
+  $('gallery-counter-pill').textContent = `ภาพ ${i + 1} / ${gallery.length}`;
+  $('gallery-counter-pill').classList.toggle('hidden', gallery.length < 2);
+  document.querySelectorAll('.gthumb').forEach((b, k) => { b.classList.toggle('border-2', k === i); b.classList.toggle('border-pricingBlue', k === i); b.classList.toggle('opacity-70', k !== i); });
 }
-function closeLightbox() {
-  const lb = document.getElementById('lightbox');
-  lb.classList.add('hidden'); lb.classList.remove('flex');
-}
-function lightboxStep(d) {
-  const n = currentGallery.length;
-  updateGalleryView((currentGalleryIdx + d + n) % n);
-  document.getElementById('lightbox-img').src = currentGallery[currentGalleryIdx];
-}
-window.openImageFull = openImageFull; window.closeLightbox = closeLightbox; window.lightboxStep = lightboxStep;
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
-// swipe on the hero image
+function openImageFull() { $('lightbox-img').src = gallery[gIdx]; $('lightbox').classList.remove('hidden'); $('lightbox').classList.add('flex'); }
+function closeLightbox() { $('lightbox').classList.add('hidden'); $('lightbox').classList.remove('flex'); }
+function lightboxStep(d) { updateGalleryView((gIdx + d + gallery.length) % gallery.length); $('lightbox-img').src = gallery[gIdx]; }
 let touchX = null;
 document.addEventListener('touchstart', e => { touchX = e.target.id === 'product-main-image' ? e.touches[0].clientX : null; }, { passive: true });
 document.addEventListener('touchend', e => {
-  if (touchX === null || currentGallery.length < 2) return;
+  if (touchX === null || gallery.length < 2) return;
   const dx = e.changedTouches[0].clientX - touchX; touchX = null;
-  if (Math.abs(dx) > 40) updateGalleryView(Math.min(currentGallery.length - 1, Math.max(0, currentGalleryIdx + (dx < 0 ? 1 : -1))));
+  if (Math.abs(dx) > 40) updateGalleryView(Math.min(gallery.length - 1, Math.max(0, gIdx + (dx < 0 ? 1 : -1))));
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+// ---------- Quantity, packages, farm modes ----------
+const maxQty = () => isSrv() ? 99999 : Math.max(1, Math.floor(num(P.stock)) || 1);
+function setQty(n) {
+  const min = minQtyOf(P, CATS);
+  qty = Math.min(maxQty(), Math.max(min, Math.floor(num(n)) || min));
+  $('order-quantity-input').value = qty;
+  recalc();
+}
+const changeQuantity = (d) => setQty(qty + d);
+const handleQuantityDirectInput = (v) => setQty(v);
+
+const packagesOf = () => (Array.isArray(P.packages) ? P.packages : []).map(k => ({ qty: Math.floor(num(k.qty)), bonus: Math.floor(num(k.bonus)) })).filter(k => k.qty > 0).sort((a, b) => a.qty - b.qty);
+const bonusFor = (q) => packagesOf().reduce((b, k) => (q >= k.qty ? k.bonus : b), 0);
+function renderValuePacks() {
+  const pk = packagesOf();
+  $('packages-section').classList.toggle('hidden', !pk.length);
+  const unit = unitOf(P, CATS);
+  $('value-packs-grid').innerHTML = pk.map(k => `<button type="button" data-qty="${k.qty}" onclick="selectValuePack(${k.qty})" class="vpack text-left rounded-2xl p-4 bg-gallery border border-hairline transition">
+    <span class="block text-xs text-slate">ซื้อ ${k.qty} ${esc(unit)}</span><span class="block text-lg font-heading font-semibold">฿${(k.qty * unitRate()).toLocaleString('th-TH')}</span>
+    ${k.bonus ? `<span class="block text-xs text-appleBlue font-medium mt-0.5">แถม ${k.bonus} · ได้รวม ${k.qty + k.bonus}</span>` : ''}</button>`).join('');
+}
+const selectValuePack = (q) => setQty(q);
+
+function unitRate() {
+  const m = (P.farmModes || []).find(x => x.key === farmMode);
+  if (m) return num(m.price);
+  return isSrv() ? (num(P.serviceRate) || num(P.price)) : num(P.price);
+}
+function renderFarmModes() {
+  const modes = P.farmModes || [];
+  $('farm-modes-section').classList.toggle('hidden', !modes.length);
+  farmMode = modes.length ? (modes.find(m => m.key === farmMode) || modes[0]).key : '';
+  const unit = unitOf(P, CATS);
+  $('farm-modes-grid').innerHTML = modes.map(m => `<button type="button" onclick="selectFarmMode(${esc(JSON.stringify(m.key))})" class="text-left rounded-2xl p-4 bg-gallery border transition ${m.key === farmMode ? 'border-2 border-pricingBlue' : 'border-hairline'}">
+    <span class="block text-sm font-semibold">${esc(m.label)}</span><span class="block text-lg font-heading font-semibold mt-1">฿${num(m.price).toLocaleString('th-TH')}<span class="text-xs text-slate font-normal"> / ${esc(unit)}</span></span></button>`).join('');
+  const srv = isSrv();
+  const self = srv && modes.length && farmMode === 'self';
+  $('service-extra-fields').classList.toggle('hidden', !(srv && !self));
+  $('self-fields').classList.toggle('hidden', !self);
+  $('farm-mode-note').textContent = farmMode === 'self' ? 'คุณเข้าเกมไปยืนเอง ร้านจะนัดเวลาและเชิญเข้าห้อง ไม่ต้องให้รหัสผ่าน' : farmMode === 'with_id' ? 'ให้อีเมลและรหัสผ่านเกม ทีมงานล็อกอินไปทำให้ และลบรหัสเมื่องานเสร็จ' : '';
+}
+function selectFarmMode(key) { farmMode = key; renderFarmModes(); renderValuePacks(); recalc(); }
+
+// ---------- Price ----------
+const subtotal = () => Math.round(qty * unitRate() * 100) / 100;
+const finalPrice = () => Math.max(0, Math.round((subtotal() - discount) * 100) / 100);
+function recalc() {
+  if (!P) return;
+  const unit = unitOf(P, CATS);
+  const sub = subtotal();
+  if (promo) {
+    const r = evaluatePromo(promo, P, sub);
+    discount = r.ok ? r.discount : 0;
+  } else discount = 0;
+  const fin = finalPrice();
+  $('product-unit-price').textContent = baht(unitRate());
+  $('product-unit-suffix').textContent = `/ ${unit}`;
+  $('calc-qty-label').textContent = qty;
+  $('calc-unit-label').textContent = unit;
+  $('calc-subtotal').textContent = baht(sub);
+  $('calc-discount-row').classList.toggle('hidden', !discount);
+  $('calc-discount-val').textContent = `-${baht(discount)}`;
+  $('calc-final-price').textContent = baht(fin);
+  $('qty-buy-price').textContent = baht(fin);
+  $('voucher-exact-total').textContent = baht(fin);
+  const b = bonusFor(qty), total = qty + b;
+  $('package-summary').textContent = b ? `ซื้อ ${qty} · แถม ${b} · ได้รวม ${total} ${unit}` : `ซื้อ ${qty} ${unit}`;
+  const nx = packagesOf().find(k => k.qty > qty);
+  $('package-next').textContent = nx ? `เพิ่มอีก ${nx.qty - qty} ${unit} รับแถม ${nx.bonus}` : '';
+  $('real-rate').classList.toggle('hidden', !b || !fin);
+  $('real-rate').textContent = `จ่าย ${baht(fin)} ได้ ${total} ${unit} ≈ ${baht(fin / total)}/${unit}`;
+  document.querySelectorAll('.vpack').forEach(c => { const on = Number(c.dataset.qty) === qty; c.classList.toggle('border-2', on); c.classList.toggle('border-pricingBlue', on); });
+  pp?.refresh();
+  updateWalletPanel();
+  updateButton();
+}
+
+function updateWalletPanel() {
+  const fin = finalPrice();
+  $('wallet-balance').textContent = !user ? 'เข้าสู่ระบบเพื่อดูยอด' : balance === null ? 'กำลังโหลด…' : `${money(balance)}฿`;
+  const short = user && balance !== null && balance < fin;
+  $('wallet-topup-link').classList.toggle('hidden', !short);
+  $('wallet-note').textContent = !workerBase() ? 'ร้านยังไม่เปิดชำระด้วยเครดิต กรุณาเลือกพร้อมเพย์หรือ TrueMoney'
+    : isSrv() ? 'ตัดเงินจากเครดิตทันที งานเข้าคิวให้ทีมงานเริ่มทำได้เลย' : 'ตัดเงินจากเครดิตทันที ไอดีเกมแสดงให้เห็นทันทีหลังชำระ';
+}
+function updateButton() {
+  const btn = $('btn-confirm-product-order');
+  if (submitting) return;
+  const out = num(P?.stock) <= 0;
+  const fin = baht(finalPrice());
+  btn.disabled = out || (method === 'wallet' && (!workerBase() || (user && balance !== null && balance < finalPrice())));
+  btn.textContent = out ? (isSrv() ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด') : method === 'wallet' ? `ชำระด้วยเครดิต ${fin}` : `แจ้งชำระเงิน ${fin}`;
+}
+
+// ---------- Promo ----------
+async function applyProductPromo() {
+  const code = $('product-promo-input').value.trim().toUpperCase();
+  const msg = $('promo-status-msg');
+  const show = (t, ok) => { msg.textContent = t; msg.className = `text-sm pt-2 ${ok ? 'text-appleBlue' : 'text-launchOrange'}`; };
+  if (!code) { promo = null; promoCode = null; msg.className = 'hidden'; recalc(); return; }
+  if (!/^[A-Z0-9_-]{2,40}$/.test(code)) { show('รูปแบบโค้ดไม่ถูกต้อง', false); return; }
+  $('btn-apply-promo').disabled = true;
+  let data = null;
+  try { const s = await getDoc(doc(db, 'promo_codes', code)); if (s.exists()) data = s.data(); } catch (e) { console.warn('promo:', e); }
+  $('btn-apply-promo').disabled = false;
+  const r = evaluatePromo(data, P, subtotal());
+  if (!r.ok) { promo = null; promoCode = null; show(r.message, false); }
+  else { promo = data; promoCode = code; show(`ใช้โค้ด ${code} สำเร็จ (${r.message})`, true); toast(`ใช้โค้ด ${code} แล้ว`, 'success'); }
+  recalc();
+}
+
+// ---------- Payment tabs ----------
+let methodPicked = false;
+const defaultMethod = () => (workerBase() ? 'wallet' : 'promptpay');
+function switchProductPaymentTab(m, auto = false) {
+  if (!auto) methodPicked = true;
+  method = m;
+  ['wallet', 'promptpay', 'truemoney'].forEach(k => {
+    $(`panel-pay-${k}`).classList.toggle('hidden', k !== m);
+    $(`tab-pay-${k}`).className = `py-2 rounded-full font-medium transition ${k === m ? 'bg-gallery text-ink shadow-sm' : 'text-slate hover:text-ink'}`;
+  });
+  updateButton();
+}
+
+// ---------- Submit ----------
+function collectBuyer() {
+  const srv = isSrv();
+  const modes = P.farmModes || [];
+  const self = srv && modes.length && farmMode === 'self';
+  const b = {
+    buyerEmail: $('buyer-email').value.trim(),
+    buyerFacebook: $('buyer-facebook').value.trim(),
+    buyerContact: $('buyer-contact').value.trim(),
+    playTime: $('play-time').value.trim(),
+    gameEmail: $('game-email').value.trim(),
+    gamePassword: $('game-password').value
+  };
+  const fail = (m, id) => { toast(m, 'error'); $(id)?.focus(); return null; };
+  if (!srv && !/^\S+@\S+\.\S+$/.test(b.buyerEmail)) return fail('กรุณากรอกอีเมลให้ถูกต้อง', 'buyer-email');
+  if (srv && b.buyerFacebook.length < 2) return fail('กรุณากรอกชื่อหรือลิงก์ Facebook', 'buyer-facebook');
+  if (srv && !self && (!b.gameEmail.includes('@') || !b.gamePassword)) return fail('กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม', b.gameEmail.includes('@') ? 'game-password' : 'game-email');
+  if (self && (!b.buyerContact || !b.playTime)) return fail('กรุณากรอกชื่อในเกม / UID และเวลาที่พร้อมเข้าเกม', b.buyerContact ? 'play-time' : 'buyer-contact');
+  return { ...b, self, srv };
+}
+
+function setBusy(on, label) {
+  submitting = on;
+  const btn = $('btn-confirm-product-order');
+  btn.disabled = on;
+  if (on) btn.textContent = label; else updateButton();
+}
+
+async function executeProductPurchase() {
+  if (!P || submitting) return;
+  if (!user) { toast('กรุณาเข้าสู่ระบบก่อนสั่งซื้อ', 'error'); setTimeout(() => { location.href = 'login.html?mode=login'; }, 900); return; }
+  if (num(P.stock) <= 0) { toast('สินค้านี้หมดแล้ว', 'error'); return; }
+  const b = collectBuyer(); if (!b) return;
+  if (method === 'wallet') return payWithWallet(b);
+  return fileManualOrder(b);
+}
+
+async function payWithWallet(b) {
+  if (balance !== null && balance < finalPrice()) { toast('เครดิตไม่พอ กรุณาเติมเงินก่อน', 'error'); return; }
+  setBusy(true, 'กำลังชำระเงิน…');
+  try {
+    const res = await callWorker('/buy', {
+      productId: P.id, quantity: qty, farmMode: farmMode || null, promoCode: promoCode || null, expectedAmount: finalPrice(),
+      buyerEmail: b.srv ? '' : b.buyerEmail, buyerFacebook: b.srv ? b.buyerFacebook : '',
+      buyerContact: b.self ? b.buyerContact : '', playTime: b.self ? b.playTime : '',
+      gameEmail: b.srv && !b.self ? b.gameEmail : '', gamePassword: b.srv && !b.self ? b.gamePassword : ''
+    });
+    $('game-password').value = '';
+    showSuccess(res.order, true);
+    toast(res.order?.status === 'completed' ? 'ชำระเงินสำเร็จ รับไอดีได้เลย' : 'ชำระเงินสำเร็จ งานเข้าคิวแล้ว', 'success');
+    P.stock = num(P.stock) - qty;
+  } catch (e) {
+    console.warn('buy:', e);
+    toast(e.message || 'ชำระเงินไม่สำเร็จ', 'error');
+  } finally { setBusy(false); }
+}
+
+function isTrueMoneyVoucher(u) { try { const x = new URL(u); return x.protocol === 'https:' && x.hostname === 'gift.truemoney.com'; } catch { return false; } }
+
+async function fileManualOrder(b) {
+  let proof = '', slip = null;
+  if (method === 'truemoney') {
+    proof = $('product-voucher-input').value.trim();
+    if (!isTrueMoneyVoucher(proof)) { toast('กรุณากรอกลิงก์ซองของขวัญ TrueMoney ให้ถูกต้อง', 'error'); return; }
+  } else {
+    if (!promptpayReady()) { toast('ร้านยังไม่เปิดรับพร้อมเพย์ กรุณาเลือกช่องทางอื่น', 'error'); return; }
+    setBusy(true, 'กำลังเตรียมสลิป…');
+    try { slip = await prepareSlip(pp.getFile()); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
+    proof = 'สลิปแนบในระบบ';
+  }
+  setBusy(true, 'กำลังส่งคำสั่งซื้อ…');
+  const srv = b.srv, modes = P.farmModes || [];
+  const sub = subtotal(), fin = finalPrice();
+  try {
+    const ref = doc(collection(db, 'orders'));
+    const orderId = `ORD-${ref.id.slice(0, 8).toUpperCase()}`;
+    const payload = {
+      orderNumber: orderId, orderId, productId: P.id,
+      productName: modes.length ? `${P.name} (${modes.find(m => m.key === farmMode)?.label || ''})` : P.name,
+      productType: srv ? 'service' : 'account',
+      quantity: qty, bonusQty: bonusFor(qty), receiveQty: qty + bonusFor(qty), unit: unitOf(P, CATS),
+      unitPrice: unitRate(), subtotal: sub, discount: Math.min(discount, sub), promoCode: promoCode || null,
+      amount: fin, finalPrice: fin, paymentMethod: method, paymentProof: proof,
+      ...(srv ? { buyerFacebook: b.buyerFacebook } : { buyerEmail: b.buyerEmail }),
+      ...(b.self ? { buyerContact: b.buyerContact, playTime: b.playTime } : {}),
+      ...(srv && !b.self ? { gameEmail: b.gameEmail, gamePassword: b.gamePassword, buyerContact: b.gameEmail } : {}),
+      ...(modes.length ? { farmMode } : {}),
+      ...(slip ? { slipHash: slip.hash, hasSlip: true } : {}),
+      status: 'pending_payment', userEmail: user.email || '', userId: user.uid, createdAt: serverTimestamp()
+    };
+    const batch = writeBatch(db);
+    batch.set(ref, payload);
+    if (slip) {
+      batch.set(doc(db, 'slip_images', ref.id), { kind: 'order', uid: user.uid, image: slip.image, createdAt: serverTimestamp() });
+      batch.set(doc(db, 'slip_hashes', slip.hash), { kind: 'order', refId: ref.id, uid: user.uid, createdAt: serverTimestamp() });
+    }
+    if (srv) {
+      batch.set(doc(db, 'queue', ref.id), {
+        orderNumber: orderId, productId: P.id, productName: P.name, unit: unitOf(P, CATS), quantity: qty,
+        nameMask: maskName(user.displayName || (user.email || '').split('@')[0]).slice(0, 8), uid: user.uid, status: 'pending_payment', createdAt: serverTimestamp()
+      });
+    }
+    await batch.commit();
+    notifyAdmin('order', ref.id);
+    $('game-password').value = '';
+    $('product-voucher-input').value = '';
+    pp.reset();
+    showSuccess({ ...payload, id: ref.id, createdAt: new Date() }, false);
+    toast('ส่งคำสั่งซื้อแล้ว ทีมงานกำลังตรวจสอบ', 'success');
+  } catch (e) {
+    console.warn('order:', e);
+    toast(slipErrorText(e), 'error');
+  } finally { setBusy(false); }
+}
+
+function showSuccess(order, paid) {
+  const card = $('product-order-success-card');
+  const srv = order.productType === 'service';
+  card.innerHTML = `
+    <div class="flex items-center gap-3">
+      <span class="w-11 h-11 rounded-full ${paid ? 'bg-emerald-500' : 'bg-ink'} text-gallery flex items-center justify-center">${icon(ICONS.check, 'w-6 h-6', 2.5)}</span>
+      <div><p class="text-xs text-slate">${paid ? 'ชำระเงินสำเร็จ' : 'ได้รับคำสั่งซื้อแล้ว'}</p>
+        <h2 class="text-xl font-heading font-semibold">${paid ? (srv ? 'งานของคุณเข้าคิวแล้ว' : 'รับไอดีของคุณได้เลย') : 'รอทีมงานตรวจสอบการชำระเงิน'}</h2></div>
+    </div>
+    ${orderCardHtml(order)}
+    <div class="grid grid-cols-2 gap-3">
+      <a href="account.html#orders" class="apple-pricing-pill py-3 text-[15px]">ออเดอร์ของฉัน</a>
+      <a href="${srv ? 'queue.html' : 'category.html'}" class="apple-explore-pill py-3 text-[15px]">${srv ? 'ดูคิวงาน' : 'ดูสินค้าอื่น'}</a>
+    </div>`;
+  card.classList.remove('hidden');
+  $('checkout-card').classList.add('hidden');
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function scrollToCheckoutForm() { $('checkout-anchor-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+// ---------- Auth + wallet ----------
+onAuthStateChanged(auth, (u) => {
+  user = u;
+  $('login-needed').classList.toggle('hidden', !!u);
+  if (u?.email && !$('buyer-email').value && !/@tactical\.store$/.test(u.email)) $('buyer-email').value = u.email;
+  if (!u) balance = null;
+  if (P) { updateWalletPanel(); updateButton(); }
+});
+document.addEventListener('wallet', (e) => {
+  balance = e.detail.balance;
+  const fb = e.detail.profile?.facebook;
+  if (fb && !$('buyer-facebook').value) $('buyer-facebook').value = fb;
+  const ce = e.detail.profile?.contactEmail;
+  if (ce && !$('buyer-email').value) $('buyer-email').value = ce;
+  if (P) { updateWalletPanel(); updateButton(); }
+});
+onSettings(() => {
+  if (!P) return;
+  renderBadges();
+  renderRelated();
+  updateWalletPanel();
+  switchProductPaymentTab(!methodPicked || (method === 'wallet' && !workerBase()) ? defaultMethod() : method, true);
 });
 
-function scrollToCheckoutForm() {
-  const el = document.getElementById('checkout-anchor-section');
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function triggerToast(text) {
-  const box = document.getElementById('toast-box');
-  const txt = document.getElementById('toast-text');
-  if (!box || !txt) return;
-
-  txt.innerText = text;
-  box.classList.remove('opacity-0', '-translate-y-4', 'scale-95', 'pointer-events-none');
-  box.classList.add('opacity-100', 'translate-y-0', 'scale-100');
-
-  setTimeout(() => {
-    box.classList.add('opacity-0', '-translate-y-4', 'scale-95', 'pointer-events-none');
-    box.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
-  }, 2800);
-}
-
-const ORDER_STATUS_LABEL = {
-  pending_payment: 'รอตรวจสอบการชำระเงิน',
-  processing: 'อยู่ในคิวงาน',
-  completed: 'จัดส่งสำเร็จ',
-  cancelled: 'ยกเลิกแล้ว'
-};
-
-async function openMyOrdersModal() {
-  const modal = document.getElementById('my-orders-modal');
-  const listEl = document.getElementById('my-orders-list');
-  const emptyEl = document.getElementById('my-orders-empty');
-  if (!modal) return;
-
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-
-  const user = auth?.currentUser;
-  let orders = [];
-  if (user) {
-    try {
-      const snap = await getDocs(query(collection(db, 'orders'), where('userId', '==', user.uid)));
-      orders = snap.docs.map(d => ({
-        ...d.data(),
-        createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : d.data().createdAt
-      })).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    } catch (err) {
-      console.warn('Load orders failed:', err);
-      triggerToast('โหลดประวัติคำสั่งซื้อไม่สำเร็จ');
-    }
-  }
-
-  if (orders.length === 0) {
-    if (listEl) listEl.innerHTML = '';
-    if (emptyEl) emptyEl.classList.remove('hidden');
-    return;
-  }
-  if (emptyEl) emptyEl.classList.add('hidden');
-  if (!listEl) return;
-
-  // Credentials appear only after an admin marks the order completed and delivers them.
-  listEl.innerHTML = orders.map(ord => {
-    const acc = ord.status === 'completed' ? (ord.accountDelivered || {}) : {};
-    const isSrv = ord.productType === 'service';
-    const detail = isSrv
-      ? `<div class="text-[11px] text-ink font-sans bg-gallery p-2 rounded-links border border-hairline">เกม: ${escapeHtml(ord.gameEmail || ord.buyerContact || '-')} | จำนวน: ${escapeHtml(ord.quantity)} ${escapeHtml(ord.unit || 'กอง')}</div>`
-      : (acc.username
-        ? `<div class="flex justify-between text-ink bg-gallery p-2 rounded-links border border-hairline"><span>U: ${escapeHtml(acc.username)}</span><span>P: ${escapeHtml(acc.password)}</span></div>`
-        : `<div class="text-[11px] text-slate font-sans bg-gallery p-2 rounded-links border border-hairline">ไอดีจะแสดงที่นี่เมื่อทีมงานยืนยันการชำระเงินแล้ว</div>`);
-    return `
-      <div class="apple-card p-4 bg-mist border-hairline space-y-2 font-mono text-xs">
-        <div class="flex justify-between items-center border-b border-hairline pb-1.5 font-sans">
-          <span class="font-semibold text-ink">${escapeHtml(ord.productName)}</span>
-          <span class="text-ink font-semibold font-mono">฿${Number(ord.finalPrice).toFixed(2)}</span>
-        </div>
-        <div class="flex justify-between text-slate text-[11px]">
-          <span>ORDER: #${escapeHtml(ord.orderId)}</span>
-          <span>${escapeHtml(ORDER_STATUS_LABEL[ord.status] || ord.status || '-')}</span>
-        </div>
-        ${detail}
-      </div>`;
-  }).join('');
-}
-
-function closeMyOrdersModal() {
-  const modal = document.getElementById('my-orders-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-  }
-}
-
-function initAuthListener() {
-  try {
-    onAuthStateChanged(auth, (user) => {
-      const loggedOut = document.getElementById('auth-logged-out');
-      const loggedIn = document.getElementById('auth-logged-in');
-      const nameEl = document.getElementById('user-display-name');
-      const initialEl = document.getElementById('user-avatar-initial');
-
-      if (user) {
-        if (loggedOut) loggedOut.classList.add('hidden');
-        if (loggedIn) {
-          loggedIn.classList.remove('hidden');
-          loggedIn.classList.add('flex');
-        }
-        const name = user.displayName || user.email?.split('@')[0] || 'Agent';
-        if (nameEl) nameEl.innerText = name;
-        if (initialEl) initialEl.innerText = name.charAt(0).toUpperCase();
-      } else {
-        if (loggedIn) loggedIn.classList.add('hidden');
-        if (loggedOut) loggedOut.classList.remove('hidden');
-      }
-    });
-  } catch (e) {
-    console.warn("Auth listener fallback:", e);
-  }
-}
-
-async function handleSignOut() {
-  try {
-    await signOut(auth);
-    triggerToast('ออกจากระบบเรียบร้อย');
-  } catch (e) {
-    console.warn("Sign out error:", e);
-  }
-}
-
-// Bind to window for HTML inline handlers
-window.updateGalleryView = updateGalleryView;
-window.changeQuantity = changeQuantity;
-window.handleQuantityDirectInput = handleQuantityDirectInput;
-window.applyProductPromo = applyProductPromo;
-window.switchProductPaymentTab = switchProductPaymentTab;
-window.executeProductPurchase = executeProductPurchase;
-window.copyOrderResultCredentials = copyOrderResultCredentials;
-window.scrollToCheckoutForm = scrollToCheckoutForm;
-window.openMyOrdersModal = openMyOrdersModal;
-window.closeMyOrdersModal = closeMyOrdersModal;
-window.handleSignOut = handleSignOut;
-
-window.selectValuePack = selectValuePack;
+Object.assign(window, {
+  updateGalleryView, openImageFull, closeLightbox, lightboxStep, changeQuantity, handleQuantityDirectInput, selectValuePack,
+  selectFarmMode, applyProductPromo, switchProductPaymentTab, executeProductPurchase, scrollToCheckoutForm
+});
+load();

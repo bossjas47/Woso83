@@ -1,558 +1,120 @@
 <!DOCTYPE html>
-<html lang="th" class="light">
+<html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>บัญชีของฉัน — TACTICAL STORE</title>
-  
-  <!-- Apple System Font Stack Fallback & Prompt -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>บัญชีของฉัน — ASTRAPHEX HUB</title>
+  <meta name="description" content="บัญชีผู้ใช้ ประวัติออเดอร์ และคิวงานของคุณที่ ASTRAPHEX HUB">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" href="../assets/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="canonical" href="https://astraphex.panderx.xyz/front/account.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ASTRAPHEX HUB">
+  <meta property="og:title" content="บัญชีของฉัน — ASTRAPHEX HUB">
+  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:url" content="https://astraphex.panderx.xyz/front/account.html">
+  <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="th_TH">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Tailwind CSS CDN -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            gallery: '#ffffff',
-            mist: '#f5f5f7',
-            frost: '#fafafc',
-            hairline: '#d6d6d6',
-            control: '#e6e6e8',
-            ink: '#1d1d1f',
-            slate: '#707070',
-            steel: '#86868b',
-            appleBlue: '#0066cc',
-            pricingBlue: '#0071e3',
-            launchOrange: '#b64400'
-          },
-          fontFamily: {
-            heading: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Outfit', 'Prompt', 'sans-serif'],
-            body: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Prompt', 'sans-serif'],
-            mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace']
-          },
-          borderRadius: {
-            'card': '28px',
-            'links': '10px',
-            'pill': '36px',
-            'input': '980px',
-            'button': '9999px',
-            'nav': '20px'
-          }
-        }
-      }
-    }
-  </script>
-
+  <script src="../js/tw-config.js"></script>
   <link rel="stylesheet" href="../css/style.css">
-
-  <style>
-    :root {
-      /* Apple Design Tokens */
-      --color-gallery-white: #ffffff;
-      --color-studio-mist: #f5f5f7;
-      --color-paper-frost: #fafafc;
-      --color-hairline-silver: #d6d6d6;
-      --color-control-gray: #e6e6e8;
-      --color-ink: #1d1d1f;
-      --color-slate: #707070;
-      --color-steel: #86868b;
-      --color-apple-blue: #0066cc;
-      --color-pricing-blue: #0071e3;
-      --color-launch-orange: #b64400;
-
-      --radius-cards: 28px;
-      --radius-inputs: 980px;
-      --radius-buttons: 9999px;
-      --radius-navigation: 20px;
-    }
-
-    body {
-      background-color: var(--color-studio-mist);
-      color: var(--color-ink);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Prompt', sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Apple 28px Surface Card: Shadowless & Flat */
-    .apple-card {
-      background-color: var(--color-gallery-white);
-      border-radius: var(--radius-cards);
-      border: 1px solid var(--color-hairline-silver);
-      box-shadow: none;
-    }
-
-    /* Apple Pricing Blue Pill */
-    .apple-pricing-pill {
-      background-color: var(--color-pricing-blue);
-      color: var(--color-gallery-white);
-      border-radius: var(--radius-buttons);
-      font-size: 13px;
-      font-weight: 500;
-      transition: opacity 0.2s ease;
-    }
-    .apple-pricing-pill:hover {
-      opacity: 0.9;
-    }
-    .apple-pricing-pill:disabled {
-      background-color: var(--color-control-gray);
-      color: var(--color-steel);
-      cursor: not-allowed;
-      opacity: 1;
-    }
-
-    /* Apple Outlined Explore Pill */
-    .apple-explore-pill {
-      background-color: transparent;
-      color: var(--color-ink);
-      border: 1px solid var(--color-hairline-silver);
-      border-radius: var(--radius-buttons);
-      font-size: 12px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-    .apple-explore-pill:hover {
-      background-color: var(--color-studio-mist);
-      border-color: var(--color-steel);
-    }
-
-    /* Apple Input Field */
-    .apple-input {
-      background-color: var(--color-gallery-white);
-      border: 1px solid var(--color-hairline-silver);
-      border-radius: 14px;
-      color: var(--color-ink);
-      font-size: 13px;
-      transition: border-color 0.2s ease;
-    }
-    .apple-input:focus {
-      outline: none;
-      border-color: var(--color-pricing-blue);
-    }
-
-    /* Apple Pill Search Input */
-    .apple-search-input {
-      background-color: var(--color-gallery-white);
-      border: 1px solid var(--color-steel);
-      border-radius: var(--radius-inputs);
-      color: var(--color-ink);
-      font-size: 13px;
-      transition: border-color 0.2s ease;
-    }
-    .apple-search-input:focus {
-      outline: none;
-      border-color: var(--color-pricing-blue);
-    }
-  </style>
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
   <script src="../js/theme.js"></script>
   <script src="../js/transition.js" defer></script>
   <script type="module" src="../js/shell.js"></script>
 </head>
-<body class="selection:bg-pricingBlue/20 selection:text-ink min-h-screen pb-20">
+<body>
+  <header id="site-header"></header>
 
-  <!-- Toast Notification Wrapper -->
-  <div id="toast-box" role="status" aria-live="polite" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 scale-95 flex items-center gap-2.5 bg-gallery border border-hairline text-ink px-5 py-2.5 rounded-button">
-    <span id="toast-dot" class="w-2 h-2 rounded-full bg-appleBlue shrink-0"></span>
-    <span id="toast-text" class="text-xs font-medium tracking-tight">ข้อความแจ้งเตือน</span>
-  </div>
-
-  <!-- Global Header Bar (Apple Minimalist Gallery Header) -->
-  <header class="w-full bg-gallery/90 backdrop-blur-xl border-b border-hairline sticky top-0 z-40">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex justify-between items-center">
-      
-      <!-- Logo Branding -->
-      <a href="../index.html" class="flex items-center gap-2 group">
-        <div class="w-6 h-6 rounded-full bg-ink text-gallery flex items-center justify-center font-bold text-xs group-hover:bg-pricingBlue transition-colors">
-          <svg class="w-3.5 h-3.5 stroke-gallery fill-none" stroke-width="2.5" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
-          </svg>
-        </div>
-        <div class="flex items-baseline gap-1">
-          <span class="font-heading font-semibold text-sm tracking-tight text-ink">TACTICAL</span>
-          <span class="text-[10px] text-slate font-normal uppercase tracking-wider">Store</span>
-        </div>
-      </a>
-
-      <!-- Back to Store Pill Button -->
-      <a href="../index.html" class="apple-explore-pill px-4 py-1.5 flex items-center gap-1.5 text-xs text-slate hover:text-ink">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-        </svg>
-        <span>กลับหน้าร้านค้า</span>
-      </a>
-
-    </div>
-  </header>
-
-  <!-- Main Container -->
-  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-
-    <!-- LOADING STATE (Prevents Auth Flash on Initial Load) -->
-    <div id="account-loading-view" class="py-20 max-w-md mx-auto apple-card p-8 text-center space-y-3">
-      <div class="w-10 h-10 rounded-full border-2 border-hairline border-t-ink animate-spin mx-auto"></div>
-      <p class="text-xs text-slate font-medium">กำลังตรวจสอบข้อมูลบัญชีและความปลอดภัย...</p>
+  <main class="max-w-[960px] mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
+    <!-- Loading -->
+    <div id="acc-loading" class="space-y-4" aria-label="กำลังโหลด">
+      <div class="skeleton h-28 !rounded-[28px]"></div><div class="skeleton h-36 !rounded-[28px]"></div><div class="skeleton h-12 w-2/3 !rounded-full"></div>
     </div>
 
-    <!-- GUEST / NOT LOGGED IN STATE (Apple 28px Card) -->
-    <div id="account-guest-view" class="hidden text-center py-16 max-w-md mx-auto apple-card p-8">
-      <div class="w-14 h-14 bg-mist border border-hairline rounded-full flex items-center justify-center mx-auto mb-4 text-ink">
-        <svg class="w-6 h-6 text-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-        </svg>
-      </div>
-      <h2 class="text-2xl font-heading font-semibold text-ink tracking-tight mb-2">
-        เข้าสู่ระบบบัญชีของคุณ
-      </h2>
-      <p class="text-slate text-xs mb-6 leading-relaxed">
-        กรุณาเข้าสู่ระบบเพื่อตรวจสอบประวัติคำสั่งซื้อ รหัสไอดีเกมที่ส่งมอบ หรือจัดการความปลอดภัยของบัญชี
-      </p>
-      <div class="flex flex-col gap-2.5">
-        <a href="login.html?mode=login" class="w-full apple-pricing-pill py-2.5 text-center text-xs">
-          เข้าสู่ระบบ (LOGIN)
-        </a>
-        <a href="login.html?mode=register" class="w-full apple-explore-pill py-2.5 text-center text-xs bg-gallery">
-          สมัครสมาชิกใหม่ (REGISTER)
-        </a>
-      </div>
-    </div>
+    <!-- Guest -->
+    <section id="acc-guest" class="hidden max-w-md mx-auto text-center py-16">
+      <div class="rounded-3xl overflow-hidden bg-black w-[260px] mx-auto"><img src="../assets/logo-full.jpg" alt="ASTRAPHEX HUB" width="1200" height="463" class="w-full h-auto"></div>
+      <h1 class="text-3xl font-heading font-semibold mt-8">บัญชีของฉัน</h1>
+      <p class="text-slate mt-2">เข้าสู่ระบบเพื่อดูยอดเงิน ไอดีที่ซื้อ และสถานะคิวงาน</p>
+      <div class="flex justify-center gap-3 mt-6"><a href="login.html?mode=login" class="apple-pricing-pill px-7 py-3 text-[15px]">เข้าสู่ระบบ</a><a href="login.html?mode=register" class="apple-explore-pill px-7 py-3 text-[15px]">สมัครสมาชิก</a></div>
+    </section>
 
-    <!-- LOGGED IN ACCOUNT DASHBOARD -->
-    <div id="account-dashboard-view" class="hidden space-y-8">
-      
-      <!-- Top Profile Hero Card (Apple 28px White Card Surface) -->
-      <div class="apple-card p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        
-        <div class="flex items-center gap-5">
-          <!-- Avatar Initial Circle -->
-          <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-ink text-gallery font-heading font-semibold text-2xl sm:text-3xl flex items-center justify-center shrink-0">
-            <span id="account-avatar-initial">A</span>
-          </div>
-
-          <!-- User Identifiers -->
-          <div class="flex flex-col">
-            <div class="flex items-center gap-2.5 flex-wrap mb-1">
-              <h1 id="account-display-name" class="text-2xl sm:text-3xl font-heading font-semibold text-ink tracking-tight">
-                Agent
-              </h1>
-              
-              <!-- Role Badge -->
-              <span id="account-role-badge" class="px-3 py-0.5 rounded-full text-xs font-mono font-medium bg-mist border border-hairline text-slate">
-                สมาชิกทั่วไป (USER)
-              </span>
+    <!-- Dashboard -->
+    <div id="acc-dash" class="hidden space-y-5">
+      <section class="grid md:grid-cols-5 gap-5">
+        <div class="md:col-span-3 apple-card p-5 sm:p-6 flex items-center gap-4">
+          <span id="acc-avatar" class="w-16 h-16 rounded-full bg-ink text-gallery text-2xl font-heading font-semibold flex items-center justify-center shrink-0">A</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 id="acc-name" class="text-2xl font-heading font-semibold truncate">-</h1>
+              <span id="acc-role" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-mist text-slate">สมาชิก</span>
             </div>
-
-            <div class="flex items-center gap-2 flex-wrap">
-              <span id="account-user-id" class="text-xs text-slate font-mono">
-                IDENTIFIER: -
-              </span>
-              <button type="button" onclick="copyUserIdentifier()" class="text-[11px] text-appleBlue hover:underline font-medium">
-                คัดลอก
-              </button>
-            </div>
-
-            <span id="account-auth-status" class="text-[11px] text-steel mt-0.5">
-              สถานะ: เข้าสู่ระบบเรียบร้อย • บัญชีปลอดภัย
-            </span>
+            <p class="text-sm text-slate mt-0.5"><span id="acc-status" class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>บัญชีปกติ</span> · สมาชิกตั้งแต่ <span id="acc-since">-</span></p>
+            <p id="acc-contact" class="text-xs text-slate mt-1 truncate"></p>
           </div>
+          <a id="acc-admin-link" href="admin.html" class="hidden apple-explore-pill px-4 py-2 text-sm shrink-0">หลังบ้าน</a>
         </div>
-
-        <!-- Quick Profile & Logout Action Pills -->
-        <div class="flex items-center gap-2.5 w-full md:w-auto">
-          <button type="button" onclick="switchAccountTab('security')" class="flex-1 md:flex-initial apple-explore-pill px-4 py-2.5 text-xs text-ink flex items-center justify-center gap-1.5">
-            <span>แก้ไขโปรไฟล์</span>
-          </button>
-          <button type="button" onclick="handleAccountSignOut()" class="flex-1 md:flex-initial apple-explore-pill px-5 py-2.5 text-xs text-launchOrange border-hairline hover:bg-mist flex items-center justify-center gap-2 transition-all">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-            </svg>
-            <span>ออกจากระบบ</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Account Segmented Navigation Tabs (Apple Pill Container) -->
-      <div class="flex bg-mist p-1 rounded-button border border-hairline gap-1 overflow-x-auto" role="tablist">
-        
-        <!-- Tab 1: Orders -->
-        <button id="tab-btn-orders" type="button" role="tab" aria-selected="true" onclick="switchAccountTab('orders')" class="px-5 py-2 rounded-button text-xs font-medium transition-all bg-ink text-gallery flex items-center gap-2 shrink-0">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-          </svg>
-          <span>ประวัติคำสั่งซื้อของฉัน</span>
-          <span id="account-orders-count-badge" class="bg-gallery text-ink text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold">0</span>
-        </button>
-
-        <!-- Tab 2: Security & Profile -->
-        <button id="tab-btn-security" type="button" role="tab" aria-selected="false" onclick="switchAccountTab('security')" class="px-5 py-2 rounded-button text-xs font-medium transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-          </svg>
-          <span>โปรไฟล์ &amp; ความปลอดภัย</span>
-        </button>
-
-        <!-- Tab 3: Backoffice (STRICTLY HIDDEN FOR REGULAR USERS, ONLY SHOWN FOR VERIFIED ADMIN) -->
-        <button id="tab-btn-admin" type="button" role="tab" aria-selected="false" onclick="switchAccountTab('admin')" class="hidden px-5 py-2 rounded-button text-xs font-medium transition-all text-launchOrange hover:bg-gallery flex items-center gap-2 shrink-0">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          <span>ระบบจัดการหลังบ้าน (ADMIN)</span>
-          <span class="w-1.5 h-1.5 rounded-full bg-launchOrange"></span>
-        </button>
-
-      </div>
-
-      <!-- TAB 1 CONTENT: ORDER HISTORY -->
-      <section id="account-sec-orders" class="block space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div class="md:col-span-2 rounded-[28px] p-5 sm:p-6 text-gallery flex flex-col justify-between" style="background:linear-gradient(135deg,#0b1f6b 0%,#0e3a8a 55%,#159a9c 100%)">
           <div>
-            <h2 class="text-2xl font-heading font-semibold text-ink tracking-tight">
-              รายการคำสั่งซื้อของคุณ
-            </h2>
-            <p class="text-slate text-xs mt-1">
-              ไอดีและรหัสผ่านที่คุณสั่งซื้อทั้งหมดจะซิงค์กับบัญชีของคุณ สามารถค้นหา ดูรหัสผ่าน และคัดลอกได้ตลอดเวลา
-            </p>
+            <p class="text-sm opacity-80">ยอดเงินคงเหลือ</p>
+            <p id="acc-balance" class="text-4xl font-heading font-bold mt-1">-</p>
           </div>
-
-          <!-- Search & Refresh Bar -->
-          <div class="flex items-center gap-2 w-full sm:w-auto">
-            <div class="relative flex-1 sm:w-64">
-              <input
-                id="orders-search-input"
-                type="search"
-                oninput="handleOrderSearch(this.value)"
-                placeholder="ค้นหาชื่อสินค้า หรือ #เลขออเดอร์..."
-                class="apple-search-input w-full pl-9 pr-4 py-2 text-xs placeholder-steel"
-              />
-              <svg class="w-3.5 h-3.5 text-steel absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-              </svg>
-            </div>
-            <button type="button" onclick="refreshAccountOrders()" class="apple-explore-pill px-4 py-2 text-xs shrink-0 flex items-center gap-1.5">
-              <span>รีเฟรช</span>
-            </button>
-          </div>
-        </div>
-
-        <div id="account-orders-list" class="space-y-4">
-          <!-- Rendered via JS -->
-        </div>
-
-        <div id="account-orders-empty" class="hidden py-16 text-center flex-col items-center justify-center apple-card bg-gallery">
-          <div class="text-3xl mb-2"><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg></div>
-          <h3 id="account-orders-empty-title" class="text-base font-semibold text-ink mb-1">ยังไม่มีประวัติคำสั่งซื้อ</h3>
-          <p id="account-orders-empty-desc" class="text-slate text-xs mb-5">เมื่อคุณเลือกซื้อไอดีเกม รหัสบัญชีจะปรากฏในหน้านี้โดยอัตโนมัติ</p>
-          <a href="../index.html#catalog-section" class="apple-pricing-pill px-6 py-2.5 text-xs inline-block">
-            เลือกซื้อไอดีเกมเลย
-          </a>
+          <a href="topup.html" class="mt-5 inline-flex self-start items-center gap-1.5 bg-cyanGlow text-[#04131c] font-semibold rounded-full px-5 py-2.5 shadow-[0_0_18px_rgba(0,229,255,.6)]">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>เติมเงิน</a>
         </div>
       </section>
 
-      <!-- TAB 2 CONTENT: PROFILE & SECURITY SETTINGS -->
-      <section id="account-sec-security" class="hidden space-y-6">
-        <div>
-          <h2 class="text-2xl font-heading font-semibold text-ink tracking-tight">
-            โปรไฟล์ &amp; ความปลอดภัยของบัญชี
-          </h2>
-          <p class="text-slate text-xs mt-1">
-            แก้ไขชื่อที่แสดง ตรวจสอบสถานะความปลอดภัย และเปลี่ยนรหัสผ่านด้วยระบบยืนยันตัวตน
-          </p>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-6">
-          <!-- Left Column: Profile Display Name + Security Status -->
-          <div class="space-y-6">
-            <div class="apple-card p-6 sm:p-7 space-y-4">
-              <h3 class="font-semibold text-ink text-sm flex items-center gap-2">
-                <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm-8 9a8 8 0 0116 0"/></svg></span> แก้ไขชื่อที่แสดง (Display Name)
-              </h3>
-              <form onsubmit="handleDisplayNameUpdate(event)" class="space-y-3">
-                <div>
-                  <label for="profile-display-name-input" class="block text-[11px] text-slate mb-1">ชื่อที่แสดงในระบบ</label>
-                  <input
-                    id="profile-display-name-input"
-                    type="text"
-                    maxlength="32"
-                    placeholder="กรอกชื่อที่ต้องการแสดง..."
-                    class="apple-input w-full px-4 py-2.5 text-xs placeholder-steel"
-                    required
-                  />
-                </div>
-                <button type="submit" class="apple-explore-pill px-5 py-2 text-xs text-ink font-medium">
-                  บันทึกชื่อที่แสดง
-                </button>
-              </form>
-            </div>
-
-            <div class="apple-card p-6 sm:p-7 space-y-4">
-              <h3 class="font-semibold text-ink text-sm flex items-center gap-2">
-                <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg></span> สถานะการรักษาความปลอดภัย
-              </h3>
-              <ul class="text-xs text-slate space-y-2.5">
-                <li class="flex items-center gap-2">
-                  <span class="text-appleBlue font-bold">✓</span> ยืนยันสิทธิ์และเข้ารหัสผ่านด้วย Firebase Authentication
-                </li>
-                <li class="flex items-center gap-2">
-                  <span class="text-appleBlue font-bold">✓</span> ป้องกันการเข้าถึงคำสั่งซื้อข้ามบัญชี (Role-Based Access Control)
-                </li>
-                <li class="flex items-center gap-2">
-                  <span class="text-launchOrange font-bold">•</span> บังคับยืนยันรหัสผ่านปัจจุบันก่อนเปลี่ยนรหัสผ่านใหม่ทุกครั้ง
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <!-- Right Column: Re-authenticated Password Update -->
-          <div class="apple-card p-6 sm:p-7 space-y-4 self-start">
-            <h3 class="font-semibold text-ink text-sm flex items-center gap-2">
-              <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 10a4 4 0 100-8 4 4 0 000 8zM11 8l-8 8v3h3v-2h2v-2h2l1-1"/></svg></span> เปลี่ยนรหัสผ่านเข้าใช้งาน
-            </h3>
-            <p class="text-xs text-slate leading-relaxed">
-              เพื่อความปลอดภัยของไอดีเกมที่คุณถือครอง กรุณากรอกรหัสผ่านปัจจุบันเพื่อยืนยันตัวตนก่อนตั้งรหัสผ่านใหม่
-            </p>
-            <form onsubmit="handlePasswordChange(event)" class="space-y-3">
-              <div>
-                <label for="change-pw-current" class="block text-[11px] text-slate mb-1">รหัสผ่านปัจจุบัน</label>
-                <input 
-                  id="change-pw-current" 
-                  type="password" 
-                  autocomplete="current-password"
-                  placeholder="กรอกรหัสผ่านปัจจุบันของคุณ..." 
-                  class="apple-input w-full px-4 py-2.5 text-xs placeholder-steel"
-                  required
-                />
-              </div>
-              <div>
-                <label for="change-pw-new" class="block text-[11px] text-slate mb-1">รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</label>
-                <input 
-                  id="change-pw-new" 
-                  type="password" 
-                  autocomplete="new-password"
-                  minlength="6"
-                  placeholder="กรอกรหัสผ่านใหม่..." 
-                  class="apple-input w-full px-4 py-2.5 text-xs placeholder-steel"
-                  required
-                />
-              </div>
-              <div>
-                <label for="change-pw-confirm" class="block text-[11px] text-slate mb-1">ยืนยันรหัสผ่านใหม่อีกครั้ง</label>
-                <input 
-                  id="change-pw-confirm" 
-                  type="password" 
-                  autocomplete="new-password"
-                  minlength="6"
-                  placeholder="กรอกรหัสผ่านใหม่อีกครั้ง..." 
-                  class="apple-input w-full px-4 py-2.5 text-xs placeholder-steel"
-                  required
-                />
-              </div>
-              <button id="change-pw-submit-btn" type="submit" class="w-full apple-pricing-pill py-2.5 text-xs mt-1">
-                อัปเดตรหัสผ่าน
-              </button>
-            </form>
-          </div>
-        </div>
+      <section class="grid grid-cols-3 gap-3">
+        <div class="soft-card p-4 text-center"><p id="acc-count-ids" class="text-2xl font-heading font-semibold">0</p><p class="text-xs text-slate">ไอดีที่ซื้อ</p></div>
+        <div class="soft-card p-4 text-center"><p id="acc-count-srv" class="text-2xl font-heading font-semibold">0</p><p class="text-xs text-slate">งานบริการ</p></div>
+        <div class="soft-card p-4 text-center"><p id="acc-count-pending" class="text-2xl font-heading font-semibold">0</p><p class="text-xs text-slate">รอดำเนินการ</p></div>
       </section>
 
-      <!-- TAB 3 CONTENT: BACKOFFICE MANAGEMENT (STRICTLY FOR VERIFIED ADMIN) -->
-      <section id="account-sec-admin" class="hidden space-y-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="text-launchOrange text-[12px] font-semibold tracking-tight block mb-1">
-              ADMIN PORTAL • SENSITIVE BACKOFFICE
-            </span>
-            <h2 class="text-2xl font-heading font-semibold text-ink tracking-tight">
-              ระบบจัดการหลังบ้าน
-            </h2>
-            <p class="text-slate text-xs mt-0.5">
-              ส่วนควบคุมพิเศษสำหรับบัญชีผู้ดูแลระบบที่ผ่านการยืนยันสิทธิ์จาก Firebase Auth เท่านั้น
-            </p>
+      <div id="orders" class="bg-control/70 p-1 rounded-full grid grid-cols-3 text-[15px] sticky top-[60px] z-20" role="tablist">
+        <button type="button" id="tab-ids" onclick="switchAccountTab('ids')" class="py-2.5 rounded-full font-medium" role="tab">ไอดีเกม</button>
+        <button type="button" id="tab-services" onclick="switchAccountTab('services')" class="py-2.5 rounded-full font-medium" role="tab">คิวงานบริการ</button>
+        <button type="button" id="tab-settings" onclick="switchAccountTab('settings')" class="py-2.5 rounded-full font-medium" role="tab">ตั้งค่าบัญชี</button>
+      </div>
+
+      <section id="sec-ids" class="space-y-3"></section>
+      <section id="sec-services" class="hidden space-y-3"></section>
+
+      <section id="sec-settings" class="hidden space-y-5">
+        <form id="form-profile" class="apple-card p-5 sm:p-6 space-y-4">
+          <h2 class="text-lg font-heading font-semibold">ข้อมูลโปรไฟล์</h2>
+          <div><label for="pf-name" class="block text-sm font-medium mb-1.5">ชื่อที่แสดง</label><input id="pf-name" type="text" maxlength="40" required class="w-full apple-input px-4 py-3"></div>
+          <div><label for="pf-facebook" class="block text-sm font-medium mb-1.5">ชื่อหรือลิงก์ Facebook</label><input id="pf-facebook" type="text" maxlength="200" placeholder="ใช้ติดต่อเรื่องงานบริการ" class="w-full apple-input px-4 py-3"></div>
+          <div><label for="pf-email" class="block text-sm font-medium mb-1.5">อีเมลติดต่อ</label><input id="pf-email" type="email" maxlength="200" placeholder="ใช้รับข้อมูลไอดีที่ซื้อ" class="w-full apple-input px-4 py-3"></div>
+          <button id="pf-save" type="submit" class="apple-pricing-pill px-6 py-3 text-[15px]">บันทึกข้อมูล</button>
+        </form>
+        <form id="form-password" class="apple-card p-5 sm:p-6 space-y-4">
+          <h2 class="text-lg font-heading font-semibold">เปลี่ยนรหัสผ่าน</h2>
+          <div><label for="pw-current" class="block text-sm font-medium mb-1.5">รหัสผ่านปัจจุบัน</label><input id="pw-current" type="password" autocomplete="current-password" required class="w-full apple-input px-4 py-3"></div>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label for="pw-new" class="block text-sm font-medium mb-1.5">รหัสผ่านใหม่</label><input id="pw-new" type="password" autocomplete="new-password" minlength="6" required class="w-full apple-input px-4 py-3"></div>
+            <div><label for="pw-confirm" class="block text-sm font-medium mb-1.5">ยืนยันรหัสผ่านใหม่</label><input id="pw-confirm" type="password" autocomplete="new-password" minlength="6" required class="w-full apple-input px-4 py-3"></div>
           </div>
-
-          <a href="admin.html" class="hidden sm:flex items-center gap-1.5 apple-pricing-pill px-5 py-2 text-xs">
-            <span>เปิดหน้าแอดมินเต็มจอ</span>
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-            </svg>
-          </a>
-        </div>
-
-        <!-- Admin Quick Actions Grid (Apple 28px Cards) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          <div class="apple-card p-6 transition-all group hover:border-steel">
-            <div class="w-10 h-10 rounded-2xl bg-mist border border-hairline flex items-center justify-center text-ink mb-4 text-lg">
-              <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg>
-            </div>
-            <h3 class="font-semibold text-ink text-sm mb-1">จัดการสินค้า</h3>
-            <p class="text-slate text-xs leading-relaxed mb-4">เพิ่มสินค้าใหม่ ใส่ URL รูปหลัก และแกลเลอรี่ภาพในตัวไอดี</p>
-            <a href="admin.html" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              ไปยังหน้าจัดการสินค้า →
-            </a>
-          </div>
-
-          <div class="apple-card p-6 transition-all group hover:border-steel">
-            <div class="w-10 h-10 rounded-2xl bg-mist border border-hairline flex items-center justify-center text-ink mb-4 text-lg">
-              <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9zM7 5H5v16h14V5h-2M8 12h8M8 16h6"/></svg>
-            </div>
-            <h3 class="font-semibold text-ink text-sm mb-1">คำสั่งซื้อลูกค้า</h3>
-            <p class="text-slate text-xs leading-relaxed mb-4">ตรวจสอบออเดอร์ ยอดเงินเข้า สลิป และบัญชีไอดีที่ระบบนำส่ง</p>
-            <a href="admin.html" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              ไปยังตารางคำสั่งซื้อ →
-            </a>
-          </div>
-
-          <div class="apple-card p-6 transition-all group hover:border-steel">
-            <div class="w-10 h-10 rounded-2xl bg-mist border border-hairline flex items-center justify-center text-ink mb-4 text-lg">
-              <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V3h9l9 9-9 9-9-9zm5-5h.01"/></svg>
-            </div>
-            <h3 class="font-semibold text-ink text-sm mb-1">โค้ดส่วนลด</h3>
-            <p class="text-slate text-xs leading-relaxed mb-4">สร้างและลบโค้ดโปรโมชั่น ลดเป็นบาทหรือเปอร์เซ็นต์</p>
-            <a href="admin.html" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              จัดการโค้ดส่วนลด →
-            </a>
-          </div>
-
-          <div class="apple-card p-6 transition-all group hover:border-steel">
-            <div class="w-10 h-10 rounded-2xl bg-mist border border-hairline flex items-center justify-center text-ink mb-4 text-lg">
-              <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4"/></svg>
-            </div>
-            <h3 class="font-semibold text-ink text-sm mb-1">ตั้งค่าร้านค้า</h3>
-            <p class="text-slate text-xs leading-relaxed mb-4">แก้ไขข้อความตัววิ่ง Marquee และลิงก์ Discord ของร้าน</p>
-            <a href="admin.html" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              ตั้งค่าร้านค้า →
-            </a>
-          </div>
-
-        </div>
-
-        <!-- Launch Console Banner (Apple Editorial Studio Card) -->
-        <div class="apple-card p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 bg-gallery">
-          <div>
-            <h3 class="text-base font-heading font-semibold text-ink mb-1">
-              เข้าสู่แดชบอร์ดหลังบ้านเต็มรูปแบบ (FULL ADMIN CONSOLE)
-            </h3>
-            <p class="text-slate text-xs">
-              มีตารางสินค้า ตารางคำสั่งซื้อ ฟอร์มปรับแต่งรูปภาพ Preset สถิติยอดขายรวม และระบบรีเซ็ตสินค้า 6 รายการ
-            </p>
-          </div>
-          <a href="admin.html" class="apple-pricing-pill px-6 py-2.5 text-xs shrink-0">
-            เปิดแดชบอร์ดหลังบ้าน
-          </a>
+          <button id="pw-save" type="submit" class="apple-pricing-pill px-6 py-3 text-[15px]">อัปเดตรหัสผ่าน</button>
+        </form>
+        <div class="apple-card p-5 sm:p-6 flex items-center justify-between gap-3">
+          <div><h2 class="text-lg font-heading font-semibold">ออกจากระบบ</h2><p class="text-sm text-slate">ออกจากระบบบนอุปกรณ์นี้</p></div>
+          <button type="button" onclick="accountSignOut()" class="apple-explore-pill px-5 py-2.5 text-[15px] text-launchOrange">ออกจากระบบ</button>
         </div>
       </section>
-
     </div>
-
   </main>
 
+  <footer id="site-footer"></footer>
   <script type="module" src="../js/account.js"></script>
 </body>
 </html>

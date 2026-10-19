@@ -1,382 +1,217 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>รายละเอียดสินค้า — TACTICAL STORE</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-tailwind.config = {
-  theme: { extend: {
-    colors: { gallery:'#fff', mist:'#f5f5f7', frost:'#fafafc', hairline:'#d2d2d7', control:'#e8e8ed',
-      ink:'#1d1d1f', slate:'#6e6e73', steel:'#86868b', appleBlue:'#0066cc', pricingBlue:'#0071e3', launchOrange:'#b64400' },
-    fontFamily: {
-      heading:['-apple-system','BlinkMacSystemFont','SF Pro Display','Prompt','sans-serif'],
-      body:['-apple-system','BlinkMacSystemFont','SF Pro Text','Prompt','sans-serif'],
-      mono:['SF Mono','ui-monospace','Menlo','monospace'] },
-    borderRadius: { card:'28px', pill:'36px', images:'28px', button:'9999px' }
-  } }
-}
-</script>
-<style>
-  :root { color-scheme: light; }
-  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
-  body { background:#fff; color:#1d1d1f; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Prompt',sans-serif;
-         -webkit-font-smoothing:antialiased; letter-spacing:-0.01em; }
-  h1,h2,h3,.font-heading { letter-spacing:-0.022em; }
-  /* Cards: borderless, on tinted surface */
-  .apple-card { background:#f5f5f7; border-radius:28px; border:0; }
-  .apple-pricing-pill { background:#0071e3; color:#fff; border-radius:9999px; font-weight:500; display:inline-flex;
-         align-items:center; justify-content:center; transition:background .2s, transform .15s; }
-  .apple-pricing-pill:hover { background:#0077ed; }
-  .apple-pricing-pill:active { transform:scale(.98); }
-  .apple-pricing-pill:disabled { background:#d2d2d7; color:#86868b; cursor:not-allowed; }
-  .apple-explore-pill { color:#0066cc; border:1px solid #0066cc; border-radius:9999px; display:inline-flex;
-         align-items:center; justify-content:center; transition:background .2s,color .2s; }
-  .apple-explore-pill:hover { background:#0066cc; color:#fff; }
-  .apple-input { background:#fff; border:1px solid #d2d2d7; border-radius:12px; color:#1d1d1f; font-size:15px;
-         transition:border-color .2s, box-shadow .2s; }
-  .apple-input:focus { outline:none; border-color:#0071e3; box-shadow:0 0 0 4px rgba(0,113,227,.18); }
-  :focus-visible { outline:2px solid #0071e3; outline-offset:2px; }
-  .row { display:flex; justify-content:space-between; align-items:baseline; }
-  #product-thumbnail-strip::-webkit-scrollbar { display:none; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } * { transition:none !important; } }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>รายละเอียดสินค้า — ASTRAPHEX HUB</title>
+  <meta name="description" content="รายละเอียดสินค้าและสั่งซื้อที่ ASTRAPHEX HUB">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" href="../assets/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="canonical" href="https://astraphex.panderx.xyz/front/product.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ASTRAPHEX HUB">
+  <meta property="og:title" content="รายละเอียดสินค้า — ASTRAPHEX HUB">
+  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:url" content="https://astraphex.panderx.xyz/front/product.html">
+  <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="th_TH">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../js/tw-config.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
   <script src="../js/theme.js"></script>
   <script src="../js/transition.js" defer></script>
   <script type="module" src="../js/shell.js"></script>
 </head>
-<body class="selection:bg-pricingBlue/20 pb-24 md:pb-0 min-h-screen">
+<body>
+  <header id="site-header"></header>
 
-<!-- Toast -->
-<div id="toast-box" role="status" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 scale-95 flex items-center gap-2.5 bg-ink/90 backdrop-blur text-gallery px-5 py-3 rounded-pill">
-  <span class="w-2 h-2 rounded-full bg-pricingBlue shrink-0"></span>
-  <span id="toast-text" class="text-sm">ข้อความแจ้งเตือน</span>
-</div>
-
-<!-- Promo strip -->
-<div class="bg-mist text-center text-[13px] text-slate py-2.5 px-4">
-  ใช้โค้ด <span class="text-ink font-medium">TACTICAL</span> ลด 50 บาท หรือ <span class="text-ink font-medium">ARENA10</span> ลด 10%
-  <a href="category.html" class="text-appleBlue ml-2 hover:underline">เลือกซื้อเลย</a>
-</div>
-
-<!-- Nav -->
-<header class="sticky top-0 z-40 bg-gallery/80 backdrop-blur-xl backdrop-saturate-150 border-b border-black/10">
-  <nav class="max-w-[1080px] mx-auto px-5 h-12 flex items-center justify-between text-[13px]">
-    <a href="../index.html" class="font-heading font-semibold text-[15px] text-ink">TACTICAL <span class="font-normal text-slate">Store</span></a>
-
-    <div class="hidden md:flex items-center gap-8 text-slate">
-      <a href="../index.html" class="hover:text-ink transition-colors">หน้าแรก</a>
-      <a href="category.html" class="hover:text-ink transition-colors">สินค้า</a>
-      <button onclick="openMyOrdersModal()" class="hover:text-ink transition-colors">ออเดอร์ของฉัน</button>
-      <a href="account.html" class="hover:text-ink transition-colors">บัญชีผู้ใช้</a>
-    </div>
-
-    <div class="flex items-center gap-3">
-      <div id="auth-logged-out" class="flex items-center gap-3">
-        <a href="login.html?mode=login" class="text-slate hover:text-ink transition-colors">เข้าสู่ระบบ</a>
-        <a href="login.html?mode=register" class="apple-pricing-pill px-4 py-1.5 text-[13px]">สมัครสมาชิก</a>
-      </div>
-      <div id="auth-logged-in" class="hidden items-center gap-3">
-        <a href="account.html" class="flex items-center gap-2 text-slate hover:text-ink transition-colors" title="จัดการบัญชี">
-          <span class="w-6 h-6 rounded-full bg-ink text-gallery text-[11px] flex items-center justify-center font-semibold"><span id="user-avatar-initial">A</span></span>
-          <span id="user-display-name" class="max-w-[80px] truncate">Agent</span>
-        </a>
-        <button onclick="handleSignOut()" class="text-steel hover:text-ink transition-colors" title="ออกจากระบบ" aria-label="ออกจากระบบ">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-        </button>
-      </div>
-    </div>
+  <nav class="max-w-[1080px] mx-auto px-4 sm:px-5 pt-5 text-sm text-slate flex items-center gap-1.5 min-w-0" aria-label="breadcrumb">
+    <a href="category.html" class="hover:text-ink shrink-0">สินค้าทั้งหมด</a><span class="text-steel">›</span>
+    <span id="breadcrumb-category" class="shrink-0">-</span><span class="text-steel">›</span>
+    <span id="breadcrumb-product-name" class="text-ink truncate">-</span>
   </nav>
-</header>
 
-<!-- Breadcrumb -->
-<div class="max-w-[1080px] mx-auto px-5 pt-4 text-xs text-slate flex items-center gap-1.5">
-  <a href="category.html" class="hover:text-ink">คลังสินค้า</a><span class="text-steel">›</span>
-  <span id="breadcrumb-category">-</span><span class="text-steel">›</span>
-  <span id="breadcrumb-product-name" class="text-ink truncate max-w-[200px] sm:max-w-sm">-</span>
-</div>
+  <main class="max-w-[1080px] mx-auto px-4 sm:px-5 pb-10">
+    <div id="product-loading-state" class="max-w-2xl mx-auto pt-6 space-y-4" aria-label="กำลังโหลด">
+      <div class="skeleton aspect-[4/3] !rounded-[28px]"></div>
+      <div class="skeleton h-9 w-3/4"></div><div class="skeleton h-8 w-1/3"></div><div class="skeleton h-24 w-full"></div>
+    </div>
 
-<main class="max-w-[1080px] mx-auto px-5 pb-16">
+    <div id="product-not-found" class="hidden py-24 text-center max-w-md mx-auto">
+      <h1 class="text-3xl font-heading font-semibold mb-2">ไม่พบสินค้านี้</h1>
+      <p class="text-slate mb-8">สินค้าอาจถูกปิดการขาย หรือลิงก์ไม่ถูกต้อง</p>
+      <a href="category.html" class="apple-pricing-pill px-7 py-3 text-[15px]">ดูสินค้าทั้งหมด</a>
+    </div>
 
-  <div id="product-loading-state" class="py-32 text-center">
-    <div class="w-7 h-7 border-2 border-hairline border-t-pricingBlue rounded-full animate-spin mx-auto mb-4"></div>
-    <p class="text-sm text-slate">กำลังโหลดข้อมูลสินค้า</p>
-  </div>
-
-  <div id="product-not-found" class="hidden py-24 text-center max-w-md mx-auto">
-    <h2 class="text-3xl font-heading font-semibold mb-2">ไม่พบสินค้านี้</h2>
-    <p class="text-slate mb-8">สินค้าอาจถูกปิดการขาย หรือรหัสสินค้าไม่ถูกต้อง</p>
-    <a href="category.html" class="apple-pricing-pill px-7 py-3 text-[15px]">ดูสินค้าทั้งหมด</a>
-  </div>
-
-  <div id="product-content-stage" class="hidden">
-
-    <div class="max-w-2xl mx-auto pt-6 space-y-5">
-
-      <!-- Hero image -->
-      <div class="relative overflow-hidden rounded-card bg-mist aspect-[4/3]">
-        <img id="product-main-image" src="" alt="ภาพสินค้า" onclick="openImageFull()" class="w-full h-full object-cover cursor-zoom-in transition-opacity duration-300"
-             onerror="this.onerror=null;this.src='https://placehold.co/800x600/f5f5f7/86868b?text=Arena+Breakout'">
-        <div class="absolute top-4 left-4 flex flex-wrap gap-2">
-          <span id="product-type-badge" class="bg-gallery/85 backdrop-blur text-ink text-xs font-medium px-3 py-1.5 rounded-full"><span id="product-type-text">ไอดีเกม</span></span>
-          <span id="product-stock-badge" class="bg-gallery/85 backdrop-blur text-appleBlue text-xs font-medium px-3 py-1.5 rounded-full"><span id="product-stock-text">พร้อมส่ง</span></span>
-        </div>
+    <div id="product-content-stage" class="hidden max-w-2xl mx-auto pt-5 space-y-5">
+      <!-- Gallery -->
+      <div class="relative overflow-hidden rounded-[28px] bg-mist aspect-[4/3]">
+        <img id="product-main-image" src="" alt="ภาพสินค้า" onclick="openImageFull()" class="w-full h-full object-cover cursor-zoom-in"
+             onerror="this.onerror=null;this.src='https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB'">
+        <div id="product-badges" class="absolute top-4 left-4 flex flex-wrap gap-2"></div>
         <div id="gallery-counter-pill" class="absolute bottom-4 right-4 bg-ink/70 backdrop-blur text-gallery text-xs px-3 py-1 rounded-full">ภาพ 1 / 1</div>
       </div>
       <div id="product-thumbnail-strip" class="flex gap-2.5 overflow-x-auto"></div>
 
+      <!-- Title -->
+      <section>
+        <p id="product-kicker-label" class="text-launchOrange text-sm font-semibold mb-1">Arena Breakout</p>
+        <h1 id="product-title-heading" class="font-heading font-semibold text-3xl sm:text-4xl leading-tight">-</h1>
+        <p class="mt-3 text-3xl font-heading font-semibold"><span id="product-unit-price">฿0.00</span> <span id="product-unit-suffix" class="text-slate text-base font-normal">/ ชิ้น</span></p>
+        <p id="product-stock-line" class="text-sm mt-1"></p>
+        <p id="product-desc-paragraph" class="text-slate text-base leading-relaxed mt-3 whitespace-pre-line">-</p>
+        <div id="product-tags" class="mt-3 flex flex-wrap items-center gap-2"></div>
+      </section>
+
       <!-- Farm modes -->
-      <section id="farm-modes-section" class="hidden apple-card p-5 sm:p-6">
+      <section id="farm-modes-section" class="hidden soft-card p-5 sm:p-6">
         <h2 class="text-xl font-heading font-semibold">เลือกรูปแบบบริการ</h2>
         <div id="farm-modes-grid" class="grid grid-cols-2 gap-3 mt-4"></div>
         <p id="farm-mode-note" class="text-sm text-slate mt-3"></p>
       </section>
 
       <!-- Packages -->
-      <section id="packages-section" class="hidden apple-card p-5 sm:p-6">
-        <h2 id="packages-title" class="text-xl font-heading font-semibold">เลือกแพ็กเกจ</h2>
+      <section id="packages-section" class="hidden soft-card p-5 sm:p-6">
+        <h2 class="text-xl font-heading font-semibold">เลือกแพ็กเกจ</h2>
         <div id="value-packs-grid" class="grid grid-cols-2 gap-3 mt-4"></div>
         <p id="package-summary" class="mt-4 text-[15px] font-medium"></p>
         <p id="package-next" class="text-sm text-appleBlue mt-1"></p>
       </section>
 
-      <!-- Title -->
-      <section class="pt-2">
-        <p id="product-kicker-label" class="text-launchOrange text-sm font-semibold mb-1">Arena Breakout</p>
-        <h1 id="product-title-heading" class="font-heading font-semibold text-3xl sm:text-4xl leading-tight text-balance">-</h1>
-        <p class="mt-3 text-3xl font-heading font-semibold">
-          <span id="product-unit-price">฿0.00</span>
-          <span id="product-unit-suffix" class="text-slate text-base font-normal">/ ชิ้น</span>
-        </p>
-        <p id="product-min-badge" class="hidden text-sm text-slate mt-1"><span id="product-min-text">ขั้นต่ำ 1 ชิ้น</span></p>
-        <p id="product-desc-paragraph" class="text-slate text-base leading-relaxed mt-3">-</p>
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          <span id="product-koen-tag" class="bg-mist text-ink text-[13px] font-medium px-3.5 py-1.5 rounded-full">Koen: -</span>
-          <span id="product-tags-container" class="contents"></span>
-        </div>
-      </section>
-
-      <!-- What you get -->
-      <section id="specs" class="apple-card p-5 sm:p-6">
-        <h2 class="text-xl font-heading font-semibold mb-3">สิ่งที่จะได้รับ</h2>
-        <div id="product-specs-grid" class="space-y-2.5"></div>
-      </section>
-
       <!-- Quantity -->
-      <section id="quantity-card" class="apple-card p-5 sm:p-6">
+      <section id="quantity-card" class="soft-card p-5 sm:p-6">
         <div class="flex items-center justify-between gap-3">
-          <div>
-            <h2 class="text-xl font-heading font-semibold">จำนวน</h2>
-            <p id="stepper-helper-hint" class="text-sm text-slate mt-0.5">ระบุจำนวนที่ต้องการ</p>
-          </div>
-          <div class="flex items-center bg-gallery rounded-button p-1">
-            <button type="button" onclick="changeQuantity(-1)" aria-label="ลดจำนวน" class="w-10 h-10 rounded-full hover:bg-mist active:scale-90 text-2xl leading-none text-ink transition">−</button>
-            <input id="order-quantity-input" type="number" value="1" min="1" aria-label="จำนวน"
-              class="w-16 text-center text-base font-semibold bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-              oninput="handleQuantityDirectInput(this.value)" onchange="handleQuantityDirectInput(this.value)">
-            <button type="button" onclick="changeQuantity(1)" aria-label="เพิ่มจำนวน" class="w-10 h-10 rounded-full hover:bg-mist active:scale-90 text-2xl leading-none text-ink transition">+</button>
+          <div><h2 class="text-xl font-heading font-semibold">จำนวน</h2><p id="stepper-helper-hint" class="text-sm text-slate mt-0.5">ระบุจำนวนที่ต้องการ</p></div>
+          <div class="flex items-center bg-gallery rounded-full p-1">
+            <button type="button" onclick="changeQuantity(-1)" aria-label="ลดจำนวน" class="w-10 h-10 rounded-full hover:bg-mist text-2xl leading-none">−</button>
+            <input id="order-quantity-input" type="number" value="1" min="1" inputmode="numeric" aria-label="จำนวน" class="w-16 text-center text-base font-semibold bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onchange="handleQuantityDirectInput(this.value)">
+            <button type="button" onclick="changeQuantity(1)" aria-label="เพิ่มจำนวน" class="w-10 h-10 rounded-full hover:bg-mist text-2xl leading-none">+</button>
           </div>
         </div>
         <p class="text-right text-xs text-slate mt-1">หน่วย: <span id="stepper-unit-label">ชิ้น</span></p>
-        <p id="real-rate" class="hidden mt-3 text-sm bg-mist rounded-2xl px-4 py-3"></p>
+        <p id="real-rate" class="hidden mt-3 text-sm bg-gallery rounded-2xl px-4 py-3"></p>
         <div class="flex items-center justify-between mt-4 gap-3">
-          <button type="button" onclick="document.getElementById('details').scrollIntoView({behavior:'smooth'})" class="text-appleBlue text-[15px] hover:underline">ดูรายละเอียดสินค้า ›</button>
+          <a href="#details" class="text-appleBlue text-[15px] hover:underline">รายละเอียดสินค้า ›</a>
           <button type="button" onclick="scrollToCheckoutForm()" class="apple-pricing-pill px-7 py-3 text-[15px]">ซื้อ <span id="qty-buy-price">฿0.00</span></button>
         </div>
       </section>
 
-      <!-- Info lines -->
       <section id="info-lines" class="space-y-2 text-[15px]"></section>
 
-      <!-- Details -->
-      <section id="details" class="apple-card divide-y divide-hairline">
-        <details open class="p-5 sm:px-6 group"><summary class="font-semibold cursor-pointer">รายละเอียดสินค้า</summary>
-          <p id="product-full-desc" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
-        <details class="p-5 sm:px-6"><summary class="font-semibold cursor-pointer">วิธีรับสินค้า / ใช้บริการ</summary>
-          <p id="product-howto" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
-        <details class="p-5 sm:px-6"><summary class="font-semibold cursor-pointer">การรับประกัน / คืนเงิน / ติดต่อร้าน</summary>
-          <p id="product-warranty" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
+      <section id="specs" class="soft-card p-5 sm:p-6"><h2 class="text-xl font-heading font-semibold mb-3">สิ่งที่จะได้รับ</h2><div id="product-specs-grid" class="space-y-2.5"></div></section>
+
+      <section id="details" class="soft-card divide-y divide-hairline">
+        <details open class="p-5 sm:px-6"><summary class="font-semibold cursor-pointer">รายละเอียดสินค้า</summary><p id="product-full-desc" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
+        <details class="p-5 sm:px-6"><summary class="font-semibold cursor-pointer">วิธีรับสินค้า / ใช้บริการ</summary><p id="product-howto" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
+        <details class="p-5 sm:px-6"><summary class="font-semibold cursor-pointer">การรับประกัน / คืนเงิน / ติดต่อร้าน</summary><p id="product-warranty" class="text-slate leading-relaxed whitespace-pre-line mt-3">-</p></details>
       </section>
 
       <!-- Checkout -->
       <section id="checkout-anchor-section" class="space-y-5">
-        <div class="apple-card p-6 sm:p-8 space-y-8">
-<!-- 2 Delivery info -->
-          <div id="buyer-info-fields">
+        <div id="checkout-card" class="soft-card p-5 sm:p-8 space-y-8">
+          <div id="login-needed" class="hidden rounded-2xl bg-gallery p-4 text-sm flex items-center justify-between gap-3">
+            <span>เข้าสู่ระบบก่อนสั่งซื้อ</span><a href="login.html?mode=login" class="apple-pricing-pill px-4 py-2 text-sm">เข้าสู่ระบบ</a>
+          </div>
+
+          <div>
             <h2 class="text-xl font-heading font-semibold mb-1">ข้อมูลสำหรับรับสินค้า</h2>
-            <p class="text-sm text-slate mb-4">ใช้สำหรับติดต่อและส่งมอบสินค้า ทีมงานจะไม่ขอรหัสผ่านอีเมลของคุณ</p>
+            <p id="buyer-hint" class="text-sm text-slate mb-4">ใช้สำหรับติดต่อและส่งมอบสินค้า</p>
             <div class="space-y-3">
-              <div>
-                <label for="buyer-email" class="block text-sm font-medium mb-1.5">อีเมล</label>
-                <input id="buyer-email" type="email" autocomplete="email" placeholder="yourname@gmail.com" class="w-full apple-input px-4 py-3" required>
+              <div id="email-field">
+                <label for="buyer-email" class="block text-sm font-medium mb-1.5">อีเมลสำหรับรับข้อมูลไอดี</label>
+                <input id="buyer-email" type="email" autocomplete="email" maxlength="200" placeholder="yourname@gmail.com" class="w-full apple-input px-4 py-3">
+              </div>
+              <div id="facebook-field" class="hidden">
+                <label for="buyer-facebook" class="block text-sm font-medium mb-1.5">ชื่อ Facebook หรือลิงก์โปรไฟล์ Facebook</label>
+                <input id="buyer-facebook" type="text" autocomplete="off" maxlength="200" placeholder="เช่น Somchai Gamer หรือ https://facebook.com/..." class="w-full apple-input px-4 py-3">
+                <p class="text-xs text-slate mt-1.5">ทีมงานจะทักไปทาง Facebook เพื่อนัดเวลาทำงาน</p>
               </div>
               <div id="self-fields" class="hidden space-y-3">
-                <div>
-                  <label for="buyer-contact" class="block text-sm font-medium mb-1.5">ชื่อในเกม / UID</label>
-                  <input id="buyer-contact" type="text" maxlength="100" autocomplete="off" placeholder="ชื่อตัวละครหรือ UID" class="w-full apple-input px-4 py-3">
-                </div>
-                <div>
-                  <label for="play-time" class="block text-sm font-medium mb-1.5">เวลาที่พร้อมเข้าเกม</label>
-                  <input id="play-time" type="text" maxlength="100" autocomplete="off" placeholder="เช่น วันนี้ 21:00 น." class="w-full apple-input px-4 py-3">
-                </div>
+                <div><label for="buyer-contact" class="block text-sm font-medium mb-1.5">ชื่อในเกม / UID</label>
+                  <input id="buyer-contact" type="text" maxlength="100" autocomplete="off" placeholder="ชื่อตัวละครหรือ UID" class="w-full apple-input px-4 py-3"></div>
+                <div><label for="play-time" class="block text-sm font-medium mb-1.5">เวลาที่พร้อมเข้าเกม</label>
+                  <input id="play-time" type="text" maxlength="100" autocomplete="off" placeholder="เช่น วันนี้ 21:00 น." class="w-full apple-input px-4 py-3"></div>
               </div>
               <div id="service-extra-fields" class="hidden space-y-3">
-                <div>
-                  <label for="game-email" class="block text-sm font-medium mb-1.5">อีเมลบัญชีเกม</label>
-                  <input id="game-email" type="email" autocomplete="off" placeholder="อีเมลที่ใช้ล็อกอินเกม" class="w-full apple-input px-4 py-3">
-                </div>
-                <div>
-                  <label for="game-password" class="block text-sm font-medium mb-1.5">รหัสผ่านบัญชีเกม</label>
+                <div><label for="game-email" class="block text-sm font-medium mb-1.5">อีเมลบัญชีเกม</label>
+                  <input id="game-email" type="email" autocomplete="off" maxlength="200" placeholder="อีเมลที่ใช้ล็อกอินเกม" class="w-full apple-input px-4 py-3"></div>
+                <div><label for="game-password" class="block text-sm font-medium mb-1.5">รหัสผ่านบัญชีเกม</label>
                   <input id="game-password" type="password" autocomplete="new-password" maxlength="100" placeholder="รหัสผ่านเกม" class="w-full apple-input px-4 py-3">
-                  <p class="text-xs text-slate mt-1.5"><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v10H6zM8 11V8a4 4 0 118 0v3"/></svg> ใช้เฉพาะเพื่อดำเนินงานให้คุณ ทีมงานจะลบรหัสผ่านออกจากระบบเมื่องานเสร็จ</p>
-                </div>
+                  <p class="text-xs text-slate mt-1.5">ใช้เพื่อทำงานให้คุณเท่านั้น ทีมงานลบรหัสผ่านออกจากระบบเมื่องานเสร็จ</p></div>
               </div>
             </div>
           </div>
 
-          <!-- Promo -->
           <div>
             <label for="product-promo-input" class="block text-sm font-medium mb-1.5">โค้ดส่วนลด</label>
             <div class="flex gap-2">
-              <input id="product-promo-input" type="text" placeholder="ใส่โค้ด" class="flex-1 min-w-0 apple-input px-4 py-3 uppercase">
-              <button type="button" onclick="applyProductPromo()" class="apple-explore-pill px-5 text-[15px]">ใช้โค้ด</button>
+              <input id="product-promo-input" type="text" maxlength="40" placeholder="ใส่โค้ด" class="flex-1 min-w-0 apple-input px-4 py-3 uppercase">
+              <button id="btn-apply-promo" type="button" onclick="applyProductPromo()" class="apple-explore-pill px-5 text-[15px] bg-gallery">ใช้โค้ด</button>
             </div>
-            <div id="promo-status-msg" class="hidden text-sm pt-2"></div>
+            <p id="promo-status-msg" class="hidden text-sm pt-2"></p>
           </div>
 
-          <!-- 3 Payment -->
           <div class="space-y-4">
             <h2 class="text-xl font-heading font-semibold">ชำระเงิน</h2>
-            <div class="bg-control/70 p-1 rounded-button flex text-sm" role="tablist">
-              <button type="button" id="tab-pay-promptpay" onclick="switchProductPaymentTab('promptpay')" class="flex-1 py-2 rounded-button font-medium transition-all bg-gallery text-ink shadow-sm">PromptPay QR</button>
-              <button type="button" id="tab-pay-truemoney" onclick="switchProductPaymentTab('truemoney')" class="flex-1 py-2 rounded-button font-medium transition-all text-slate hover:text-ink">ซอง TrueMoney</button>
+            <div class="bg-control/70 p-1 rounded-full grid grid-cols-3 text-sm" role="tablist">
+              <button type="button" id="tab-pay-wallet" onclick="switchProductPaymentTab('wallet')" class="py-2 rounded-full font-medium">เครดิตในบัญชี</button>
+              <button type="button" id="tab-pay-promptpay" onclick="switchProductPaymentTab('promptpay')" class="py-2 rounded-full font-medium">พร้อมเพย์</button>
+              <button type="button" id="tab-pay-truemoney" onclick="switchProductPaymentTab('truemoney')" class="py-2 rounded-full font-medium">TrueMoney</button>
             </div>
 
-            <div id="panel-pay-promptpay" class="bg-gallery rounded-2xl p-5 text-center space-y-3">
-              <div class="w-40 h-40 mx-auto flex items-center justify-center">
-                <img id="product-qr-image" src="" alt="QR พร้อมเพย์ของร้าน" class="hidden w-full h-full object-contain">
-                <span id="product-qr-placeholder" class="text-xs text-slate">ร้านยังไม่ได้ตั้งค่า QR พร้อมเพย์</span>
-              </div>
-              <p id="product-promptpay-name" class="text-sm font-medium"></p>
-              <p class="text-xs text-slate">โอนตามยอดสุทธิ แล้วกรอกเวลาหรือเลขอ้างอิงรายการด้านล่าง</p>
-              <input id="product-payment-ref" type="text" maxlength="100" placeholder="เวลาที่โอน หรือเลขอ้างอิงในสลิป" aria-label="เวลาที่โอนหรือเลขอ้างอิง" class="w-full apple-input px-4 py-3 text-left">
+            <div id="panel-pay-wallet" class="bg-gallery rounded-2xl p-5 space-y-3">
+              <div class="row"><span class="text-slate">ยอดเงินคงเหลือ</span><span id="wallet-balance" class="text-xl font-heading font-semibold">-</span></div>
+              <p id="wallet-note" class="text-sm text-slate">ตัดเงินจากเครดิตทันที ไอดีเกมแสดงให้เห็นทันทีหลังชำระ</p>
+              <a id="wallet-topup-link" href="topup.html" class="hidden apple-explore-pill w-full py-2.5 text-sm">เครดิตไม่พอ · ไปหน้าเติมเงิน</a>
             </div>
-
+            <div id="panel-pay-promptpay" class="hidden bg-gallery rounded-2xl p-5"></div>
             <div id="panel-pay-truemoney" class="hidden bg-gallery rounded-2xl p-5 space-y-3">
               <label for="product-voucher-input" class="block text-sm font-medium">ลิงก์ซองของขวัญ TrueMoney</label>
-              <input id="product-voucher-input" type="url" placeholder="https://gift.truemoney.com/campaign/..." class="w-full apple-input px-4 py-3">
+              <input id="product-voucher-input" type="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/..." class="w-full apple-input px-4 py-3">
               <p class="text-xs text-slate">สร้างซองตามยอดสุทธิ <strong id="voucher-exact-total" class="text-ink">฿0.00</strong> และแบ่งให้ 1 คน</p>
             </div>
           </div>
 
-          <!-- Summary -->
           <div class="space-y-2 text-[15px] border-t border-hairline pt-6">
             <div class="row text-slate"><span>ราคาสินค้า (<span id="calc-qty-label">1</span> <span id="calc-unit-label">ชิ้น</span>)</span><span id="calc-subtotal" class="text-ink">฿0.00</span></div>
             <div id="calc-discount-row" class="hidden row text-appleBlue"><span>ส่วนลด</span><span id="calc-discount-val">-฿0.00</span></div>
-            <div class="row text-slate"><span>ค่าบริการระบบ</span><span>ฟรี</span></div>
-            <div class="row pt-4">
-              <span class="text-lg font-semibold">ยอดสุทธิ</span>
-              <span id="calc-final-price" class="text-4xl font-heading font-semibold">฿0.00</span>
-            </div>
+            <div class="row pt-4"><span class="text-lg font-semibold">ยอดสุทธิ</span><span id="calc-final-price" class="text-4xl font-heading font-semibold">฿0.00</span></div>
           </div>
 
           <div>
-            <button id="btn-confirm-product-order" onclick="executeProductPurchase()" type="button" class="w-full apple-pricing-pill py-4 text-[17px]">
-              <span>แจ้งชำระเงิน (<span id="btn-final-price-tag">฿0.00</span>)</span>
-            </button>
-            <p class="text-center text-xs text-slate mt-3">ทีมงานตรวจสอบการชำระเงินแล้วส่งมอบในเมนูออเดอร์ของฉัน การซื้อขายไอดีอาจขัดต่อข้อกำหนดของผู้พัฒนาเกมและบัญชีอาจถูกระงับ</p>
+            <button id="btn-confirm-product-order" onclick="executeProductPurchase()" type="button" class="w-full apple-pricing-pill py-4 text-[17px]">ชำระเงิน</button>
+            <p class="text-center text-xs text-slate mt-3">การซื้อขายไอดีอาจขัดต่อข้อกำหนดของผู้พัฒนาเกมและบัญชีอาจถูกระงับ</p>
           </div>
         </div>
 
-<!-- Success -->
-        <div id="product-order-success-card" class="hidden apple-card p-6 sm:p-8 space-y-5">
-          <div class="flex items-center gap-3">
-            <span class="w-10 h-10 rounded-full bg-ink text-gallery flex items-center justify-center text-lg font-semibold">✓</span>
-            <div>
-              <p class="text-xs text-slate">ได้รับคำสั่งซื้อแล้ว</p>
-              <h3 class="text-xl font-heading font-semibold">รอตรวจสอบการชำระเงิน</h3>
-            </div>
-          </div>
-          <div class="bg-gallery rounded-2xl p-4 space-y-3 text-sm">
-            <div class="row"><span class="text-slate">เลขที่ออเดอร์</span><span id="order-result-id" class="font-semibold font-mono">#ORD-XXXX</span></div>
-            <div class="row gap-3"><span class="text-slate">สินค้า</span><span id="order-result-product" class="text-right">-</span></div>
-            <p class="text-slate text-xs">เมื่อทีมงานยืนยันยอดแล้ว ไอดีหรือคิวบริการจะแสดงในเมนู ออเดอร์ของฉัน โดยอัตโนมัติ</p>
-          </div>
-          <a id="btn-view-queue" href="queue.html" class="hidden w-full apple-explore-pill py-3 text-[15px]">ดูคิวงานของฉัน</a>
-          <button onclick="copyOrderResultCredentials()" id="btn-copy-result" class="w-full apple-explore-pill py-3 text-[15px]">คัดลอกเลขที่ออเดอร์</button>
-          <div class="flex gap-3">
-            <button onclick="openMyOrdersModal()" class="flex-1 apple-pricing-pill py-3 text-[15px]">ดูออเดอร์ของฉัน</button>
-            <a href="category.html" class="flex-1 apple-explore-pill py-3 text-[15px]">ดูสินค้าอื่น</a>
-          </div>
-        </div>
+        <div id="product-order-success-card" class="hidden apple-card p-6 sm:p-8 space-y-5"></div>
+      </section>
+
+      <section class="pt-10">
+        <div class="flex items-end justify-between mb-6"><h2 class="font-heading font-semibold text-2xl sm:text-3xl">สินค้าที่คุณอาจสนใจ</h2><a href="category.html" class="text-appleBlue text-[15px] hover:underline">ดูทั้งหมด ›</a></div>
+        <div id="related-products-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-5"></div>
       </section>
     </div>
+  </main>
 
-    <!-- Related -->
-    <section class="mt-20 sm:mt-28">
-      <div class="flex items-end justify-between mb-8">
-        <h2 class="font-heading font-semibold text-2xl sm:text-4xl">สินค้าที่คุณอาจสนใจ</h2>
-        <a href="category.html" class="text-appleBlue text-[15px] hover:underline">ดูทั้งหมด ›</a>
-      </div>
-      <div id="related-products-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
-    </section>
+  <div id="lightbox" class="hidden fixed inset-0 z-[75] bg-ink/90 backdrop-blur-md items-center justify-center" onclick="closeLightbox()">
+    <button type="button" onclick="closeLightbox()" aria-label="ปิด" class="absolute top-5 right-5 w-10 h-10 rounded-full bg-gallery/15 text-gallery text-xl">✕</button>
+    <button type="button" onclick="event.stopPropagation();lightboxStep(-1)" aria-label="ก่อนหน้า" class="absolute left-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">‹</button>
+    <img id="lightbox-img" src="" alt="" class="max-w-[92vw] max-h-[85vh] object-contain rounded-2xl" onclick="event.stopPropagation()">
+    <button type="button" onclick="event.stopPropagation();lightboxStep(1)" aria-label="ถัดไป" class="absolute right-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">›</button>
   </div>
-</main>
 
-<!-- Lightbox -->
-<div id="lightbox" class="hidden fixed inset-0 z-[60] bg-ink/90 backdrop-blur-md items-center justify-center" onclick="closeLightbox()">
-  <button onclick="closeLightbox()" aria-label="ปิด" class="absolute top-5 right-5 w-10 h-10 rounded-full bg-gallery/15 text-gallery text-xl">✕</button>
-  <button onclick="event.stopPropagation();lightboxStep(-1)" aria-label="ก่อนหน้า" class="absolute left-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">‹</button>
-  <img id="lightbox-img" src="" alt="" class="max-w-[92vw] max-h-[85vh] object-contain rounded-2xl" onclick="event.stopPropagation()">
-  <button onclick="event.stopPropagation();lightboxStep(1)" aria-label="ถัดไป" class="absolute right-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">›</button>
-</div>
-
-<!-- Orders modal -->
-<div id="my-orders-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-ink/40 backdrop-blur-md">
-  <div class="bg-gallery rounded-card max-w-xl w-full p-6 sm:p-8 relative max-h-[85vh] overflow-y-auto">
-    <button onclick="closeMyOrdersModal()" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist hover:bg-control text-slate flex items-center justify-center transition-colors">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-    </button>
-    <h3 class="text-2xl font-heading font-semibold mb-1">ออเดอร์ของฉัน</h3>
-    <p class="text-slate text-sm mb-6">ไอดีและคิวงานบริการที่เคยสั่งซื้อจะอยู่ที่นี่</p>
-    <div id="my-orders-list" class="space-y-3"></div>
-    <div id="my-orders-empty" class="hidden py-12 text-center">
-      <p class="font-semibold mb-1">ยังไม่มีออเดอร์</p>
-      <p class="text-slate text-sm">เมื่อสั่งซื้อสำเร็จ ข้อมูลจะแสดงที่นี่</p>
-    </div>
-  </div>
-</div>
-
-<!-- Mobile buy bar -->
-<div class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-gallery/85 backdrop-blur-xl border-t border-black/10 px-5 pt-3 flex items-center justify-between" style="padding-bottom:max(12px,env(safe-area-inset-bottom))">
-  <div>
-    <span id="mobile-bar-sub" class="text-xs text-slate block">ยอดสุทธิ</span>
-    <span id="mobile-bar-price" class="text-2xl font-heading font-semibold leading-tight">฿0.00</span>
-  </div>
-  <div class="flex items-center gap-3">
-    <button onclick="document.getElementById('quantity-card').scrollIntoView({behavior:'smooth',block:'center'})" class="text-appleBlue text-sm">แก้จำนวน ↑</button>
-    <button onclick="scrollToCheckoutForm()" class="apple-pricing-pill px-7 py-3 text-base">สั่งซื้อ</button>
-  </div>
-</div>
-
-<footer class="bg-mist text-slate text-xs py-10 mt-8">
-  <div class="max-w-[1080px] mx-auto px-5 flex flex-col md:flex-row justify-between gap-5">
-    <p>© 2026 Tactical Store ระบบจำหน่ายไอดีและทรัพยากรเกม Arena Breakout </p>
-    <div class="flex flex-wrap gap-6">
-      <a href="../index.html" class="hover:text-ink">หน้าแรก</a>
-      <a href="category.html" class="hover:text-ink">คลังสินค้า</a>
-      <button onclick="openMyOrdersModal()" class="hover:text-ink">ออเดอร์ของฉัน</button>
-      <a href="account.html" class="hover:text-ink">บัญชีผู้ใช้</a>
-    </div>
-  </div>
-</footer>
-
-<script type="module" src="../js/product.js"></script>
+  <footer id="site-footer"></footer>
+  <script type="module" src="../js/product.js"></script>
 </body>
 </html>

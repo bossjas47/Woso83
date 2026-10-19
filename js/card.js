@@ -1,42 +1,53 @@
-/** Product card shared by the home and category pages. Buttons call window.openDetailModal / startCheckout. */
-const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const icon = (d, cls = 'w-3.5 h-3.5') => `<svg class="${cls}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
-const I = {
-  id: 'M6 8h12a4 4 0 014 4v3a3 3 0 01-5 2l-2-2H9l-2 2a3 3 0 01-5-2v-3a4 4 0 014-4zM8 12v3M6.5 13.5h3M16 12h.01M18 14h.01',
-  bolt: 'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
-  arrow: 'M5 12h14M13 6l6 6-6 6'
-};
+import { ROOT, esc, icon, ICONS } from "./ui.js";
 
-export function productCardHtml({ p, isService, unit, min, price, stock, koen, categoryName, fallback }) {
+/** Product card shared by the home and category pages. The whole card links to the product page. */
+export const productUrl = (id, buy = false) => `${ROOT}front/product.html?id=${encodeURIComponent(id)}${buy ? '&action=buy' : ''}`;
+
+/** Delivery badge: game IDs paid with credit are delivered automatically; services follow the queue. */
+export function deliveryBadge(isService, instant) {
+  if (isService) return `<span class="badge badge-queue">${icon(ICONS.queue, 'w-3.5 h-3.5', 2)}งานบริการ (ตามคิว)</span>`;
+  return instant
+    ? `<span class="badge badge-auto">${icon(ICONS.bolt, 'w-3.5 h-3.5', 2)}ส่งอัตโนมัติ (รับไอดีทันที)</span>`
+    : `<span class="badge badge-auto">${icon(ICONS.id, 'w-3.5 h-3.5', 2)}ไอดีเกม (รับในเมนูออเดอร์)</span>`;
+}
+
+export function productCardHtml({ p, isService, unit, min, price, stock, koen, categoryName, fallback, instant }) {
   const out = stock <= 0;
   const low = !isService && stock > 0 && stock <= 3;
-  const idArg = esc(JSON.stringify(String(p.id ?? '')));
+  const url = productUrl(p.id);
   const name = esc(p.name || 'ไม่มีชื่อสินค้า');
   const stockText = out ? (isService ? 'คิวเต็ม' : 'สินค้าหมด')
-    : isService ? `รับงานได้ ${stock} ${esc(unit)}` : low ? `เหลือ ${stock} ไอดี` : `คงเหลือ ${stock} ไอดี`;
-  const stockCls = out ? 'text-slate' : low ? 'text-launchOrange' : 'text-ink';
-  const tags = (Array.isArray(p.tags) ? p.tags : []).slice(0, 2).map(t => `<span class="text-[11px] text-slate bg-mist rounded-full px-2.5 py-0.5">${esc(t)}</span>`).join('');
+    : isService ? `รับงานได้ ${stock} ${esc(unit)}` : low ? `เหลือ ${stock} ไอดี` : `พร้อมส่ง ${stock} ไอดี`;
+  const dot = out ? 'bg-steel' : low ? 'bg-launchOrange' : 'bg-emerald-500';
+  const stockCls = out ? 'text-slate' : low ? 'text-launchOrange' : 'text-slate';
+  const mode = isService ? `${icon(ICONS.queue, 'w-3 h-3', 2)}ตามคิว` : instant ? `${icon(ICONS.bolt, 'w-3 h-3', 2)}ส่งทันที` : `${icon(ICONS.id, 'w-3 h-3', 2)}รับในออเดอร์`;
   return `
-    <article class="apple-card p-3 flex flex-col h-full group">
-      <div onclick="openDetailModal(${idArg})" class="relative aspect-[4/3] rounded-[22px] overflow-hidden bg-mist cursor-pointer">
-        <img src="${esc(p.image || fallback)}" alt="${name}" loading="lazy" onerror="this.onerror=null;this.src='${fallback}'"
+    <article class="apple-card !rounded-[24px] p-2.5 sm:p-3 flex flex-col h-full group relative">
+      <a href="${url}" class="relative block aspect-square rounded-[18px] overflow-hidden bg-mist" aria-label="${name}">
+        <img src="${esc(p.image || fallback)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${fallback}'"
           class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${out ? 'grayscale opacity-70' : ''}">
-        <span class="absolute top-3 left-3 inline-flex items-center gap-1 bg-gallery/90 backdrop-blur text-ink text-[11px] font-medium px-2.5 py-1 rounded-full">${icon(isService ? I.bolt : I.id)}${isService ? 'บริการ' : 'ไอดีเกม'}</span>
-        <span class="absolute bottom-3 left-3 bg-gallery/90 backdrop-blur text-[11px] font-medium px-2.5 py-1 rounded-full ${stockCls}">${stockText}</span>
-      </div>
-      <div class="flex flex-col flex-grow px-2.5 pt-4 pb-1.5">
-        ${categoryName ? `<p class="text-xs text-slate">${esc(categoryName)}</p>` : ''}
-        <h3 onclick="openDetailModal(${idArg})" class="text-[17px] leading-snug font-semibold text-ink line-clamp-2 cursor-pointer mt-0.5">${name}</h3>
-        <p class="text-sm text-slate mt-1 line-clamp-1">${esc(koen)}</p>
-        ${tags ? `<div class="flex flex-wrap gap-1.5 mt-2.5">${tags}</div>` : ''}
-        <div class="mt-auto pt-4 flex items-end justify-between gap-3">
-          <div>
-            <p class="text-2xl leading-none font-heading font-semibold">฿${Number(price).toLocaleString('th-TH', { maximumFractionDigits: 2 })}${isService ? `<span class="text-sm text-slate font-normal"> / ${esc(unit)}</span>` : ''}</p>
-            ${isService && min > 1 ? `<p class="text-xs text-slate mt-1.5">ขั้นต่ำ ${min} ${esc(unit)}</p>` : ''}
-          </div>
-          <button type="button" onclick="startCheckout(${idArg})" ${out ? 'disabled' : ''}
-            class="${out ? 'bg-control text-steel rounded-full px-5 py-2 text-sm cursor-not-allowed' : 'apple-pricing-pill pl-5 pr-4 py-2 text-sm gap-1.5'}">สั่งซื้อ${out ? '' : icon(I.arrow, 'w-4 h-4')}</button>
+        ${p.featured ? `<span class="absolute top-2 left-2 badge badge-featured bg-gallery/95">${icon(ICONS.star, 'w-3 h-3', 2)}แนะนำ</span>` : ''}
+        <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-gallery/90 backdrop-blur text-[11px] font-medium px-2 py-0.5 rounded-full ${isService ? 'text-launchOrange' : 'text-[#0a7a3b]'}">${mode}</span>
+      </a>
+      <div class="flex flex-col flex-grow px-1 pt-2.5 pb-0.5">
+        <p class="flex items-center gap-1.5 text-xs ${stockCls}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span>${stockText}</p>
+        <h3 class="text-[15px] sm:text-base leading-snug font-semibold text-ink line-clamp-2 mt-1.5 min-h-[2.6em]"><a href="${url}">${name}</a></h3>
+        ${koen ? `<p class="text-xs text-slate mt-0.5 line-clamp-1">${esc(koen)}</p>` : ''}
+        <div class="mt-auto pt-2.5">
+          <p class="text-xl leading-none font-heading font-semibold">฿${Number(price).toLocaleString('th-TH', { maximumFractionDigits: 2 })}${isService ? `<span class="text-xs text-slate font-normal"> / ${esc(unit)}</span>` : ''}</p>
+          ${isService && min > 1 ? `<p class="text-[11px] text-slate mt-1">ขั้นต่ำ ${min} ${esc(unit)}</p>` : ''}
+          ${out
+            ? `<span class="mt-3 flex items-center justify-center w-full h-12 rounded-full bg-control text-steel text-[15px] font-semibold">${isService ? 'คิวเต็ม' : 'สินค้าหมด'}</span>`
+            : `<a href="${productUrl(p.id, true)}" class="apple-pricing-pill mt-3 w-full h-12 text-[16px] font-semibold">สั่งซื้อ${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>`}
         </div>
       </div>
     </article>`;
+}
+
+export function productSkeletonHtml(n = 6) {
+  return Array.from({ length: n }).map(() => `
+    <div class="apple-card !rounded-[24px] p-2.5 sm:p-3" aria-hidden="true">
+      <div class="skeleton aspect-square !rounded-[18px]"></div>
+      <div class="px-1 pt-3 space-y-2"><div class="skeleton h-3.5 w-24 !rounded-full"></div><div class="skeleton h-4 w-3/4"></div><div class="skeleton h-5 w-1/2"></div><div class="skeleton h-12 w-full !rounded-full mt-3"></div></div>
+    </div>`).join('');
 }

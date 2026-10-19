@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="th" class="light">
+<html lang="th">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบหลังบ้านผู้ดูแล — TACTICAL STORE</title>
+  <title>หลังบ้าน — ASTRAPHEX HUB</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" href="../assets/favicon.png">
   
   <!-- Apple System Font Stack & Google Fonts Prompt / Outfit Fallback -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -222,6 +224,13 @@
         <span class="text-xs text-slate font-normal">กำลังตรวจสอบสถานะความปลอดภัยในระบบ...</span>
       </div>
 
+      <!-- 1b. NOT SIGNED IN / NOT ADMIN -->
+      <div id="pin-state-noauth" class="hidden space-y-4 py-2">
+        <h2 id="noauth-title" class="text-2xl font-display font-semibold">เฉพาะผู้ดูแลระบบ</h2>
+        <p id="noauth-text" class="text-slate text-xs">กรุณาเข้าสู่ระบบด้วยบัญชีแอดมิน</p>
+        <a id="noauth-login" href="login.html?mode=login&next=admin.html" class="w-full apple-pricing-pill py-3 text-xs">เข้าสู่ระบบ</a>
+      </div>
+
       <!-- 2. SETUP NEW PIN STATE -->
       <div id="pin-state-setup" class="hidden space-y-5">
         <div>
@@ -310,7 +319,7 @@
         <a href="../index.html" class="hover:text-ink transition-colors flex items-center gap-1">
           <span>← กลับสู่หน้าร้านค้า</span>
         </a>
-        <span class="font-mono text-[10px] text-steel">SECURE VAULT v3.0</span>
+        <span class="font-mono text-[10px] text-steel">ASTRAPHEX HUB</span>
       </div>
 
     </div>
@@ -324,22 +333,15 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 h-11 flex justify-between items-center text-xs">
         
         <div class="flex items-center gap-3">
-          <a href="../index.html" class="flex items-center gap-2 group">
-            <div class="w-6 h-6 rounded-full bg-ink text-gallery flex items-center justify-center font-bold text-xs group-hover:bg-pricingBlue transition-colors">
-              <svg class="w-3.5 h-3.5 stroke-gallery fill-none" stroke-width="2.5" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
-              </svg>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <span class="font-display font-semibold text-sm tracking-tight text-ink">TACTICAL</span>
-              <span class="text-[11px] text-launchOrange font-semibold tracking-[-0.12px] uppercase">Admin</span>
-            </div>
+          <a href="../index.html" class="flex items-center gap-2">
+            <img src="../assets/logo-icon.png" alt="" width="28" height="28" class="w-7 h-7 object-contain">
+            <span class="font-display font-bold text-sm tracking-tight text-ink">ASTRAPHEX HUB</span>
+            <span class="text-[11px] text-launchOrange font-semibold uppercase">Admin</span>
           </a>
 
           <div class="hidden sm:flex items-center gap-1.5 bg-mist border border-hairline px-3 py-0.5 rounded-full text-[11px] font-medium text-slate ml-3">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Firestore: psl-esport (LIVE)</span>
+            <span id="admin-who">กำลังตรวจสอบสิทธิ์…</span>
           </div>
         </div>
 
@@ -365,24 +367,13 @@
     <!-- Sub-navigation Bar (5 Sections) -->
     <div class="border-b border-hairline bg-mist py-2.5">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto">
-        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all bg-ink text-gallery flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg></span> จัดการสินค้า &amp; คลังสต็อก
-        </button>
-        <button id="admin-tab-btn-categories" onclick="switchAdminTab('categories')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></span> หมวดหมู่สินค้า
-        </button>
-        <button id="admin-tab-btn-orders" onclick="switchAdminTab('orders')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9zM7 5H5v16h14V5h-2M8 12h8M8 16h6"/></svg></span> รายการคำสั่งซื้อ (Orders)
-        </button>
-        <button id="admin-tab-btn-promos" onclick="switchAdminTab('promos')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V3h9l9 9-9 9-9-9zm5-5h.01"/></svg></span> โค้ดส่วนลด (Promo Codes)
-        </button>
-        <button id="admin-tab-btn-topups" onclick="switchAdminTab('topups')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 10h18"/></svg></span> รายการเติมเงิน (Topups)
-        </button>
-        <button id="admin-tab-btn-settings" onclick="switchAdminTab('settings')" class="px-4 py-1.5 rounded-button text-xs font-normal transition-all text-slate hover:text-ink flex items-center gap-2 shrink-0">
-          <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4"/></svg></span> ตั้งค่าร้านค้า &amp; ประกาศ
-        </button>
+        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">สินค้า &amp; สต็อก</button>
+        <button id="admin-tab-btn-categories" onclick="switchAdminTab('categories')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">หมวดหมู่</button>
+        <button id="admin-tab-btn-orders" onclick="switchAdminTab('orders')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ออเดอร์ <span id="badge-orders" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
+        <button id="admin-tab-btn-topups" onclick="switchAdminTab('topups')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">เติมเงิน &amp; โปรโมชั่น <span id="badge-topups" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
+        <button id="admin-tab-btn-users" onclick="switchAdminTab('users')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ผู้ใช้</button>
+        <button id="admin-tab-btn-promos" onclick="switchAdminTab('promos')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">โค้ดส่วนลด</button>
+        <button id="admin-tab-btn-settings" onclick="switchAdminTab('settings')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ตั้งค่าร้าน</button>
       </div>
     </div>
 
@@ -459,7 +450,7 @@
           </div>
           
           <div id="admin-products-empty" class="hidden py-16 text-center text-slate text-xs">
-            ไม่พบสินค้าในระบบ กรุณากด "เพิ่มสินค้าใหม่" หรือ "คืนค่า 6 สินค้าเริ่มต้น"
+            ยังไม่มีสินค้า กด "เพิ่มสินค้าใหม่" เพื่อเริ่มต้น
           </div>
         </div>
 
@@ -471,7 +462,6 @@
           <div>
             <h3 class="font-display font-semibold text-ink text-base">เพิ่ม / แก้ไขหมวดหมู่</h3>
             <p class="text-xs text-slate mt-0.5">หมวด "บริการ" ตั้งหน่วยและขั้นต่ำต่อรายการได้ (เช่น โยนกระสุนขั้นต่ำ 15 กอง) สินค้าแต่ละชิ้นตั้งทับค่านี้ได้ในฟอร์มสินค้า</p>
-            <p id="admin-categories-default-note" class="hidden text-xs text-launchOrange mt-1">ตอนนี้ใช้หมวดมาตรฐานของระบบ ยังไม่ได้บันทึกลงฐานข้อมูล เมื่อกดบันทึกหมวดใดก็ตาม ระบบจะคัดลอกหมวดมาตรฐานทั้งหมดลงฐานข้อมูลให้แก้ได้</p>
           </div>
           <form id="category-form" onsubmit="handleCategorySubmit(event)" class="grid sm:grid-cols-12 gap-3 items-end">
             <input type="hidden" id="cat-edit-id" />
@@ -529,444 +519,166 @@
         </div>
       </section>
 
-      <!-- SECTION 2: ORDER MANAGEMENT -->
+      <!-- SECTION: ORDERS -->
       <section id="admin-sec-orders" class="hidden space-y-6">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="apple-card p-6">
-            <span class="text-xs text-slate font-medium block mb-1">ยอดขายรวมทั้งหมด</span>
-            <span id="metric-order-revenue" class="text-3xl font-display font-semibold text-pricingBlue">฿0.00</span>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ยอดขาย (ออเดอร์สำเร็จ)</span><span id="metric-order-revenue" class="text-2xl font-display font-semibold text-pricingBlue">฿0.00</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ออเดอร์ทั้งหมด</span><span id="metric-order-count" class="text-2xl font-display font-semibold">0</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">รอตรวจสอบ</span><span id="metric-order-pending" class="text-2xl font-display font-semibold text-launchOrange">0</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">กำลังดำเนินการ</span><span id="metric-order-processing" class="text-2xl font-display font-semibold text-appleBlue">0</span></div>
+        </div>
+        <div class="apple-card p-4 sm:px-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+          <div class="flex gap-2 flex-1">
+            <input id="order-search" type="search" oninput="renderAdminOrders()" placeholder="ค้นหาเลขออเดอร์ ชื่อสินค้า ผู้ซื้อ…" class="flex-1 min-w-0 apple-input-rounded px-4 py-2 text-xs">
+            <select id="order-status-filter" onchange="renderAdminOrders()" class="apple-input px-3 py-2 text-xs">
+              <option value="active">ต้องดำเนินการ</option><option value="all">ทั้งหมด</option><option value="pending_payment">รอตรวจสอบ</option>
+              <option value="processing">กำลังดำเนินการ</option><option value="completed">ส่งมอบสำเร็จ</option><option value="cancelled">ยกเลิก</option>
+            </select>
           </div>
-          <div class="apple-card p-6">
-            <span class="text-xs text-slate font-medium block mb-1">คำสั่งซื้อสำเร็จ</span>
-            <span id="metric-order-count" class="text-3xl font-display font-semibold text-ink">0</span>
+          <button onclick="refreshOrders()" class="text-xs font-medium text-appleBlue hover:underline">รีเฟรช</button>
+        </div>
+        <div id="admin-orders-list" class="space-y-3"></div>
+        <div id="admin-orders-empty" class="hidden apple-card py-16 text-center text-slate text-xs">ไม่มีออเดอร์ในมุมมองนี้</div>
+      </section>
+
+      <!-- SECTION: TOP-UPS + PROMOTIONS -->
+      <section id="admin-sec-topups" class="hidden space-y-6">
+        <div class="apple-card p-5 sm:p-6 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+            <div><h3 class="font-display font-semibold text-base">โปรโมชั่นการเติมเงิน</h3><p class="text-xs text-slate">เช่น เติมครบ 500 บาท รับโบนัส 25 บาท หรือ 5% · ลูกค้าได้โปรที่โบนัสสูงสุดที่เข้าเงื่อนไข</p></div>
           </div>
-          <div class="apple-card p-6">
-            <span class="text-xs text-slate font-medium block mb-1">PromptPay QR</span>
-            <span id="metric-order-promptpay" class="text-3xl font-display font-semibold text-appleBlue">0</span>
-          </div>
-          <div class="apple-card p-6">
-            <span class="text-xs text-slate font-medium block mb-1">ซอง TrueMoney</span>
-            <span id="metric-order-truemoney" class="text-3xl font-display font-semibold text-launchOrange">0</span>
-          </div>
+          <form id="tpromo-form" onsubmit="saveTopupPromo(event)" class="grid sm:grid-cols-12 gap-3 items-end">
+            <input type="hidden" id="tpromo-id">
+            <div class="sm:col-span-2"><label class="block text-[11px] text-slate mb-1" for="tpromo-min">เติมครบ (บาท)</label><input id="tpromo-min" type="number" min="20" step="1" required class="w-full apple-input px-3 py-2 text-xs font-mono"></div>
+            <div class="sm:col-span-2"><label class="block text-[11px] text-slate mb-1" for="tpromo-type">ประเภทโบนัส</label><select id="tpromo-type" class="w-full apple-input px-3 py-2 text-xs"><option value="fixed">บาท</option><option value="percent">เปอร์เซ็นต์</option></select></div>
+            <div class="sm:col-span-2"><label class="block text-[11px] text-slate mb-1" for="tpromo-value">โบนัส</label><input id="tpromo-value" type="number" min="0.01" step="0.01" required class="w-full apple-input px-3 py-2 text-xs font-mono"></div>
+            <div class="sm:col-span-4"><label class="block text-[11px] text-slate mb-1" for="tpromo-label">ข้อความสั้น (ไม่บังคับ)</label><input id="tpromo-label" type="text" maxlength="60" placeholder="เช่น โปรต้อนรับสมาชิกใหม่" class="w-full apple-input px-3 py-2 text-xs"></div>
+            <label class="sm:col-span-2 flex items-center gap-2 text-xs pb-2"><input id="tpromo-active" type="checkbox" checked> เปิดใช้งาน</label>
+            <div class="sm:col-span-12 flex gap-2"><button type="submit" class="apple-pricing-pill px-5 py-2 text-xs">บันทึกโปรโมชั่น</button><button type="button" onclick="resetTopupPromo()" class="apple-explore-pill px-4 py-2 text-xs">ล้างฟอร์ม</button></div>
+          </form>
+          <div id="tpromo-list" class="divide-y divide-hairline border-t border-hairline"></div>
         </div>
 
-        <div class="apple-card overflow-hidden">
-          <div class="p-5 sm:px-6 border-b border-hairline flex justify-between items-center">
-            <h3 class="font-display font-semibold text-ink text-base">รายการคำสั่งซื้อจากลูกค้า (Collection: orders)</h3>
-            <button onclick="refreshOrders()" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-3-6.2M20 4v5h-5"/></svg></span> รีเฟรชข้อมูล
-            </button>
+        <div class="apple-card p-4 sm:px-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+          <h3 class="font-display font-semibold text-base">คำขอเติมเงิน</h3>
+          <div class="flex gap-2">
+            <select id="topup-status-filter" onchange="renderAdminTopups()" class="apple-input px-3 py-2 text-xs"><option value="pending">รอตรวจสอบ</option><option value="all">ทั้งหมด</option><option value="completed">เติมแล้ว</option><option value="rejected">ไม่อนุมัติ</option></select>
+            <button onclick="renderAdminTopups()" class="text-xs font-medium text-appleBlue hover:underline">รีเฟรช</button>
           </div>
+        </div>
+        <div id="admin-topups-list" class="space-y-3"></div>
+        <div id="admin-topups-empty" class="hidden apple-card py-16 text-center text-slate text-xs">ไม่มีรายการในมุมมองนี้</div>
+      </section>
 
+      <!-- SECTION: USERS -->
+      <section id="admin-sec-users" class="hidden space-y-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ผู้ใช้ในระบบ</span><span id="metric-user-count" class="text-2xl font-display font-semibold">0</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ยอดเงินคงค้างรวม</span><span id="metric-user-balance" class="text-2xl font-display font-semibold text-pricingBlue">฿0</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ผู้ดูแลระบบ</span><span id="metric-user-admins" class="text-2xl font-display font-semibold">0</span></div>
+          <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ถูกระงับ</span><span id="metric-user-suspended" class="text-2xl font-display font-semibold text-launchOrange">0</span></div>
+        </div>
+        <div class="apple-card p-4 sm:px-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+          <input id="user-search" type="search" oninput="renderAdminUsers()" placeholder="ค้นหาชื่อผู้ใช้ อีเมล Facebook หรือ UID…" class="flex-1 min-w-0 apple-input-rounded px-4 py-2 text-xs">
+          <p class="text-[11px] text-slate">ผู้ใช้เก่าจะขึ้นในรายการหลังจากเข้าสู่ระบบครั้งถัดไป</p>
+        </div>
+        <div class="apple-card overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs admin-table">
-              <thead>
-                <tr>
-                  <th class="py-3 px-4">เลขที่ออเดอร์</th>
-                  <th class="py-3 px-4">เวลาสั่งซื้อ</th>
-                  <th class="py-3 px-4">สินค้า</th>
-                  <th class="py-3 px-4">ยอดเงิน</th>
-                  <th class="py-3 px-4">ช่องทาง</th>
-                  <th class="py-3 px-4">ไอดีที่ส่งมอบ (User / Pass)</th>
-                  <th class="py-3 px-4">สถานะ</th>
-                  <th class="py-3 px-4">ดำเนินการ</th>
-                </tr>
-              </thead>
-              <tbody id="admin-orders-table-body" class="divide-y divide-hairline">
-                <!-- เรนเดอร์จาก js/admin.js -->
-              </tbody>
+              <thead><tr><th class="py-3 px-4">ผู้ใช้</th><th class="py-3 px-4">ติดต่อ</th><th class="py-3 px-4">ยอดเงิน</th><th class="py-3 px-4">สิทธิ์</th><th class="py-3 px-4">สถานะ</th><th class="py-3 px-4">สมัครเมื่อ</th><th class="py-3 px-4 text-right">จัดการ</th></tr></thead>
+              <tbody id="admin-users-table-body"></tbody>
             </table>
           </div>
-
-          <div id="admin-orders-empty" class="hidden py-16 text-center text-slate text-xs">
-            ยังไม่มีรายการคำสั่งซื้อในระบบ
-          </div>
+          <div id="admin-users-empty" class="hidden py-16 text-center text-slate text-xs">ไม่พบผู้ใช้</div>
         </div>
       </section>
 
-      <!-- SECTION 3: PROMO CODE MANAGEMENT -->
+      <!-- SECTION: PROMO CODES -->
       <section id="admin-sec-promos" class="hidden space-y-6">
         <div class="apple-card p-6 md:p-8 space-y-6">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-5">
             <div>
-              <span class="text-pricingBlue text-[11px] font-semibold tracking-tight uppercase block mb-1">
-                Promo Code Engine
-              </span>
-              <h3 class="text-2xl font-display font-semibold text-ink tracking-tight">
-                ระบบจัดการโค้ดส่วนลด
-              </h3>
-              <p class="text-slate text-xs mt-1">
-                ตั้งค่าสิทธิ์ต่อคน โควต้ารวม และรูปแบบส่วนลด (บาท, %, หรือสุ่มช่วงตัวเลข)
-              </p>
+              <h3 class="text-2xl font-display font-semibold">โค้ดส่วนลด</h3>
+              <p class="text-slate text-xs mt-1">ลดเป็นบาทหรือ % · เลือกได้ว่าใช้กับสินค้าทั้งหมด เฉพาะหมวดหมู่ หรือเฉพาะสินค้า</p>
             </div>
-            
-            <button 
-              type="button" 
-              onclick="openPromoModal()" 
-              class="apple-pricing-pill px-5 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-              <span>สร้างโค้ดส่วนลดใหม่</span>
-            </button>
+            <button type="button" onclick="openPromoModal()" class="apple-pricing-pill px-5 py-2.5 text-xs font-semibold">+ สร้างโค้ดส่วนลด</button>
           </div>
-
           <div class="overflow-x-auto -mx-6 sm:mx-0">
             <table class="w-full text-left text-xs admin-table">
-              <thead>
-                <tr class="border-b border-hairline text-slate bg-mist/50">
-                  <th class="py-3 px-4 font-semibold">รหัสโค้ด</th>
-                  <th class="py-3 px-4 font-semibold">ประเภท &amp; มูลค่าส่วนลด</th>
-                  <th class="py-3 px-4 font-semibold">สิทธิ์ต่อคน</th>
-                  <th class="py-3 px-4 font-semibold">โควต้าทั้งหมด</th>
-                  <th class="py-3 px-4 font-semibold">คำอธิบาย</th>
-                  <th class="py-3 px-4 text-right font-semibold">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody id="admin-promos-table-body" class="divide-y divide-hairline">
-                <!-- เรนเดอร์ไดนามิกจาก js/back/code.js -->
-              </tbody>
+              <thead><tr><th class="py-3 px-4">โค้ด</th><th class="py-3 px-4">ส่วนลด</th><th class="py-3 px-4">ใช้กับ</th><th class="py-3 px-4">สิทธิ์ต่อคน</th><th class="py-3 px-4">ใช้ไป / โควต้า</th><th class="py-3 px-4">สถานะ</th><th class="py-3 px-4 text-right">จัดการ</th></tr></thead>
+              <tbody id="admin-promos-table-body"></tbody>
             </table>
           </div>
-          
-          <div id="admin-promos-empty" class="hidden py-16 text-center text-slate text-xs">
-            ยังไม่มีโค้ดส่วนลดในระบบ กดปุ่ม "สร้างโค้ดส่วนลดใหม่" ด้านบนเพื่อเริ่มต้น
-          </div>
+          <div id="admin-promos-empty" class="hidden py-16 text-center text-slate text-xs">ยังไม่มีโค้ดส่วนลด</div>
         </div>
       </section>
 
-      <!-- SECTION 4: STORE SETTINGS & ANNOUNCEMENTS & API KEYS -->
-      <section id="admin-sec-settings" class="hidden space-y-6">
-        <div class="max-w-2xl mx-auto apple-card p-6 md:p-8">
-          <h3 class="font-display font-semibold text-ink text-xl mb-1">ตั้งค่าร้านค้า &amp; ข้อความประกาศ</h3>
-          <p class="text-slate text-xs mb-6">บันทึกการตั้งค่าลง Firestore เพื่อให้หน้าร้านเปลี่ยนข้อความทันที</p>
-
-          <form onsubmit="handleSaveSettings(event)" class="space-y-5">
-            <div>
-              <label class="block text-xs font-medium text-slate mb-1.5">
-                <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l8 5V5L7 10H3zM18 9a4 4 0 010 6"/></svg> ข้อความตัววิ่งด้านบนสุด (Marquee Announcement):
-              </label>
-              <textarea 
-                id="setting-marquee-text" 
-                rows="3" 
-                class="w-full apple-input p-3 text-xs leading-relaxed font-mono"
-              ></textarea>
-              <span class="text-[11px] text-steel mt-1 block">ข้อความจะเลื่อนผ่านหน้าจอแบบไม่มีที่สิ้นสุด</span>
-            </div>
-
-            <!-- Apple-Style Promotional Ribbon Banner Settings -->
-            <div class="bg-mist p-4 rounded-2xl border border-hairline space-y-3">
-              <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-ink flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-appleBlue"></span>
-                  <span>แถบข้อความโปรโมชั่นสไตล์ Apple (Ribbon Banner) สำหรับหน้า index และ category</span>
-                </div>
-                <span class="text-[10px] text-steel font-mono">BELOW NAV</span>
-              </div>
-
-              <div>
-                <label class="block text-[11px] text-slate mb-1">ข้อความหลักของแบนเนอร์ (เว้นว่างเพื่อซ่อน):</label>
-                <input 
-                  id="setting-ribbon-text" 
-                  type="text" 
-                  placeholder="ข้อความแบนเนอร์ (เว้นว่างเพื่อซ่อนแบนเนอร์)" 
-                  class="w-full apple-input px-3.5 py-2 text-xs"
-                />
-              </div>
-
-              <div class="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">ข้อความปุ่มลิงก์ (เช่น เลือกซื้อ):</label>
-                  <input 
-                    id="setting-ribbon-link-text" 
-                    type="text" 
-                    placeholder="เลือกซื้อ" 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs"
-                  />
-                </div>
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">URL ปลายทาง (เช่น #catalog-section หรือ ลิงก์โปรโมชั่น):</label>
-                  <input 
-                    id="setting-ribbon-link-url" 
-                    type="text" 
-                    placeholder="#catalog-section" 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- สถิติหน้าร้าน 4 รายการ -->
-            <div class="pt-3 border-t border-hairline space-y-3">
-              <div class="flex items-center justify-between">
-                <div>
-                  <h4 class="text-xs font-semibold text-ink uppercase tracking-wider">
-                    <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> สถิติหน้าร้าน (Highlights Metrics 4 ค่า)
-                  </h4>
-                  <p class="text-[11px] text-slate mt-0.5">กำหนดค่าตัวเลขและข้อความคำอธิบายที่จะแสดงผลบนแถบสถิติหน้าร้าน</p>
-                </div>
-                <span class="text-[10px] text-steel font-mono">LIVE DISPLAY</span>
-              </div>
-
-              <div class="grid sm:grid-cols-2 gap-3.5">
-                <!-- Stat 1 -->
-                <div class="bg-mist p-3.5 rounded-2xl border border-hairline space-y-2">
-                  <div class="text-[11px] font-semibold text-slate flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-appleBlue"></span>
-                    <span>สถิติที่ 1 (สมาชิกในระบบ)</span>
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ค่าตัวเลข / สัญลักษณ์:</label>
-                    <input 
-                      id="setting-stat1-val" 
-                      type="text" 
-                      placeholder="ใส่เฉพาะตัวเลขจริง หรือเว้นว่างเพื่อซ่อน" 
-                      class="w-full apple-input px-3 py-1.5 text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ข้อความกำกับ (Label):</label>
-                    <input 
-                      id="setting-stat1-lbl" 
-                      type="text" 
-                      placeholder="สมาชิกในระบบ" 
-                      class="w-full apple-input px-3 py-1.5 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <!-- Stat 2 -->
-                <div class="bg-mist p-3.5 rounded-2xl border border-hairline space-y-2">
-                  <div class="text-[11px] font-semibold text-slate flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-appleBlue"></span>
-                    <span>สถิติที่ 2 (ไอดีพร้อมส่งทันที)</span>
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ค่าตัวเลข (เว้นว่าง = ดึงสต็อกจริงอัตโนมัติ):</label>
-                    <input 
-                      id="setting-stat2-val" 
-                      type="text" 
-                      placeholder="1,405 หรือเว้นว่างเพื่อออโต้" 
-                      class="w-full apple-input px-3 py-1.5 text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ข้อความกำกับ (Label):</label>
-                    <input 
-                      id="setting-stat2-lbl" 
-                      type="text" 
-                      placeholder="ไอดีพร้อมส่งทันที" 
-                      class="w-full apple-input px-3 py-1.5 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <!-- Stat 3 -->
-                <div class="bg-mist p-3.5 rounded-2xl border border-hairline space-y-2">
-                  <div class="text-[11px] font-semibold text-slate flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-appleBlue"></span>
-                    <span>สถิติที่ 3 (ออเดอร์สำเร็จ)</span>
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ค่าตัวเลข / สัญลักษณ์:</label>
-                    <input 
-                      id="setting-stat3-val" 
-                      type="text" 
-                      placeholder="ใส่เฉพาะตัวเลขจริง หรือเว้นว่างเพื่อซ่อน" 
-                      class="w-full apple-input px-3 py-1.5 text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ข้อความกำกับ (Label):</label>
-                    <input 
-                      id="setting-stat3-lbl" 
-                      type="text" 
-                      placeholder="ออเดอร์สำเร็จ" 
-                      class="w-full apple-input px-3 py-1.5 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <!-- Stat 4 -->
-                <div class="bg-mist p-3.5 rounded-2xl border border-hairline space-y-2">
-                  <div class="text-[11px] font-semibold text-slate flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-appleBlue"></span>
-                    <span>สถิติที่ 4 (เวลาจัดส่งเฉลี่ย)</span>
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ค่าตัวเลข / สัญลักษณ์:</label>
-                    <input 
-                      id="setting-stat4-val" 
-                      type="text" 
-                      placeholder="ใส่เฉพาะตัวเลขจริง หรือเว้นว่างเพื่อซ่อน" 
-                      class="w-full apple-input px-3 py-1.5 text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-[10px] text-steel mb-0.5">ข้อความกำกับ (Label):</label>
-                    <input 
-                      id="setting-stat4-lbl" 
-                      type="text" 
-                      placeholder="เวลาจัดส่งเฉลี่ย" 
-                      class="w-full apple-input px-3 py-1.5 text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-medium text-slate mb-1.5">ลิงก์ Discord ชุมชน:</label>
-                <input 
-                  id="setting-discord-link" 
-                  type="text" 
-                  placeholder="https://discord.gg/..." 
-                  class="w-full apple-input px-3.5 py-2 text-xs"
-                />
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate mb-1.5">Line ID / ช่องทางติดต่อ:</label>
-                <input 
-                  id="setting-line-id" 
-                  type="text" 
-                  placeholder="@tacticalstore" 
-                  class="w-full apple-input px-3.5 py-2 text-xs"
-                />
-              </div>
-            </div>
-
-            <!-- PAYMENT GATEWAY & TOPUP API KEYS -->
-            <div class="bg-mist p-4 rounded-2xl border border-hairline space-y-3.5">
-              <div class="flex items-center justify-between">
-                <div class="text-xs font-semibold text-ink flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-appleBlue"></span>
-                  <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 10a4 4 0 100-8 4 4 0 000 8zM11 8l-8 8v3h3v-2h2v-2h2l1-1"/></svg> ตั้งค่า API เติมเงินอัตโนมัติ (SlipOK &amp; TrueMoney API Gateway)</span>
-                </div>
-                <span class="text-[10px] text-steel font-mono">GATEWAY CONFIG</span>
-              </div>
-
-              <div class="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">SlipOK API Key:</label>
-                  <input 
-                    id="setting-slipok-key" 
-                    type="password" 
-                    placeholder="ใส่ SlipOK API Key ของคุณ..." 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs font-mono"
-                  />
-                  <span class="text-[10px] text-steel block mt-0.5">ใช้ตรวจสลิปพร้อมเพย์อัตโนมัติ 24 ชม.</span>
-                </div>
-
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">SlipOK Branch ID:</label>
-                  <input 
-                    id="setting-slipok-branch" 
-                    type="text" 
-                    placeholder="เช่น 0001 หรือ สาขาหลัก" 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs font-mono"
-                  />
-                  <span class="text-[10px] text-steel block mt-0.5">รหัสสาขาของ SlipOK</span>
-                </div>
-
-                <div class="sm:col-span-2">
-                  <label class="block text-[11px] text-slate mb-1">ชื่อหรือเลขท้ายบัญชีผู้รับของร้าน (ตามที่ขึ้นในสลิป):</label>
-                  <input id="setting-slipok-receiver" type="text" placeholder="เช่น ร้านทดสอบ หรือ 1234" class="w-full apple-input px-3.5 py-1.5 text-xs" />
-                  <span class="text-[10px] text-steel block mt-0.5">จำเป็น: สลิปที่โอนเข้าบัญชีอื่นจะไม่ผ่าน ถ้าเว้นว่างระบบจะไม่เติมอัตโนมัติ</span>
-                </div>
-              </div>
-
-              <label class="flex items-start gap-2 text-xs text-ink cursor-pointer">
-                <input id="setting-slip-auto" type="checkbox" class="mt-0.5" />
-                <span>เปิดตรวจสลิปอัตโนมัติในหน้าเติมเงิน
-                  <span class="block text-[10px] text-steel font-normal">ต้อง deploy Cloudflare Worker (<code>worker/</code>) และใส่ URL ด้านล่างก่อน มิฉะนั้นให้ปิดไว้ (ระบบจะให้แอดมินตรวจเอง)</span>
-                </span>
-              </label>
-              <input id="setting-slip-worker-url" type="text" placeholder="https://slip.ชื่อคุณ.workers.dev" class="w-full apple-input px-3.5 py-1.5 text-xs" />
-
-              <div class="grid sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">TrueMoney Secret / Webhook Key <span class="text-steel">(ยังไม่เปิดใช้)</span>:</label>
-                  <input 
-                    id="setting-truemoney-key" 
-                    type="password" 
-                    placeholder="ใส่ TrueMoney API Key / Secret..." 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">ลิงก์รูป QR พร้อมเพย์ของร้าน:</label>
-                  <input id="setting-promptpay-qr-url" type="text" placeholder="https://..." class="w-full apple-input px-3.5 py-1.5 text-xs font-mono" />
-                  <span class="text-[10px] text-steel block mt-0.5">แสดงในหน้าชำระเงิน ถ้าเว้นว่างจะรับชำระพร้อมเพย์ไม่ได้</span>
-                </div>
-
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">ชื่อบัญชีรับเงิน (แสดงให้ลูกค้าเห็น):</label>
-                  <input id="setting-promptpay-name" type="text" maxlength="100" placeholder="ชื่อบัญชีที่ตรงกับ QR" class="w-full apple-input px-3.5 py-1.5 text-xs" />
-                </div>
-
-                <div>
-                  <label class="block text-[11px] text-slate mb-1">หมายเลขพร้อมเพย์รับเงิน (PromptPay No.):</label>
-                  <input 
-                    id="setting-promptpay-no" 
-                    type="text" 
-                    placeholder="เช่น 0891234567 หรือ 010555..." 
-                    class="w-full apple-input px-3.5 py-1.5 text-xs font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div class="pt-4 border-t border-hairline flex items-center justify-between">
-              <div>
-                <div class="text-xs font-semibold text-ink">รหัส PIN ความปลอดภัยของระบบ</div>
-                <div class="text-[11px] text-slate">ต้องการเปลี่ยนรหัสผ่านเข้าแดชบอร์ดใหม่</div>
-              </div>
-              <button type="button" onclick="promptResetPin()" class="apple-explore-pill px-4 py-1.5 text-xs text-red-500 border-red-200 hover:bg-red-50">
-                เปลี่ยนรหัส PIN
-              </button>
-            </div>
-
-            <button type="submit" class="w-full apple-pricing-pill py-3 text-xs">
-              บันทึกการตั้งค่าร้านค้า
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <!-- SECTION 5: TOPUP TRANSACTIONS MANAGEMENT -->
-      <section id="admin-sec-topups" class="hidden space-y-6">
-        <div class="apple-card overflow-hidden">
-          <div class="p-5 sm:px-6 border-b border-hairline flex justify-between items-center">
-            <h3 class="font-display font-semibold text-ink text-base">รายการเติมเงินเข้าระบบ (Collection: topup_transactions)</h3>
-            <button onclick="renderAdminTopups()" class="text-xs font-medium text-appleBlue hover:underline flex items-center gap-1">
-              <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-3-6.2M20 4v5h-5"/></svg></span> รีเฟรชข้อมูล
-            </button>
+      <!-- SECTION: SETTINGS -->
+      <section id="admin-sec-settings" class="hidden">
+        <form id="settings-form" onsubmit="handleSaveSettings(event)" class="max-w-3xl mx-auto space-y-6">
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">แถบประกาศด้านบน</h3>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-announce-on" type="checkbox"> แสดงแถบประกาศทุกหน้า</label>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-announce-text">ข้อความประกาศ</label><input id="setting-announce-text" type="text" maxlength="300" placeholder="เช่น เติมเงินวันนี้รับโบนัส 10%" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-announce-link">ลิงก์เมื่อกดประกาศ (ไม่บังคับ)</label><input id="setting-announce-link" type="text" placeholder="https://... หรือ /front/topup.html" class="w-full apple-input px-3.5 py-2 text-xs"></div>
           </div>
 
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs admin-table">
-              <thead>
-                <tr>
-                  <th class="py-3 px-4">เลขที่รายการ</th>
-                  <th class="py-3 px-4">ผู้ใช้งาน</th>
-                  <th class="py-3 px-4">ช่องทาง</th>
-                  <th class="py-3 px-4">ยอดเงิน (฿)</th>
-                  <th class="py-3 px-4">เครดิตที่ได้</th>
-                  <th class="py-3 px-4">เลขอ้างอิงสลิป / ซอง</th>
-                  <th class="py-3 px-4">สถานะ</th>
-                  <th class="py-3 px-4">ดำเนินการ</th>
-                </tr>
-              </thead>
-              <tbody id="admin-topups-table-body" class="divide-y divide-hairline">
-                <!-- เรนเดอร์จาก js/admin.js -->
-              </tbody>
-            </table>
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">ช่องทางติดต่อแอดมิน</h3>
+            <p class="text-xs text-slate -mt-2">แสดงในเมนู "เพิ่มเติม" และท้ายเว็บ ช่องที่ว่างจะไม่แสดง</p>
+            <div class="grid sm:grid-cols-3 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-contact-line">Line (ID หรือลิงก์)</label><input id="setting-contact-line" type="text" placeholder="@astraphex" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-contact-facebook">Facebook (ลิงก์)</label><input id="setting-contact-facebook" type="text" placeholder="https://facebook.com/..." class="w-full apple-input px-3.5 py-2 text-xs"></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-contact-discord">Discord (ลิงก์เชิญ)</label><input id="setting-contact-discord" type="text" placeholder="https://discord.gg/..." class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            </div>
           </div>
 
-          <div id="admin-topups-empty" class="hidden py-16 text-center text-slate text-xs">
-            ยังไม่มีรายการเติมเงินในระบบ
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">สถิติหน้าร้าน</h3>
+            <p class="text-xs text-slate -mt-2">หน้าเว็บแสดง <strong>ค่าเริ่มต้นที่ตั้งไว้ + จำนวนจริงในระบบ</strong> และเพิ่มขึ้นเองทุกครั้งที่มีผู้สมัครหรือออเดอร์สำเร็จ</p>
+            <div class="grid sm:grid-cols-3 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-base-users">ผู้ใช้งานทั้งหมด (เริ่มต้น)</label><input id="setting-base-users" type="number" min="0" step="1" class="w-full apple-input px-3.5 py-2 text-xs font-mono"><p id="stat-actual-users" class="text-[11px] text-slate mt-1"></p></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-base-sales">ยอดขายสะสม บาท (เริ่มต้น)</label><input id="setting-base-sales" type="number" min="0" step="1" class="w-full apple-input px-3.5 py-2 text-xs font-mono"><p id="stat-actual-sales" class="text-[11px] text-slate mt-1"></p></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-base-orders">ออเดอร์สำเร็จ (เริ่มต้น)</label><input id="setting-base-orders" type="number" min="0" step="1" class="w-full apple-input px-3.5 py-2 text-xs font-mono"><p id="stat-actual-orders" class="text-[11px] text-slate mt-1"></p></div>
+            </div>
           </div>
-        </div>
+
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">พร้อมเพย์ (รับเงิน)</h3>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-promptpay-name">ชื่อบัญชี</label><input id="setting-promptpay-name" type="text" maxlength="100" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-promptpay-number">เลขพร้อมเพย์ / เลขบัญชี (ปุ่มคัดลอก)</label><input id="setting-promptpay-number" type="text" maxlength="40" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4 items-start">
+              <div class="w-40 h-40 rounded-2xl border border-hairline bg-mist flex items-center justify-center overflow-hidden shrink-0"><img id="qr-preview" alt="QR ปัจจุบัน" class="hidden w-full h-full object-contain"><span id="qr-preview-empty" class="text-[11px] text-slate">ยังไม่มี QR</span></div>
+              <div class="space-y-2 flex-1 w-full">
+                <label class="block text-[11px] text-slate" for="qr-file">อัปโหลดรูป QR (แนะนำ)</label>
+                <input id="qr-file" type="file" accept="image/*" class="block w-full text-xs file:mr-3 file:rounded-full file:border-0 file:bg-mist file:px-4 file:py-2">
+                <div class="flex gap-2"><button type="button" onclick="uploadQr()" id="btn-upload-qr" class="apple-pricing-pill px-4 py-2 text-xs">อัปโหลด QR</button><button type="button" onclick="removeQr()" class="apple-explore-pill px-4 py-2 text-xs">ลบ QR ที่อัปโหลด</button></div>
+                <label class="block text-[11px] text-slate pt-2" for="setting-promptpay-qr-url">หรือใช้ลิงก์รูป QR (ใช้เมื่อไม่ได้อัปโหลด)</label>
+                <input id="setting-promptpay-qr-url" type="text" placeholder="https://..." class="w-full apple-input px-3.5 py-2 text-xs">
+              </div>
+            </div>
+          </div>
+
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">ระบบอัตโนมัติ (Cloudflare Worker)</h3>
+            <p class="text-xs text-slate -mt-2">ใช้สำหรับ: ชำระด้วยเครดิตแล้วส่งไอดีอัตโนมัติ, แก้ชื่อผู้ใช้/รหัสผ่าน/สิทธิ์ในหน้าผู้ใช้, แจ้งเตือน Discord และตรวจสลิปอัตโนมัติ วิธีติดตั้งอยู่ใน README</p>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-slip-worker-url">URL ของ Worker</label><input id="setting-slip-worker-url" type="text" placeholder="https://astraphex-worker.xxx.workers.dev" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-slip-auto" type="checkbox"> เปิดตรวจสลิปเติมเงินอัตโนมัติ (EasySlip)</label>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-discord-webhook">Discord Webhook URL (แจ้งเตือนแอดมิน · เก็บเป็นความลับ)</label>
+              <div class="flex gap-2"><input id="setting-discord-webhook" type="text" placeholder="https://discord.com/api/webhooks/..." class="flex-1 min-w-0 apple-input px-3.5 py-2 text-xs font-mono"><button type="button" onclick="testWebhook()" class="apple-explore-pill px-4 py-2 text-xs shrink-0">ทดสอบ</button></div>
+              <p class="text-[11px] text-slate mt-1">แจ้งเมื่อมีออเดอร์ใหม่ สลิปเติมเงินใหม่ และการซื้อด้วยเครดิต</p></div>
+          </div>
+
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">อื่น ๆ</h3>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-koen-label">ชื่อหัวข้อค่าบนการ์ดไอดี</label><input id="setting-koen-label" type="text" maxlength="30" placeholder="Koen" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <div class="flex items-center justify-between gap-3 pt-2 border-t border-hairline"><span class="text-xs text-slate">รหัส PIN สำหรับเปิดหน้าหลังบ้าน</span><button type="button" onclick="promptResetPin()" class="apple-explore-pill px-4 py-2 text-xs text-launchOrange">เปลี่ยนรหัส PIN</button></div>
+          </div>
+
+          <button type="submit" class="w-full apple-pricing-pill py-3 text-sm">บันทึกการตั้งค่าทั้งหมด</button>
+        </form>
       </section>
 
     </main>
@@ -1105,6 +817,11 @@
           <div>
             <label class="block text-xs font-medium text-slate mb-1">หมวดหมู่ (Category):</label>
             <select id="prod-category" onchange="handleCategoryChange(this.value)" class="w-full apple-input px-3 py-2 text-xs"></select>
+          </div>
+
+          <div class="sm:col-span-2 flex items-center justify-between gap-3 rounded-2xl border border-hairline bg-mist px-4 py-3">
+            <div><p class="text-xs font-medium text-ink">แสดงเป็นพิเศษหน้าแรก (Featured)</p><p class="text-[11px] text-slate">สินค้าจะขึ้นในส่วน "สินค้าแนะนำ" และติดป้ายแนะนำ</p></div>
+            <label class="relative inline-flex items-center cursor-pointer"><input id="prod-featured" type="checkbox" class="sr-only peer"><span class="w-11 h-6 bg-control rounded-full peer-checked:bg-pricingBlue transition after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition peer-checked:after:translate-x-5"></span></label>
           </div>
 
           <div>
@@ -1386,164 +1103,102 @@
     </div>
   </div>
 
-  <!-- MODAL: CREATE / EDIT PROMO CODE -->
-  <div id="promo-form-modal" class="fixed inset-0 z-50 hidden items-start justify-center p-4 sm:p-6 bg-ink/20 backdrop-blur-xl overflow-y-auto">
-    <div class="apple-card max-w-xl w-full p-6 sm:p-8 relative my-6 sm:my-10 bg-gallery border border-hairline shadow-2xl rounded-3xl">
-      
-      <button type="button" onclick="closePromoModal()" class="absolute top-5 right-5 text-steel hover:text-ink p-1.5 rounded-full hover:bg-mist transition-colors">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-
-      <span class="text-launchOrange text-[12px] font-semibold tracking-[-0.12px] uppercase block mb-1">
-        Promo Code Editor
-      </span>
-      <h3 id="promo-modal-heading" class="text-2xl font-display font-semibold text-ink mb-1">
-        สร้างโค้ดส่วนลดใหม่
-      </h3>
-      <p class="text-slate text-xs mb-5">
-        ตั้งค่าเงื่อนไขการลดราคา จำนวนครั้งต่อคน และจำกัดจำนวนคนใช้ทั้งหมด
-      </p>
-
-      <form id="promo-crud-form" onsubmit="handleSavePromoModal(event)" class="space-y-4">
-        <input type="hidden" id="promo-edit-mode" value="create">
-        <input type="hidden" id="promo-original-code" value="">
-
-        <!-- 1. รหัสโค้ด (Code Name) -->
-        <div>
-          <label class="block text-xs font-medium text-slate mb-1">
-            รหัสโค้ด (Promo Code Name): <span class="text-launchOrange font-bold">*</span>
-          </label>
-          <input 
-            id="promo-code-name" 
-            type="text" 
-            placeholder="เช่น TACTICAL, SPECIAL20, LUCKY10" 
-            class="w-full apple-input px-3.5 py-2 text-xs uppercase font-mono font-bold tracking-wider"
-            required
-          />
-          <span class="text-[10px] text-steel block mt-0.5">ตัวพิมพ์ใหญ่ อักษรภาษาอังกฤษหรือตัวเลข</span>
+  <!-- MODAL: PROMO CODE -->
+  <div id="promo-form-modal" class="modal" role="dialog" aria-modal="true" aria-label="โค้ดส่วนลด">
+    <div class="modal-card !max-w-xl">
+      <button type="button" onclick="closePromoModal()" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <h3 id="promo-modal-heading" class="text-xl font-display font-semibold mb-5">สร้างโค้ดส่วนลด</h3>
+      <form id="promo-form" onsubmit="handleSavePromoModal(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="promo-edit-mode" value="create"><input type="hidden" id="promo-original-code">
+        <div><label class="block text-slate mb-1" for="promo-code-name">โค้ด (A-Z, 0-9, _ -)</label><input id="promo-code-name" type="text" maxlength="40" required pattern="[A-Za-z0-9_\-]{2,40}" class="w-full apple-input px-3.5 py-2 font-mono uppercase"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-slate mb-1" for="promo-discount-type">ประเภท</label><select id="promo-discount-type" class="w-full apple-input px-3 py-2"><option value="fixed">ลดเป็นบาท</option><option value="percent">ลดเป็น %</option></select></div>
+          <div><label class="block text-slate mb-1" for="promo-discount-val">มูลค่า</label><input id="promo-discount-val" type="number" min="0.01" step="0.01" required class="w-full apple-input px-3.5 py-2 font-mono"></div>
         </div>
-
-        <!-- 2. ประเภทส่วนลด (Discount Type) -->
-        <div class="bg-mist p-3.5 rounded-2xl border border-hairline space-y-3">
-          <label class="block text-xs font-semibold text-ink">
-            ประเภทส่วนลด (Discount Type):
-          </label>
-          
-          <select id="promo-discount-type" onchange="handlePromoTypeChange(this.value)" class="w-full apple-input px-3.5 py-2 text-xs font-medium">
-            <option value="fixed">ลดเป็นจำนวนเงินคงที่ (บาท)</option>
-            <option value="percent">ลดเป็นเปอร์เซ็นต์คงที่ (%)</option>
-            <option value="random_percent">สุ่มเปอร์เซ็นต์ส่วนลด (เช่น 10% - 20%)</option>
-            <option value="random_fixed">สุ่มจำนวนเงินส่วนลด (เช่น 20฿ - 50฿)</option>
+        <div>
+          <label class="block text-slate mb-1" for="promo-applies-to">ใช้ได้กับ</label>
+          <select id="promo-applies-to" onchange="handlePromoScopeChange()" class="w-full apple-input px-3 py-2">
+            <option value="all">สินค้าทั้งหมด</option><option value="categories">เฉพาะหมวดหมู่ที่เลือก</option><option value="products">เฉพาะสินค้าที่ระบุ</option>
           </select>
-
-          <!-- Type A & B: Single Value Input -->
-          <div id="promo-single-val-box">
-            <label id="promo-val-label" class="block text-[11px] font-medium text-slate mb-1">
-              มูลค่าที่ลด (บาท):
-            </label>
-            <input 
-              id="promo-discount-val" 
-              type="number" 
-              step="0.01" 
-              min="0" 
-              placeholder="เช่น 50" 
-              class="w-full apple-input px-3.5 py-2 text-xs font-mono font-bold text-pricingBlue"
-            />
-          </div>
-
-          <!-- Type C & D: Range / Random Inputs -->
-          <div id="promo-range-val-box" class="hidden grid grid-cols-2 gap-3">
-            <div>
-              <label id="promo-min-label" class="block text-[11px] font-medium text-slate mb-1">
-                สุ่มต่ำสุด (%):
-              </label>
-              <input 
-                id="promo-range-min" 
-                type="number" 
-                step="0.01" 
-                min="0" 
-                placeholder="เช่น 10" 
-                class="w-full apple-input px-3.5 py-2 text-xs font-mono font-bold text-launchOrange"
-              />
-            </div>
-            <div>
-              <label id="promo-max-label" class="block text-[11px] font-medium text-slate mb-1">
-                สุ่มสูงสุด (%):
-              </label>
-              <input 
-                id="promo-range-max" 
-                type="number" 
-                step="0.01" 
-                min="0" 
-                placeholder="เช่น 20" 
-                class="w-full apple-input px-3.5 py-2 text-xs font-mono font-bold text-launchOrange"
-              />
-            </div>
-          </div>
         </div>
-
-        <!-- 3. เงื่อนไขจำกัดสิทธิ์ (Quota & Limits) -->
-        <div class="grid sm:grid-cols-2 gap-3.5">
-          <!-- สิทธิ์ต่อคน -->
-          <div>
-            <label class="block text-xs font-medium text-slate mb-1">
-              จำนวนครั้งที่ใช้ได้ต่อคน (Uses / Person):
-            </label>
-            <input 
-              id="promo-max-per-user" 
-              type="number" 
-              min="0" 
-              step="1" 
-              placeholder="1 (เว้นว่าง = ไม่จำกัด)" 
-              class="w-full apple-input px-3.5 py-2 text-xs font-mono"
-            />
-            <span class="text-[10px] text-steel block mt-0.5">เช่น 1 คนใช้ได้ 1 ครั้ง (0 หรือเว้นว่าง = ไม่จำกัด)</span>
-          </div>
-
-          <!-- โควต้าคนใช้ทั้งหมด -->
-          <div>
-            <label class="block text-xs font-medium text-slate mb-1">
-              โค้ดจำกัดการใช้ทั้งหมดกี่คน (Total Quota):
-            </label>
-            <input 
-              id="promo-max-total-uses" 
-              type="number" 
-              min="0" 
-              step="1" 
-              placeholder="50 (เว้นว่าง = ไม่จำกัด)" 
-              class="w-full apple-input px-3.5 py-2 text-xs font-mono"
-            />
-            <span class="text-[10px] text-steel block mt-0.5">เช่น จำกัด 50 คนแรก (0 หรือเว้นว่าง = ไม่จำกัด)</span>
-          </div>
+        <div id="promo-scope-box" class="hidden rounded-2xl border border-hairline p-3 max-h-56 overflow-y-auto space-y-1.5"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-slate mb-1" for="promo-max-per-user">สิทธิ์ต่อคน (0 = ไม่จำกัด)</label><input id="promo-max-per-user" type="number" min="0" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+          <div><label class="block text-slate mb-1" for="promo-max-total-uses">โควต้ารวม (0 = ไม่จำกัด)</label><input id="promo-max-total-uses" type="number" min="0" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
         </div>
-
-        <!-- 4. คำอธิบายโค้ด (Description) -->
-        <div>
-          <label class="block text-xs font-medium text-slate mb-1">
-            คำอธิบายโค้ด (Description):
-          </label>
-          <input 
-            id="promo-desc" 
-            type="text" 
-            placeholder="เช่น ส่วนลด 50 บาท หรือ สุ่มรับส่วนลด 10-20% สำหรับสมาชิกใหม่" 
-            class="w-full apple-input px-3.5 py-2 text-xs"
-          />
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-4 border-t border-hairline">
-          <button type="button" onclick="closePromoModal()" class="apple-explore-pill px-5 py-2 text-xs">
-            ยกเลิก
-          </button>
-          <button type="submit" id="btn-save-promo" class="apple-pricing-pill px-6 py-2 text-xs font-semibold">
-            บันทึกโค้ดส่วนลด
-          </button>
-        </div>
+        <div><label class="block text-slate mb-1" for="promo-desc">คำอธิบาย (เห็นเฉพาะแอดมิน)</label><input id="promo-desc" type="text" maxlength="120" class="w-full apple-input px-3.5 py-2"></div>
+        <label class="flex items-center gap-2"><input id="promo-active" type="checkbox" checked> เปิดใช้งานโค้ดนี้</label>
+        <div class="flex justify-end gap-2 pt-3 border-t border-hairline"><button type="button" onclick="closePromoModal()" class="apple-explore-pill px-5 py-2">ยกเลิก</button><button type="submit" class="apple-pricing-pill px-6 py-2">บันทึกโค้ด</button></div>
       </form>
-
     </div>
   </div>
 
-  <!-- โหลดสคริปต์หลักและโมดูลโค้ดส่วนลด -->
+  <!-- MODAL: USER -->
+  <div id="user-modal" class="modal" role="dialog" aria-modal="true" aria-label="จัดการผู้ใช้">
+    <div class="modal-card !max-w-2xl">
+      <button type="button" onclick="closeModal('user-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <p class="text-[11px] text-slate font-mono" id="um-uid"></p>
+      <h3 id="um-title" class="text-xl font-display font-semibold mb-4">ผู้ใช้</h3>
+      <div class="bg-mist p-1 rounded-full grid grid-cols-3 text-xs mb-5">
+        <button type="button" id="um-tab-info" onclick="userModalTab('info')" class="py-2 rounded-full">ข้อมูลบัญชี</button>
+        <button type="button" id="um-tab-wallet" onclick="userModalTab('wallet')" class="py-2 rounded-full">ยอดเงิน</button>
+        <button type="button" id="um-tab-history" onclick="userModalTab('history')" class="py-2 rounded-full">ประวัติ</button>
+      </div>
+      <form id="um-pane-info" onsubmit="saveUserInfo(event)" class="space-y-3 text-xs">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="block text-slate mb-1" for="um-username">ชื่อผู้ใช้ (ใช้เข้าสู่ระบบ)</label><input id="um-username" type="text" maxlength="24" class="w-full apple-input px-3.5 py-2"></div>
+          <div><label class="block text-slate mb-1" for="um-contact-email">อีเมลติดต่อ</label><input id="um-contact-email" type="email" maxlength="200" class="w-full apple-input px-3.5 py-2"></div>
+          <div><label class="block text-slate mb-1" for="um-facebook">ชื่อหรือลิงก์ Facebook</label><input id="um-facebook" type="text" maxlength="200" class="w-full apple-input px-3.5 py-2"></div>
+          <div><label class="block text-slate mb-1" for="um-password">ตั้งรหัสผ่านใหม่ (เว้นว่าง = ไม่เปลี่ยน)</label><input id="um-password" type="text" minlength="6" maxlength="100" autocomplete="off" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+          <div><label class="block text-slate mb-1" for="um-role">สิทธิ์การใช้งาน</label><select id="um-role" class="w-full apple-input px-3 py-2"><option value="user">User</option><option value="admin">Admin</option></select></div>
+          <div><label class="block text-slate mb-1" for="um-status">สถานะบัญชี</label><select id="um-status" class="w-full apple-input px-3 py-2"><option value="active">ปกติ</option><option value="suspended">ระงับการใช้งาน</option></select></div>
+        </div>
+        <p id="um-worker-note" class="text-[11px] text-launchOrange"></p>
+        <p class="text-[11px] text-slate">อีเมลเข้าสู่ระบบในระบบ: <span id="um-login-email" class="font-mono"></span></p>
+        <div class="flex justify-end gap-2 pt-3 border-t border-hairline"><button type="submit" id="um-save" class="apple-pricing-pill px-6 py-2">บันทึกข้อมูลบัญชี</button></div>
+      </form>
+      <form id="um-pane-wallet" onsubmit="saveUserWallet(event)" class="hidden space-y-4 text-xs">
+        <div class="rounded-2xl bg-mist p-4"><p class="text-slate">ยอดเงินปัจจุบัน</p><p id="um-balance" class="text-3xl font-display font-semibold">฿0.00</p></div>
+        <div class="grid grid-cols-3 gap-2" role="radiogroup">
+          <label class="flex items-center gap-2 rounded-xl border border-hairline p-2.5"><input type="radio" name="um-wmode" value="add" checked> เพิ่มเงิน</label>
+          <label class="flex items-center gap-2 rounded-xl border border-hairline p-2.5"><input type="radio" name="um-wmode" value="sub"> หักเงิน</label>
+          <label class="flex items-center gap-2 rounded-xl border border-hairline p-2.5"><input type="radio" name="um-wmode" value="set"> ตั้งยอดใหม่</label>
+        </div>
+        <div><label class="block text-slate mb-1" for="um-amount">จำนวนเงิน (บาท)</label><input id="um-amount" type="number" min="0" step="0.01" required class="w-full apple-input px-3.5 py-2 font-mono"></div>
+        <div><label class="block text-slate mb-1" for="um-wnote">เหตุผล (บันทึกในประวัติ)</label><input id="um-wnote" type="text" maxlength="120" placeholder="เช่น คืนเงินออเดอร์ ORD-XXXX" class="w-full apple-input px-3.5 py-2"></div>
+        <div class="flex justify-end pt-3 border-t border-hairline"><button type="submit" id="um-wsave" class="apple-pricing-pill px-6 py-2">ปรับยอดเงิน</button></div>
+        <div><p class="font-semibold mb-2">ประวัติการปรับยอดโดยแอดมิน</p><div id="um-wallet-logs" class="divide-y divide-hairline"></div></div>
+      </form>
+      <div id="um-pane-history" class="hidden space-y-5 text-xs">
+        <div><p class="font-semibold mb-2">ประวัติการเติมเงิน</p><div id="um-topups" class="divide-y divide-hairline"></div></div>
+        <div><p class="font-semibold mb-2">ประวัติการสั่งซื้อ / คิวงาน</p><div id="um-orders" class="divide-y divide-hairline"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SLIP IMAGE -->
+  <div id="slip-modal" class="modal" role="dialog" aria-modal="true" aria-label="สลิปโอนเงิน">
+    <div class="modal-card !max-w-md text-center">
+      <button type="button" onclick="closeModal('slip-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <h3 class="text-lg font-display font-semibold mb-3">สลิปโอนเงิน</h3>
+      <img id="slip-modal-img" alt="สลิปโอนเงิน" class="mx-auto max-h-[70vh] rounded-2xl border border-hairline">
+      <p id="slip-modal-meta" class="text-xs text-slate mt-3"></p>
+    </div>
+  </div>
+
+  <!-- MODAL: NOTE TO CUSTOMER -->
+  <div id="note-modal" class="modal" role="dialog" aria-modal="true" aria-label="หมายเหตุถึงลูกค้า">
+    <form class="modal-card" onsubmit="saveOrderNote(event)">
+      <button type="button" onclick="closeModal('note-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <h3 class="text-lg font-display font-semibold">หมายเหตุถึงลูกค้า</h3>
+      <p id="note-modal-order" class="text-xs text-slate mb-3"></p>
+      <input type="hidden" id="note-order-id">
+      <textarea id="note-text" rows="4" maxlength="500" placeholder="เช่น นัดเข้าเกม 21:00 น. / กำลังโยนของ 10/15 กอง" class="w-full apple-input p-3 text-sm"></textarea>
+      <p class="text-[11px] text-slate mt-1">ลูกค้าเห็นข้อความนี้ในหน้าออเดอร์ของฉัน</p>
+      <div class="flex justify-end gap-2 mt-4"><button type="button" onclick="closeModal('note-modal')" class="apple-explore-pill px-5 py-2 text-xs">ยกเลิก</button><button type="submit" class="apple-pricing-pill px-6 py-2 text-xs">บันทึก</button></div>
+    </form>
+  </div>
+
   <script type="module" src="../js/admin.js"></script>
   <script type="module" src="../js/back/code.js"></script>
 </body>
