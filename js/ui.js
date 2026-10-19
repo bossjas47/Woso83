@@ -13,6 +13,43 @@ export const baht = (v) => `฿${money(v)}`;
 export const tsDate = (v) => (v?.toDate ? v.toDate() : (v ? new Date(v) : null));
 export const fmtDate = (v) => { const d = tsDate(v); return d && !isNaN(d) ? d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'; };
 
+// ---------- Images ----------
+export const FALLBACK_IMAGE = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+/** Turn what admins paste into a loadable picture URL (adds https://, Google Drive / Imgur page links -> image links). */
+export function fixImageUrl(u) {
+  let s = String(u ?? '').trim();
+  if (!s) return '';
+  if (s.startsWith('data:image/')) return s;
+  if (s.startsWith('//')) s = 'https:' + s;
+  else if (!/^https?:\/\//i.test(s)) s = 'https://' + s.replace(/^\/+/, '');
+  const drive = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]{10,})/);
+  if (drive) return `https://drive.google.com/thumbnail?id=${drive[1]}&sz=w1600`;
+  const imgur = s.match(/^https?:\/\/(?:www\.)?imgur\.com\/([A-Za-z0-9]{5,8})$/);
+  if (imgur) return `https://i.imgur.com/${imgur[1]}.jpg`;
+  return s;
+}
+/**
+ * Product pictures are whatever admins paste (often 2–5 MB phone photos). They go through the free wsrv.nl image
+ * cache, which resizes to the size actually shown and converts to WebP (usually 20–60 KB). If it fails, the browser
+ * falls back to the original link (see imgAttrs). Set IMAGE_CDN = '' to turn this off.
+ */
+export const IMAGE_CDN = 'https://wsrv.nl/';
+export function sizedImage(u, width) {
+  const s = fixImageUrl(u);
+  if (!IMAGE_CDN || !/^https?:\/\//.test(s) || s.startsWith(IMAGE_CDN) || /placehold\.co/.test(s)) return s;
+  return `${IMAGE_CDN}?url=${encodeURIComponent(s)}&w=${width}&output=webp&q=78&we`;
+}
+/** src + width/height + lazy loading + "resized copy failed -> original -> placeholder" for an <img>. */
+export function imgAttrs(u, width, height, { eager = false } = {}) {
+  const orig = fixImageUrl(u) || FALLBACK_IMAGE;
+  return `src="${esc(sizedImage(orig, width * 2))}" data-orig="${esc(orig)}" width="${width}" height="${height}" decoding="async" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} referrerpolicy="no-referrer" onerror="imgFallback(this)"`;
+}
+window.imgFallback = (el) => {
+  const orig = el.dataset.orig;
+  if (orig && el.getAttribute('src') !== orig) { el.src = orig; return; }
+  el.onerror = null; el.src = FALLBACK_IMAGE;
+};
+
 export function timeAgo(v) {
   const d = tsDate(v); if (!d) return '';
   const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
@@ -114,6 +151,9 @@ export async function callWorker(path, body) {
     body: JSON.stringify(body || {})
   });
   const data = await res.json().catch(() => ({}));
+  // An older Worker answers every path as a slip check ("ยอดเงินไม่ถูกต้อง"). Say what is really wrong instead.
+  if (path !== '/' && path !== '/slip' && !res.headers.get('x-astraphex-worker'))
+    throw Object.assign(new Error('ระบบหลังร้านยังไม่อัปเดต (Worker เวอร์ชันเก่า) กรุณาแจ้งแอดมิน'), { status: res.status, code: 'old-worker', data });
   if (!res.ok) throw Object.assign(new Error(data.error || data.message || 'ทำรายการไม่สำเร็จ'), { status: res.status, data });
   return data;
 }

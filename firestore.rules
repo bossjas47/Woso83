@@ -189,6 +189,19 @@ service cloud.firestore {
     match /slip_refs/{id} { allow read, write: if false; }
     match /slip_attempts/{id} { allow read, write: if false; }
     match /notify_log/{id} { allow read, write: if false; }
+    // Cart: one document per customer, product ids + quantities only (prices and stock are checked by the Worker at checkout).
+    match /carts/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['items', 'updatedAt'])
+        && request.resource.data.items is list && request.resource.data.items.size() <= 8;
+    }
+    // Game-ID rentals: written only by the Worker; the renter reads the record (end time, status), never the login.
+    match /rentals/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    match /angpao_vouchers/{id} { allow read: if isAdmin(); allow write: if false; }
 
     match /{document=**} { allow read, write: if false; }
   }

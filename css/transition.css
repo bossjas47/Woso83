@@ -5,10 +5,11 @@
 @keyframes pt-fade { from { opacity: 0; } }
 
 @view-transition { navigation: auto; }
-header { view-transition-name: site-header; } /* nav stays put while the page changes */
-::view-transition-group(site-header) { animation-duration: 0.3s; animation-timing-function: cubic-bezier(0.28, 0.11, 0.32, 1); }
-::view-transition-old(root) { animation: pt-out 0.18s cubic-bezier(0.28, 0.11, 0.32, 1) both; }
-::view-transition-new(root) { animation: pt-in 0.36s cubic-bezier(0.28, 0.11, 0.32, 1) 0.06s both; }
+#site-header { view-transition-name: site-header; } /* header and bottom nav stay put while the page changes */
+.bottom-nav { view-transition-name: bottom-nav; }
+::view-transition-group(site-header), ::view-transition-group(bottom-nav) { animation-duration: 0s; }
+::view-transition-old(root) { animation: pt-out 0.14s cubic-bezier(0.28, 0.11, 0.32, 1) both; }
+::view-transition-new(root) { animation: pt-fade 0.24s cubic-bezier(0.28, 0.11, 0.32, 1) both; }
 
 @supports not (view-transition-name: none) {
   body { animation: pt-fade 0.3s cubic-bezier(0.28, 0.11, 0.32, 1) both; }

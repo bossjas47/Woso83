@@ -8,6 +8,7 @@ import { mountPromptPay, promptpayReady, prepareSlip, slipErrorText } from "./pa
  * Top-up page. Credit is never written from the browser (firestore.rules). Two ways in:
  *  - auto (admin turned on slip check + Worker): the QR on the slip is checked by the Worker and credited at once;
  *  - manual: a pending request with the slip image; an admin approves it in the back office.
+ *  - ซองอั่งเปา TrueMoney (needs the Worker): redeemed by the Worker and credited at once.
  * Bonus comes from topup_promos (admin-managed): the best active promotion whose minimum the amount reaches.
  */
 const MIN = 20, MAX = 50000;
@@ -53,8 +54,11 @@ function onAmount() {
 }
 
 function switchTopupPaymentTab(m) {
+  if (m === 'angpao' && !workerBase()) m = 'promptpay';
   method = m;
-  ['promptpay', 'truemoney'].forEach(k => {
+  $('tab-angpao').classList.toggle('hidden', !workerBase());
+  $('topup-tabs').classList.toggle('grid-cols-2', !!workerBase()); $('topup-tabs').classList.toggle('grid-cols-1', !workerBase());
+  ['promptpay', 'angpao'].forEach(k => {
     $(`panel-${k}`).classList.toggle('hidden', k !== m);
     $(`tab-${k}`).className = `py-2 rounded-full font-medium transition ${k === m ? 'bg-gallery text-ink shadow-sm' : 'text-slate hover:text-ink'}`;
   });
@@ -64,8 +68,8 @@ const autoMode = () => getSettings().slipAutoVerify === true && !!workerBase();
 function updateNote() {
   $('topup-mode-note').textContent = method === 'promptpay'
     ? (autoMode() ? 'ระบบตรวจสลิปอัตโนมัติ ผ่านแล้วได้เครดิตทันที' : 'แอดมินตรวจสลิปแล้วเติมเครดิตให้ โดยปกติไม่เกิน 15 นาที')
-    : 'แอดมินตรวจสอบซองแล้วเติมเครดิตให้';
-  if (!submitting) $('btn-topup').textContent = method === 'promptpay' ? (autoMode() ? 'ส่งสลิปและรับเครดิต' : 'ส่งสลิปโอนเงิน') : 'ส่งซองของขวัญ';
+    : 'รับซองอัตโนมัติ เครดิตเข้าทันที';
+  if (!submitting) $('btn-topup').textContent = method === 'promptpay' ? (autoMode() ? 'ส่งสลิปและรับเครดิต' : 'ส่งสลิปโอนเงิน') : 'รับซองและเติมเครดิต';
 }
 
 function setBusy(on, label) {
@@ -77,25 +81,20 @@ function setBusy(on, label) {
 async function executeTopup() {
   if (submitting) return;
   if (!user) { toast('กรุณาเข้าสู่ระบบก่อนเติมเงิน', 'error'); return; }
+  if (method === 'angpao') return redeemAngpao();
   if (!(amount >= MIN && amount <= MAX)) { toast(`กรุณาใส่จำนวนเงิน ${MIN} – ${money(MAX, 0)} บาท`, 'error'); $('amount-input').focus(); return; }
   const { promo, bonus } = bestPromo(promos, amount);
   let slip = null, proof = '';
-  if (method === 'truemoney') {
-    proof = $('tm-link').value.trim();
-    if (!/^https:\/\/gift\.truemoney\.com\//.test(proof)) { toast('กรุณากรอกลิงก์ซองของขวัญ TrueMoney ให้ถูกต้อง', 'error'); return; }
-    setBusy(true, 'กำลังส่ง…');
-  } else {
-    if (!promptpayReady()) { toast('ร้านยังไม่ได้ตั้งค่า QR พร้อมเพย์', 'error'); return; }
-    const file = pp.getFile();
-    setBusy(true, 'กำลังเตรียมสลิป…');
-    try { slip = await prepareSlip(file); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
-    if (autoMode()) {
-      setBusy(true, 'กำลังตรวจสลิป…');
-      const r = await tryAuto(file);
-      if (r === 'done' || r === 'rejected') { setBusy(false); return; }
-    }
-    proof = 'สลิปแนบในระบบ';
+  if (!promptpayReady()) { toast('ร้านยังไม่ได้ตั้งค่า QR พร้อมเพย์', 'error'); return; }
+  const file = pp.getFile();
+  setBusy(true, 'กำลังเตรียมสลิป…');
+  try { slip = await prepareSlip(file); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
+  if (autoMode()) {
+    setBusy(true, 'กำลังตรวจสลิป…');
+    const r = await tryAuto(file);
+    if (r === 'done' || r === 'rejected') { setBusy(false); return; }
   }
+  proof = 'สลิปแนบในระบบ';
   setBusy(true, 'กำลังส่ง…');
   try {
     const ref = doc(collection(db, 'topup_transactions'));
@@ -112,11 +111,26 @@ async function executeTopup() {
     }
     await batch.commit();
     notifyAdmin('topup', ref.id);
-    pp.reset(); $('tm-link').value = '';
+    pp.reset();
     toast('ส่งหลักฐานแล้ว แอดมินจะตรวจสอบและเติมเครดิตให้', 'success');
   } catch (e) {
     console.warn('topup:', e);
     toast(slipErrorText(e), 'error');
+  } finally { setBusy(false); }
+}
+
+/** TrueMoney gift voucher: the Worker redeems it into the shop wallet and credits the amount received + promo bonus. */
+async function redeemAngpao() {
+  const link = $('tm-link').value.trim();
+  if (!/^https:\/\/gift\.truemoney\.com\//.test(link)) { toast('กรุณาวางลิงก์ซองอั่งเปา TrueMoney ให้ถูกต้อง', 'error'); $('tm-link').focus(); return; }
+  setBusy(true, 'กำลังรับซอง…');
+  try {
+    const r = await callWorker('/angpao', { link });
+    $('tm-link').value = '';
+    toast(`เติมเครดิตสำเร็จ +${money(r.credit)}${r.bonus ? ` (รวมโบนัส ${money(r.bonus)})` : ''}`, 'success');
+  } catch (e) {
+    console.warn('angpao:', e);
+    toast(e.message || 'รับซองไม่สำเร็จ', 'error');
   } finally { setBusy(false); }
 }
 
@@ -142,7 +156,7 @@ function renderHistory() {
     const [label, cls] = ST[t.status] || [t.status, 'bg-mist text-slate'];
     return `<div class="py-3 flex items-center justify-between gap-3">
       <div class="min-w-0"><p class="font-medium">${baht(t.amount)} ${num(t.bonusCredit) ? `<span class="text-emerald-600 text-sm">+${money(t.bonusCredit)} โบนัส</span>` : ''}</p>
-        <p class="text-xs text-slate truncate">${esc(t.txnId || '')} · ${t.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'} · ${esc(fmtDate(t.createdAt))}</p>
+        <p class="text-xs text-slate truncate">${esc(t.txnId || '')} · ${t.paymentMethod === 'angpao' ? 'ซองอั่งเปา' : t.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'} · ${esc(fmtDate(t.createdAt))}</p>
         ${t.status === 'rejected' && t.adminNote ? `<p class="text-xs text-launchOrange">${esc(t.adminNote)}</p>` : ''}</div>
       <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${cls}">${label}</span></div>`;
   }).join('');
@@ -161,7 +175,7 @@ onAuthStateChanged(auth, (u) => {
   }, (e) => console.warn('history:', e));
 });
 onSnapshot(collection(db, 'topup_promos'), (s) => { promos = s.docs.map(d => ({ id: d.id, ...d.data() })); onAmount(); }, () => { promos = []; onAmount(); });
-onSettings(updateNote);
+onSettings(() => switchTopupPaymentTab(method));
 
 pp = mountPromptPay($('panel-promptpay'), { getAmount: () => amount, idPrefix: 'tp' });
 $('amount-input').addEventListener('input', onAmount);

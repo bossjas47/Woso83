@@ -1,18 +1,26 @@
 // ASTRAPHEX HUB — Cloudflare Worker (server side of the shop). All routes take POST + the user's Firebase ID token.
 //   POST /            (or /slip)   top-up slip check with EasySlip, credits the wallet           (any signed-in user)
+//   POST /angpao                   TrueMoney gift voucher: redeem, credit (+promo), optional buy
 //   POST /buy                      pay with wallet credit: price, promo, balance, stock in one transaction;
 //                                  game IDs are delivered at once, services go to the queue      (any signed-in user)
+//   POST /cart                     pay up to 8 cart lines with credit (each line like /buy)
+//   POST /rent                     rent a game ID by the hour (price, deposit and balance checked here)
+//   POST /rent/extend|credentials|return   extend, read the login (only while the rental runs), give back
+//   POST /admin/rent               close a returned / expired rental: refund or keep the deposit, put the ID back
+//   Cron Trigger (*/5 * * * *)     locks IDs whose rental time is up (needed for the Discord alert; credentials are time-checked anyway)
 //   POST /admin/user               change a user's login name, password, admin claim, disabled  (admin claim only)
 //   POST /notify                   Discord message for a new order / top-up request ({kind:'test'} = admin only)
 // Variables (Worker > Settings > Variables and Secrets):
 //   SERVICE_ACCOUNT  secret  the Firebase service-account JSON, pasted as text
 //   EASYSLIP_KEY     secret  EasySlip API key                         (only for automatic slip checks)
+//   TRUEMONEY_PHONE  secret  shop's TrueMoney wallet number, e.g. 0812345678 (turns on ซองอั่งเปา /angpao)
 //   RECEIVER_MATCH   text    shop account name / digits on the slip    (only for automatic slip checks)
 //   ALLOWED_ORIGIN   text    optional, your site origin, e.g. https://astraphex.panderx.xyz (default: any)
 // The Discord webhook URL lives in Firestore system_private/secrets.discordWebhook (admin > settings).
 const MIN = 20, MAX = 50000, THROTTLE_MS = 10000, MAX_SLIP_AGE_MS = 3 * 864e5;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const SHOP = 'ASTRAPHEX HUB';
+export const WORKER_VERSION = '4';
 
 const enc = new TextEncoder();
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -261,7 +269,7 @@ async function buyOnce({ user, d, fs, now }) {
       if (str(d.buyerFacebook).length < 2) return [{ error: 'กรุณากรอกชื่อหรือลิงก์ Facebook' }, 400];
       if (self && (!str(d.buyerContact) || !str(d.playTime))) return [{ error: 'กรุณากรอกชื่อในเกมและเวลาที่พร้อม' }, 400];
       if (!self && (!str(d.gameEmail).includes('@') || !String(d.gamePassword || ''))) return [{ error: 'กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม' }, 400];
-    } else if (!/^\S+@\S+\.\S+$/.test(str(d.buyerEmail))) return [{ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, 400];
+    } else if (str(d.buyerEmail) && !/^\S+@\S+\.\S+$/.test(str(d.buyerEmail))) return [{ error: 'อีเมลไม่ถูกต้อง' }, 400];
 
     const subtotal = r2(qty * rate);
     let discount = 0, code = null;
@@ -301,7 +309,7 @@ async function buyOnce({ user, d, fs, now }) {
       productType: isService ? 'service' : 'account', quantity: qty, bonusQty, receiveQty: qty + bonusQty, unit,
       unitPrice: rate, subtotal, discount, promoCode: code, amount, finalPrice: amount,
       paymentMethod: 'wallet', paymentProof: 'เครดิตในบัญชี', userEmail: user.email, userId: user.uid,
-      ...(isService ? { buyerFacebook: str(d.buyerFacebook) } : { buyerEmail: str(d.buyerEmail) }),
+      ...(isService ? { buyerFacebook: str(d.buyerFacebook) } : str(d.buyerEmail) ? { buyerEmail: str(d.buyerEmail) } : {}),
       ...(self ? { buyerContact: str(d.buyerContact), playTime: str(d.playTime) } : {}),
       ...(isService && !self ? { gameEmail: str(d.gameEmail), gamePassword: String(d.gamePassword || '').slice(0, 200), buyerContact: str(d.gameEmail) } : {}),
       ...(modes.length ? { farmMode: mode.key } : {}),
@@ -345,6 +353,329 @@ async function routeBuy({ user, data, fs, fetchFn, now, later }) {
       { name: 'สินค้า', value: `${o.productName} × ${o.quantity}` }, { name: 'ผู้ซื้อ', value: user.name || user.email }] }));
   }
   return out;
+}
+
+
+// ---------- POST /angpao : TrueMoney gift voucher (ซองอั่งเปา) ----------
+// JavaScript port of @pichxyaponn/tw-angpao (utils.ts / index.ts / error.class.ts). The voucher is redeemed into the
+// shop's TrueMoney wallet (env TRUEMONEY_PHONE), then the amount actually received is credited to the customer
+// (+ the best top-up promotion), and optionally spent at once on an order (purpose 'buy').
+export function getValidVoucherCode(voucherCode) {
+  const parts = String(voucherCode || '').split('?v=');
+  const codeToTest = parts[1] || parts[0];
+  const match = codeToTest.match(/[0-9A-Za-z]+/);
+  return match ? match[0] : '';
+}
+const thaiPhoneNumberRegex = /^0[689]\d{8}$/;
+export function isValidThaiPhoneNumber(phoneNumber) {
+  const cleaned = String(phoneNumber || '').replace(/[^\d]/g, '');
+  if (cleaned.startsWith('66') && cleaned.length === 11) return thaiPhoneNumberRegex.test('0' + cleaned.substring(2));
+  return thaiPhoneNumberRegex.test(cleaned);
+}
+const isRecord = (v) => typeof v === 'object' && v !== null;
+const isTwSuccess = (v) => isRecord(v) && isRecord(v.status) && v.status.code === 'SUCCESS' && isRecord(v.status.data);
+const isTwError = (v) => isRecord(v) && isRecord(v.status) && typeof v.status.code === 'string';
+async function parseTwResponse(res) {
+  if (!res?.ok) {
+    try { const j = await res.json(); if (isTwError(j)) return j; } catch { /* fall through */ }
+    return { status: { code: 'HTTP_ERROR_' + (res?.status || 'UNKNOWN'), message: `API request failed: ${res?.statusText || 'Unknown'}` }, data: null };
+  }
+  let data;
+  try { data = await res.json(); } catch { return { status: { code: 'INVALID_JSON_RESPONSE', message: 'API returned invalid JSON' }, data: null }; }
+  if (isTwSuccess(data) || isTwError(data)) return data;
+  return { status: { code: 'MALFORMED_RESPONSE', message: 'API returned JSON in an unrecognised shape' }, data: null };
+}
+export async function redeemVoucher({ phoneNumber, voucherCode, fetchFn = fetch }) {
+  const mobile = String(phoneNumber || '').trim().replace(/[^\d]/g, '').replace(/^66(?=\d{9}$)/, '0');
+  const code = voucherCode ? getValidVoucherCode(voucherCode) : '';
+  if (!isValidThaiPhoneNumber(mobile)) return { status: { code: 'INVALID_PHONE_NUMBER', message: 'Invalid Thai Phone Number.' }, data: null };
+  if (!code) return { status: { code: 'INVALID_VOUCHER_CODE', message: 'Invalid Voucher Code.' }, data: null };
+  try {
+    const res = await fetchFn(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
+      method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ mobile, voucher_hash: code })
+    });
+    return await parseTwResponse(res);
+  } catch (e) {
+    return { status: { code: 'NETWORK_ERROR', message: e?.message || 'Unexpected error' }, data: null };
+  }
+}
+const TW_MESSAGES = {
+  VOUCHER_OUT_OF_STOCK: 'ซองนี้ถูกรับไปครบแล้ว', TARGET_USER_REDEEMED: 'ซองนี้ถูกรับไปแล้ว', VOUCHER_NOT_FOUND: 'ไม่พบซองนี้ ตรวจลิงก์อีกครั้ง',
+  CANNOT_GET_OWN_VOUCHER: 'รับซองของตัวเองไม่ได้', VOUCHER_EXPIRED: 'ซองหมดอายุแล้ว', INVALID_VOUCHER_CODE: 'ลิงก์ซองไม่ถูกต้อง',
+  INVALID_PHONE_NUMBER: 'ร้านตั้งค่าเบอร์รับซองไม่ถูกต้อง กรุณาติดต่อแอดมิน'
+};
+export const angpaoErrorText = (code) => TW_MESSAGES[code] || `รับซองไม่สำเร็จ (${code}) กรุณาลองใหม่หรือติดต่อแอดมิน`;
+
+async function routeAngpao({ user, data, fs, env, fetchFn, now, later }) {
+  const link = str(data.link, 300);
+  const code = getValidVoucherCode(link);
+  if (!/gift\.truemoney\.com/i.test(link) || code.length < 10) return [{ error: 'กรุณาวางลิงก์ซองของขวัญ TrueMoney ให้ถูกต้อง' }, 400];
+  if (!env.TRUEMONEY_PHONE) return [{ error: 'ร้านยังไม่เปิดรับซองอั่งเปา' }, 503];
+  const buy = data.purpose === 'buy' ? (data.buy || {}) : null;
+  if (buy) { const bad = validateBuy(buy); if (bad) return [{ error: bad }, 400]; }
+
+  const profile = await fs.get(`users/${user.uid}`);
+  if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+  const key = `angpao_${user.uid}`;
+  const attempt = (await fs.get(`slip_attempts/${key}`)) || {};
+  if (num(attempt.lockUntil) > now) return [{ error: `ลองใส่ลิงก์ผิดหลายครั้ง กรุณารอ ${Math.ceil((attempt.lockUntil - now) / 60e3)} นาที แล้วลองใหม่` }, 429];
+  if (now - num(attempt.at) < 5000) return [{ error: 'ทำรายการถี่เกินไป รอสักครู่แล้วลองใหม่' }, 429];
+  // 5 bad links within 10 minutes lock the account's angpao for 10 minutes (stops voucher-code guessing)
+  const save = (extra) => fs.commit([{ update: { name: fs.name(`slip_attempts/${key}`), fields: fs.fields({ at: now, fails: num(attempt.fails), failStart: num(attempt.failStart), lockUntil: 0, ...extra }) } }]);
+  await save({});
+
+  const r = await redeemVoucher({ phoneNumber: env.TRUEMONEY_PHONE, voucherCode: code, fetchFn });
+  if (r.status.code !== 'SUCCESS') {
+    const serverSide = /^(HTTP_ERROR_|NETWORK_ERROR|INVALID_JSON_RESPONSE|MALFORMED_RESPONSE)/.test(r.status.code);
+    if (serverSide) console.warn('angpao upstream:', r.status.code, r.status.message);
+    else {
+      const fresh = now - num(attempt.failStart) > 600e3, fails = fresh ? 1 : num(attempt.fails) + 1;
+      await save({ fails: fails >= 5 ? 0 : fails, failStart: fresh ? now : num(attempt.failStart), lockUntil: fails >= 5 ? now + 600e3 : 0 });
+    }
+    return [{ error: angpaoErrorText(r.status.code), code: r.status.code }, serverSide ? 502 : 400];
+  }
+  const v = r.status.data.voucher || {}, ticket = r.status.data.my_ticket || {};
+  const amount = r2(num(ticket.amount_baht) || num(v.amount_baht));
+  if (!(amount > 0)) return [{ error: 'รับซองแล้วแต่อ่านยอดเงินไม่ได้ กรุณาติดต่อแอดมิน' }, 502];
+  const ref = `${str(v.voucher_id, 80) || code}_${num(ticket.update_date) || now}`.replace(/[^\w-]/g, '');
+
+  const promos = (await fs.query('', 'topup_promos')).map(d => ({ id: d.id, ...d.data }));
+  const { promo, bonus } = bestTopupPromo(promos, amount);
+  const id = randomId();
+  const credit = r2(amount + bonus);
+  const writes = [
+    { update: { name: fs.name(`angpao_vouchers/${ref}`), fields: fs.fields({ uid: user.uid, amount, voucherId: str(v.voucher_id, 80), code, txnId: id }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } },
+    { update: { name: fs.name(`users/${user.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [{ fieldPath: 'walletBalance', increment: { doubleValue: credit } }, stamp('lastTopupAt')] },
+    { update: { name: fs.name(`topup_transactions/${id}`), fields: fs.fields({ txnId: 'TOPUP-' + id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: bonus, finalCredit: credit, ...(promo ? { promoId: promo.id } : {}), paymentMethod: 'angpao', proofRef: str(v.voucher_id, 80) || code, status: 'completed', verifiedVia: 'angpao' }) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')] },
+    { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, delta: credit, note: `ซองอั่งเปา ฿${money(amount)}${bonus ? ` + โบนัส ${money(bonus)}` : ''}`, by: 'system' }) }, updateTransforms: [stamp('at')] }
+  ];
+  let saved = false;
+  for (let i = 0; i < 2 && !saved; i++) {
+    try { await fs.commit(writes); saved = true; }
+    catch (e) { if (e.code === 'already-exists') { saved = 'dup'; break; } console.error('angpao credit failed', e); }
+  }
+  if (saved === 'dup') return [{ error: 'ซองนี้เติมเครดิตไปแล้ว' }, 409];
+  if (saved !== true) {
+    // The money is already in the shop's wallet: never lose it silently.
+    await discord(fs, fetchFn, { title: '⚠️ รับซองอั่งเปาแล้วแต่เติมเครดิตไม่สำเร็จ', description: `ผู้ใช้ ${user.name || user.email} (${user.uid}) ยอด ฿${money(amount)} ซอง ${code} — กรุณาเติมเครดิตให้เอง` }).catch(() => {});
+    return [{ error: `รับซองแล้ว ฿${money(amount)} แต่เติมเครดิตไม่สำเร็จ แอดมินได้รับแจ้งแล้ว กรุณาติดต่อแอดมิน` }, 500];
+  }
+  later(discord(fs, fetchFn, { title: '🧧 รับซองอั่งเปาอัตโนมัติ', description: `ผู้ใช้ ${user.name || user.email} ได้รับเครดิต ${money(credit)} (ซอง ฿${money(amount)}${bonus ? ` + โบนัส ${money(bonus)}` : ''})` }));
+  const out = { status: 'credited', amount, bonus, credit };
+  if (!buy) return [out];
+  // Spend the new credit on the order. If it fails (price, stock, not enough), the credit stays in the account.
+  const [b, st] = await routeBuy({ user, data: buy, fs, fetchFn, now, later });
+  return [st ? { ...out, buyError: b.error || 'สั่งซื้อไม่สำเร็จ' } : { ...out, buy: b }];
+}
+
+// ---------- POST /cart : pay several cart lines with credit ----------
+// Each line is bought with the same code as /buy (own transaction). The balance for the whole cart is checked first;
+// a line that fails (sold out, price changed) is reported and costs nothing, the others still go through.
+// shortcut: not one all-or-nothing transaction, at most 8 lines per call (Worker subrequest limit); upgrade if partial carts annoy customers.
+async function routeCart({ user, data, fs, fetchFn, now, later }) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (!items.length || items.length > 8) return [{ error: 'ตะกร้าต้องมี 1–8 รายการ' }, 400];
+  for (const it of items) {
+    const bad = validateBuy(it);
+    if (bad) return [{ error: bad }, 400];
+    if (!(num(it.expectedAmount) > 0)) return [{ error: 'ไม่พบราคาสินค้า กรุณาโหลดตะกร้าใหม่' }, 400];
+  }
+  const need = r2(items.reduce((a, it) => a + num(it.expectedAmount), 0));
+  const balance = r2(num((await fs.get(`users/${user.uid}`))?.walletBalance));
+  if (balance < need) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(need)} (คงเหลือ ฿${money(balance)})` }, 400];
+  const results = [];
+  for (const [index, it] of items.entries()) {
+    const [body, status] = await routeBuy({ user, data: { ...it, promoCode: null }, fs, fetchFn, now, later });
+    results.push(status ? { index, error: body.error || 'สั่งซื้อไม่สำเร็จ' } : { index, ok: true, order: body.order });
+  }
+  return [{ results }];
+}
+
+// ---------- Rentals (เช่าไอดี) ----------
+// A rental product keeps its game IDs in products/{id}/stock_items like a sold ID, but the ID is only lent:
+//   available -> rented (while the rental runs) -> cooldown (returned / expired, admin changes the password) -> available.
+// The customer never reads the credentials from Firestore: /rent/credentials answers only while the rental is active.
+const RENT_MAX_HOURS = 720;
+export const isRentProduct = (p) => !!p && (num(p.rentHourPrice) > 0 || (Array.isArray(p.rentPackages) && p.rentPackages.some(k => num(k.hours) > 0 && num(k.price) > 0)));
+/** Package price when the hours match a package exactly, otherwise hours x hourly rate (0 = not sold that way). */
+export function rentPrice(product, hours) {
+  const pk = (Array.isArray(product.rentPackages) ? product.rentPackages : []).find(k => Math.floor(num(k.hours)) === hours && num(k.price) > 0);
+  if (pk) return r2(num(pk.price));
+  const rate = num(product.rentHourPrice);
+  const min = Math.max(1, Math.floor(num(product.rentMinHours)) || 1);
+  return rate > 0 && hours >= min ? r2(hours * rate) : 0;
+}
+const rentHours = (v) => { const h = Number(v); return Number.isInteger(h) && h >= 1 && h <= RENT_MAX_HOURS ? h : 0; };
+const retry = async (fn) => {
+  for (let i = 0; i < 3; i++) {
+    try { return await fn(); }
+    catch (e) { if (e.code === 'conflict' && i < 2) continue; if (e.code === 'conflict') return [{ error: 'มีคนกำลังทำรายการพร้อมกัน กรุณาลองอีกครั้ง' }, 409]; throw e; }
+  }
+};
+const walletWrites = (fs, uid, before, after, note) => [
+  { update: { name: fs.name(`users/${uid}`), fields: fs.fields({ walletBalance: r2(after) }) }, updateMask: { fieldPaths: ['walletBalance'] }, currentDocument: { exists: true } },
+  { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid, before: r2(before), after: r2(after), delta: r2(after - before), note, by: 'system' }) }, updateTransforms: [stamp('at')] }
+];
+
+async function rentOnce({ user, d, fs, now }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const [profile, product] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`products/${d.productId}`, tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    if (!isRentProduct(product)) return [{ error: 'ไม่พบสินค้าเช่านี้' }, 404];
+    const price = rentPrice(product, d.hours);
+    if (!(price > 0)) return [{ error: `เช่าไม่ได้ ขั้นต่ำ ${Math.max(1, Math.floor(num(product.rentMinHours)) || 1)} ชั่วโมง หรือเลือกแพ็กเกจที่ร้านกำหนด` }, 400];
+    const deposit = r2(Math.max(0, num(product.rentDeposit)));
+    const total = r2(price + deposit);
+    if (d.expectedAmount != null && Math.abs(num(d.expectedAmount) - total) > 0.01) return [{ error: `ราคาเปลี่ยนเป็น ฿${money(total)} (รวมมัดจำ ฿${money(deposit)}) กรุณาตรวจสอบอีกครั้ง` }, 409];
+    const balance = r2(num(profile?.walletBalance));
+    if (balance < total) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(total)} (คงเหลือ ฿${money(balance)})` }, 400];
+    const items = await fs.query(`products/${d.productId}`, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 1, tx });
+    if (!items.length) return [{ error: 'ไม่มีไอดีว่างให้เช่าตอนนี้' }, 409];
+
+    const rid = randomId();
+    const endMs = now + d.hours * 3600e3;
+    const username = profile?.username || user.name || user.email.split('@')[0];
+    const rental = {
+      uid: user.uid, userEmail: user.email, nameMask: maskName(username).slice(0, 8), productId: d.productId, productName: String(product.name || '').slice(0, 200),
+      stockItemId: items[0].id, hours: d.hours, price, deposit, depositStatus: deposit > 0 ? 'held' : 'none', startMs: now, endMs, status: 'active', extended: 0, viewCount: 0
+    };
+    await fs.commit([
+      ...walletWrites(fs, user.uid, balance, balance - total, `เช่า ${rental.productName} ${d.hours} ชม. (รวมมัดจำ ฿${money(deposit)})`),
+      { update: { name: fs.name(`products/${d.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -1), stamp('updatedAt')], currentDocument: { exists: true } },
+      { update: { name: fs.name(items[0].path), fields: fs.fields({ status: 'rented', rentalId: rid }) }, updateMask: { fieldPaths: ['status', 'rentalId'] }, updateTransforms: [stamp('rentedAt')], currentDocument: { exists: true } },
+      { update: { name: fs.name(`rentals/${rid}`), fields: fs.fields(rental) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } }
+    ], tx);
+    committed = true;
+    return [{ status: 'active', rental: { id: rid, ...rental }, balance: r2(balance - total) }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+async function routeRent({ user, data, fs, fetchFn, now, later }) {
+  if (typeof data.productId !== 'string' || !/^[\w-]{1,128}$/.test(data.productId)) return [{ error: 'ไม่พบสินค้า' }, 400];
+  const hours = rentHours(data.hours);
+  if (!hours) return [{ error: `จำนวนชั่วโมงไม่ถูกต้อง (1–${RENT_MAX_HOURS})` }, 400];
+  const out = await retry(() => rentOnce({ user, d: { ...data, hours }, fs, now }));
+  const [body, status] = out;
+  if (!status && body.rental) later(discord(fs, fetchFn, { title: '🔑 มีการเช่าไอดีใหม่', fields: [
+    { name: 'สินค้า', value: body.rental.productName }, { name: 'ระยะเวลา', value: `${body.rental.hours} ชม.`, inline: true },
+    { name: 'ค่าเช่า', value: `฿${money(body.rental.price)}`, inline: true }, { name: 'มัดจำ', value: `฿${money(body.rental.deposit)}`, inline: true }, { name: 'ผู้เช่า', value: user.name || user.email }] }));
+  return out;
+}
+
+const OWN_RENTAL = [{ error: 'ไม่พบรายการเช่านี้' }, 404];
+const rentalId = (d) => (typeof d.rentalId === 'string' && /^[\w-]{1,64}$/.test(d.rentalId) ? d.rentalId : '');
+
+async function extendOnce({ user, d, fs, now }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const [rental, profile] = await Promise.all([fs.get(`rentals/${d.rentalId}`, tx), fs.get(`users/${user.uid}`, tx)]);
+    if (!rental || rental.uid !== user.uid) return OWN_RENTAL;
+    if (rental.status !== 'active' || now >= num(rental.endMs)) return [{ error: 'หมดเวลาเช่าแล้ว ต่อเวลาไม่ได้ กรุณาเช่าใหม่' }, 409];
+    const product = await fs.get(`products/${rental.productId}`, tx);
+    const rate = num(product?.rentHourPrice);
+    if (!(rate > 0)) return [{ error: 'ไอดีนี้ไม่เปิดให้ต่อเวลา' }, 400];
+    const price = r2(d.hours * rate);
+    if (d.expectedAmount != null && Math.abs(num(d.expectedAmount) - price) > 0.01) return [{ error: `ราคาเปลี่ยนเป็น ฿${money(price)} กรุณาตรวจสอบอีกครั้ง` }, 409];
+    const balance = r2(num(profile?.walletBalance));
+    if (balance < price) return [{ error: `เครดิตไม่พอ (คงเหลือ ฿${money(balance)})` }, 400];
+    const endMs = num(rental.endMs) + d.hours * 3600e3;
+    await fs.commit([
+      ...walletWrites(fs, user.uid, balance, balance - price, `ต่อเวลาเช่า ${rental.productName} +${d.hours} ชม.`),
+      { update: { name: fs.name(`rentals/${d.rentalId}`), fields: fs.fields({ endMs }) }, updateMask: { fieldPaths: ['endMs'] }, updateTransforms: [inc('hours', d.hours), inc('price', price), inc('extended', 1)], currentDocument: { exists: true } }
+    ], tx);
+    committed = true;
+    return [{ status: 'active', endMs, charged: price, balance: r2(balance - price) }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+async function routeRentExtend({ user, data, fs, now }) {
+  const id = rentalId(data), hours = rentHours(data.hours);
+  if (!id) return OWN_RENTAL;
+  if (!hours) return [{ error: `จำนวนชั่วโมงไม่ถูกต้อง (1–${RENT_MAX_HOURS})` }, 400];
+  return retry(() => extendOnce({ user, d: { ...data, rentalId: id, hours }, fs, now }));
+}
+
+/** Rental ran out: lock the ID (cooldown) and mark the rental expired. The deposit stays held until an admin decides. */
+async function expireRental(fs, id, r) {
+  await fs.commit([
+    { update: { name: fs.name(`rentals/${id}`), fields: fs.fields({ status: 'expired' }) }, updateMask: { fieldPaths: ['status'] }, updateTransforms: [stamp('expiredAt')], currentDocument: { exists: true } },
+    { update: { name: fs.name(`products/${r.productId}/stock_items/${r.stockItemId}`), fields: fs.fields({ status: 'cooldown' }) }, updateMask: { fieldPaths: ['status'] }, currentDocument: { exists: true } }
+  ]);
+}
+
+async function routeRentCredentials({ user, data, fs, now }) {
+  const id = rentalId(data);
+  const r = id ? await fs.get(`rentals/${id}`) : null;
+  if (!r || r.uid !== user.uid) return OWN_RENTAL;
+  if (r.status !== 'active') return [{ error: 'การเช่านี้สิ้นสุดแล้ว ดูรหัสไม่ได้' }, 403];
+  if (now >= num(r.endMs)) { await expireRental(fs, id, r); return [{ error: 'หมดเวลาเช่าแล้ว ดูรหัสไม่ได้' }, 403]; }
+  const item = await fs.get(`products/${r.productId}/stock_items/${r.stockItemId}`);
+  if (!item) return [{ error: 'ไม่พบไอดี กรุณาติดต่อแอดมิน' }, 404];
+  await fs.commit([{ update: { name: fs.name(`rentals/${id}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('viewCount', 1), stamp('lastViewAt')], currentDocument: { exists: true } }]);
+  return [{ username: String(item.username || ''), password: String(item.password || ''), endMs: num(r.endMs) }];
+}
+
+async function routeRentReturn({ user, data, fs, fetchFn, now, later }) {
+  const id = rentalId(data);
+  const r = id ? await fs.get(`rentals/${id}`) : null;
+  if (!r || r.uid !== user.uid) return OWN_RENTAL;
+  if (r.status !== 'active') return [{ error: 'การเช่านี้สิ้นสุดแล้ว' }, 409];
+  const problem = data.problem === true;
+  const note = str(data.note, 300);
+  await fs.commit([
+    { update: { name: fs.name(`rentals/${id}`), fields: fs.fields({ status: 'returned', returnedMs: now, problem, ...(note ? { note } : {}) }) }, updateMask: { fieldPaths: ['status', 'returnedMs', 'problem', ...(note ? ['note'] : [])] }, currentDocument: { exists: true } },
+    { update: { name: fs.name(`products/${r.productId}/stock_items/${r.stockItemId}`), fields: fs.fields({ status: 'cooldown' }) }, updateMask: { fieldPaths: ['status'] }, currentDocument: { exists: true } }
+  ]);
+  later(discord(fs, fetchFn, { title: problem ? '⚠️ ลูกค้าแจ้งปัญหาไอดีเช่า' : '↩️ ลูกค้าคืนไอดีเช่า รอตรวจ', fields: [
+    { name: 'สินค้า', value: String(r.productName) }, { name: 'ผู้เช่า', value: user.name || user.email }, ...(note ? [{ name: 'หมายเหตุ', value: note }] : [])] }));
+  return [{ status: 'returned' }];
+}
+
+/** Admin closes a returned / expired rental: deposit back or kept, and the ID goes back on the shelf (optionally with a new password). */
+async function routeAdminRent({ user, data, fs, now }) {
+  if (!user.admin) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
+  const id = rentalId(data);
+  if (!id) return OWN_RENTAL;
+  if (!['refund', 'forfeit'].includes(data.action)) return [{ error: 'คำสั่งไม่ถูกต้อง' }, 400];
+  return retry(async () => {
+    const tx = await fs.begin();
+    let committed = false;
+    try {
+      const r = await fs.get(`rentals/${id}`, tx);
+      if (!r) return OWN_RENTAL;
+      if (!['returned', 'expired'].includes(r.status)) return [{ error: r.status === 'active' ? 'ยังอยู่ในช่วงเช่า' : 'ปิดรายการนี้แล้ว' }, 409];
+      const refund = data.action === 'refund' && num(r.deposit) > 0 ? r2(r.deposit) : 0;
+      const writes = [{ update: { name: fs.name(`rentals/${id}`), fields: fs.fields({ status: 'closed', depositStatus: num(r.deposit) > 0 ? (refund ? 'refunded' : 'forfeited') : 'none' }) }, updateMask: { fieldPaths: ['status', 'depositStatus'] }, updateTransforms: [stamp('closedAt')], currentDocument: { exists: true } }];
+      if (refund) {
+        const profile = await fs.get(`users/${r.uid}`, tx);
+        const before = r2(num(profile?.walletBalance));
+        writes.push(...walletWrites(fs, r.uid, before, before + refund, `คืนมัดจำเช่า ${r.productName}`));
+      }
+      const fresh = {};
+      if (str(data.username)) fresh.username = str(data.username);
+      if (str(data.password)) fresh.password = str(data.password, 200);
+      writes.push(
+        { update: { name: fs.name(`products/${r.productId}/stock_items/${r.stockItemId}`), fields: fs.fields({ status: data.keepLocked === true ? 'cooldown' : 'available', rentalId: null, ...fresh }) }, updateMask: { fieldPaths: ['status', 'rentalId', ...Object.keys(fresh)] }, currentDocument: { exists: true } },
+        ...(data.keepLocked === true ? [] : [{ update: { name: fs.name(`products/${r.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', 1), stamp('updatedAt')], currentDocument: { exists: true } }])
+      );
+      await fs.commit(writes, tx);
+      committed = true;
+      return [{ ok: true, refunded: refund }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+
+/** Cron: every few minutes lock the IDs whose rental time is up and tell the admin to change the passwords. */
+export async function sweepRentals(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  const due = (await fs.query('', 'rentals', [['status', 'EQUAL', 'active']])).filter(x => now >= num(x.data.endMs));
+  for (const x of due) await expireRental(fs, x.id, x.data);
+  if (due.length) await discord(fs, fetchFn, { title: `⏰ หมดเวลาเช่า ${due.length} รายการ`, description: due.map(x => `• ${x.data.productName} — ${x.data.nameMask || ''}`).join('\n').slice(0, 1500), fields: [{ name: 'ต้องทำ', value: 'เปลี่ยนรหัสผ่านไอดีในเกม แล้วกดยืนยันในแท็บ "การเช่า" เพื่อคืนมัดจำและเปิดให้เช่าต่อ' }] });
+  return due.length;
 }
 
 // ---------- POST /admin/user ----------
@@ -413,12 +744,12 @@ async function routeNotify({ user, data, fs, fetchFn, now }) {
 
 // ---------- router ----------
 export async function handle(request, env, { fetchFn = fetch, now = Date.now(), ctx = null } = {}) {
-  const cors = { 'access-control-allow-origin': env.ALLOWED_ORIGIN || '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', vary: 'origin' };
+  const cors = { 'access-control-allow-origin': env.ALLOWED_ORIGIN || '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-expose-headers': 'x-astraphex-worker', 'x-astraphex-worker': WORKER_VERSION, vary: 'origin' };
   const reply = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', ...cors } });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply({ error: 'method not allowed' }, 405);
   const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
-  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/admin/user': routeAdminUser, '/notify': routeNotify };
+  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify };
   const route = routes[path];
   if (!route) return reply({ error: 'not found' }, 404);
   const pending = [];
@@ -439,4 +770,8 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
   }
 }
 
-export default { fetch: (request, env, ctx) => handle(request, env, { ctx }) };
+export default {
+  fetch: (request, env, ctx) => handle(request, env, { ctx }),
+  // Cron Trigger (Worker > Settings > Triggers > Cron: */5 * * * *) closes rentals whose time is up
+  scheduled: (event, env, ctx) => ctx.waitUntil(sweepRentals(env).catch((e) => console.warn('sweep:', e)))
+};

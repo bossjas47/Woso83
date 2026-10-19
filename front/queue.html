@@ -23,8 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="../js/tw-config.js"></script>
+  <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
@@ -38,7 +37,12 @@
   <main class="max-w-[720px] mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
     <h1 class="font-heading font-semibold text-3xl sm:text-4xl">คิวงานบริการ</h1>
     <p class="text-slate mt-2">ดูคิวและประวัติการใช้บริการ 30 วันล่าสุด ชื่อบัญชีถูกเซ็นเซอร์บางส่วนเพื่อความเป็นส่วนตัว</p>
-    <div id="queue-groups" class="mt-8 space-y-6">
+    <div class="mt-6 bg-control/70 p-1 rounded-full grid grid-cols-2 text-[15px] max-w-sm" role="tablist">
+      <button type="button" id="qtab-all" onclick="setQueueView('all')" role="tab" class="py-2.5 rounded-full font-medium">คิวทั้งหมด</button>
+      <button type="button" id="qtab-mine" onclick="setQueueView('mine')" role="tab" class="py-2.5 rounded-full font-medium">การจ้างของฉัน</button>
+    </div>
+    <div id="queue-mine" class="hidden mt-6 space-y-3"></div>
+    <div id="queue-groups" class="mt-6 space-y-6">
       <div class="skeleton h-48 !rounded-[28px]"></div><div class="skeleton h-48 !rounded-[28px]"></div>
     </div>
   </main>

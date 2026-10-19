@@ -12,14 +12,14 @@ import { ensureProfile } from "./profile.js";
  * Pages only need <header id="site-header"></header> and <footer id="site-footer"></footer>.
  */
 const page = location.pathname.split('/').pop() || 'index.html';
-const ACTIVE = { 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more' }[page] || '';
+const ACTIVE = { 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more', 'rentals.html': 'more', 'wallet.html': 'more', 'cart.html': 'more' }[page] || '';
 const L = {
   home: ROOT + 'index.html', shop: ROOT + 'front/category.html', topup: ROOT + 'front/topup.html',
   account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', orders: ROOT + 'front/account.html#orders',
-  login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
+  cart: ROOT + 'front/cart.html', login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
 };
-const LOGO = ROOT + 'assets/logo-icon.png';
-const LOGO_FULL = ROOT + 'assets/logo-full.jpg';
+const LOGO = ROOT + 'assets/logo-icon-96.png';
+const LOGO_FULL = ROOT + 'assets/logo-full-600.jpg';
 
 let user = null;
 let balance = null;
@@ -61,7 +61,10 @@ function renderHeader() {
         <button type="button" onclick="openTools()" class="text-slate hover:text-ink transition-colors">เครื่องมือ</button>
         <button type="button" onclick="toggleMore(event)" class="${ACTIVE === 'more' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'} inline-flex items-center gap-1 transition-colors" aria-haspopup="dialog">เพิ่มเติม ${icon('M6 9l6 6 6-6', 'w-3.5 h-3.5', 2)}</button>
       </div>
-      <div id="header-auth" class="flex items-center gap-2 shrink-0"></div>
+      <div class="flex items-center gap-2 shrink-0">
+        <a href="${L.cart}" class="relative w-10 h-10 rounded-full hover:bg-mist flex items-center justify-center text-ink" aria-label="ตะกร้า">${icon('M3 4h2l2.4 11h10.2L20 7H6.2M9 20h.01M17 20h.01', 'w-[22px] h-[22px]', 2)}<span id="cart-badge" class="hidden absolute top-0 right-0 min-w-[18px] h-[18px] px-1 rounded-full bg-launchOrange text-gallery text-[11px] font-semibold leading-[18px] text-center"></span></a>
+        <div id="header-auth" class="flex items-center gap-2 shrink-0"></div>
+      </div>
     </nav>`;
   renderHeaderAuth();
 }
@@ -89,7 +92,7 @@ function renderFooter() {
   f.innerHTML = `
     <div class="max-w-[1200px] mx-auto px-4 sm:px-6 py-12 grid gap-10 md:grid-cols-3 text-sm">
       <div>
-        <div class="rounded-2xl overflow-hidden bg-black w-[240px] max-w-full"><img src="${LOGO_FULL}" alt="${SHOP_NAME}" width="1200" height="463" class="w-full h-auto"></div>
+        <div class="rounded-2xl overflow-hidden bg-black w-[240px] max-w-full"><img src="${LOGO_FULL}" alt="${SHOP_NAME}" width="600" height="232" class="w-full h-auto"></div>
         <p class="text-slate mt-4 leading-relaxed">ศูนย์รวมไอดีและบริการในเกม Arena Breakout ตรวจสอบได้ทุกออเดอร์</p>
       </div>
       <div>
@@ -200,11 +203,18 @@ async function shellSignOut() {
   try { await signOut(auth); toast('ออกจากระบบแล้ว'); closeMore(); } catch (_) { toast('ออกจากระบบไม่สำเร็จ', 'error'); }
 }
 
-let unsubUser = null;
+let unsubUser = null, unsubCart = null;
 function watchUser(u) {
   if (unsubUser) { unsubUser(); unsubUser = null; }
+  if (unsubCart) { unsubCart(); unsubCart = null; }
   balance = null;
+  const badge = document.getElementById('cart-badge');
+  if (badge) badge.classList.add('hidden');
   if (!u) return;
+  unsubCart = onSnapshot(doc(db, 'carts', u.uid), (s) => {
+    const n = (s.data()?.items || []).length, b = document.getElementById('cart-badge');
+    if (b) { b.textContent = n; b.classList.toggle('hidden', !n); }
+  }, () => {});
   unsubUser = onSnapshot(doc(db, 'users', u.uid), (snap) => {
     const d = snap.exists() ? snap.data() : {};
     balance = num(d.walletBalance);

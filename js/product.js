@@ -2,11 +2,12 @@ import { db, auth } from "../firebase-config.js";
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
-import { esc, num, baht, money, toast, icon, ICONS, onSettings, workerBase, callWorker, notifyAdmin, maskName } from "./ui.js";
-import { deliveryBadge, productCardHtml } from "./card.js";
+import { esc, num, baht, money, toast, icon, ICONS, onSettings, workerBase, callWorker, notifyAdmin, maskName, fixImageUrl, sizedImage } from "./ui.js";
+import { deliveryBadge, productCardHtml, isRentProduct } from "./card.js";
 import { mountPromptPay, promptpayReady, prepareSlip, slipErrorText } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
 import { orderCardHtml } from "./orders-ui.js";
+import { addToCart } from "./cart-store.js";
 
 /**
  * Product page: details, quantity / packages / farm modes, and checkout.
@@ -53,13 +54,15 @@ function render() {
   $('breadcrumb-category').textContent = categoryOf(CATS, P.category)?.name || (srv ? 'งานบริการ' : 'ไอดีเกม');
   $('product-title-heading').textContent = P.name;
   $('product-kicker-label').textContent = categoryOf(CATS, P.category)?.name || 'Arena Breakout';
-  gallery = (Array.isArray(P.gallery) && P.gallery.filter(Boolean).length ? P.gallery.filter(Boolean) : [P.image || FALLBACK]);
+  // the card's picture (P.image) first, then any extra gallery pictures; bad / page-style links are fixed or dropped
+  gallery = [...new Set([P.image, ...(Array.isArray(P.gallery) ? P.gallery : [])].map(fixImageUrl).filter(Boolean))];
+  if (!gallery.length) gallery = [FALLBACK];
   updateGalleryView(0);
-  $('product-thumbnail-strip').innerHTML = gallery.length > 1 ? gallery.map((u, i) => `<button type="button" onclick="updateGalleryView(${i})" class="gthumb w-16 h-12 rounded-xl overflow-hidden border shrink-0 ${i === 0 ? 'border-2 border-pricingBlue' : 'border-hairline opacity-70'}"><img src="${esc(u)}" alt="ภาพที่ ${i + 1}" class="w-full h-full object-cover"></button>`).join('') : '';
+  $('product-thumbnail-strip').innerHTML = thumbsHtml();
   renderBadges();
   const stock = Math.max(0, Math.floor(num(P.stock)));
-  $('product-stock-line').innerHTML = stock <= 0 ? `<span class="text-launchOrange font-medium">${srv ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด'}</span>`
-    : srv ? `<span class="text-emerald-600 font-medium">รับงานได้อีก ${stock} ${esc(unit)}</span>` : `<span class="${stock <= 3 ? 'text-launchOrange' : 'text-emerald-600'} font-medium">คงเหลือ ${stock} ไอดี</span>`;
+  $('product-stock-line').innerHTML = stock <= 0 ? `<span class="text-launchOrange font-medium">${srv ? 'คิวเต็มชั่วคราว' : isRent() ? 'ไม่มีไอดีว่างให้เช่า' : 'สินค้าหมด'}</span>`
+    : isRent() ? `<span class="text-emerald-600 font-medium">ว่างให้เช่า ${stock} ไอดี</span>` : srv ? `<span class="text-emerald-600 font-medium">รับงานได้อีก ${stock} ${esc(unit)}</span>` : `<span class="${stock <= 3 ? 'text-launchOrange' : 'text-emerald-600'} font-medium">คงเหลือ ${stock} ไอดี</span>`;
   $('product-desc-paragraph').textContent = P.desc || '';
   $('product-full-desc').textContent = P.desc || '-';
   const koen = String(P.koen || '').trim();
@@ -77,7 +80,8 @@ function render() {
   $('product-warranty').textContent = P.warrantyText || 'หากมีปัญหาเกี่ยวกับสินค้า ติดต่อทีมงานพร้อมเลขที่ออเดอร์';
 
   // buyer fields: services ask Facebook instead of e-mail
-  $('email-field').classList.toggle('hidden', srv);
+  $('buyer-block').classList.toggle('hidden', !srv); // game IDs show up in "my orders": nothing to ask
+  $('email-field').classList.add('hidden');
   $('facebook-field').classList.toggle('hidden', !srv);
   $('buyer-hint').textContent = srv ? 'ทีมงานใช้ Facebook ติดต่อเพื่อนัดเวลาทำงาน' : 'ใช้สำหรับติดต่อเรื่องไอดีที่ซื้อ ทีมงานจะไม่ขอรหัสผ่านอีเมลของคุณ';
 
@@ -90,33 +94,48 @@ function render() {
   renderFarmModes();
   renderValuePacks();
   recalc();
+  applyRentUi();
 }
 
 function renderBadges() {
-  $('product-badges').innerHTML = deliveryBadge(isSrv(), !!workerBase()) + (P.featured ? `<span class="badge badge-featured">${icon(ICONS.star, 'w-3.5 h-3.5', 2)}แนะนำ</span>` : '');
+  $('product-badges').innerHTML = deliveryBadge(isSrv(), !!workerBase(), isRent()) + (P.featured ? `<span class="badge badge-featured">${icon(ICONS.star, 'w-3.5 h-3.5', 2)}แนะนำ</span>` : '');
 }
 
 function renderRelated() {
   const others = allProducts.filter(p => p.id !== P.id).sort((a, b) => (b.category === P.category) - (a.category === P.category)).slice(0, 4);
   $('related-products-grid').innerHTML = others.map(p => {
     const srv = isServiceProduct(p, CATS);
-    return productCardHtml({ p, isService: srv, unit: unitOf(p, CATS), min: minQtyOf(p, CATS), price: num(p.price) || num(p.serviceRate), stock: Math.floor(num(p.stock)), koen: '', categoryName: categoryOf(CATS, p.category)?.name, fallback: FALLBACK, instant: !!workerBase() });
+    return productCardHtml({ p, isService: srv, unit: unitOf(p, CATS), min: minQtyOf(p, CATS), price: num(p.price) || num(p.serviceRate), stock: Math.floor(num(p.stock)), koen: String(p.koen || '').trim() && p.koen !== '-' ? (p.koenLabel ? `${p.koenLabel}: ${p.koen}` : String(p.koen)) : '', categoryName: categoryOf(CATS, p.category)?.name, fallback: FALLBACK, instant: !!workerBase() });
   }).join('');
   $('related-products-grid').parentElement.classList.toggle('hidden', !others.length);
 }
 
 // ---------- Gallery ----------
+/** A picture that fails is taken out of the gallery and the next one shown; the placeholder only when none load. */
+function onMainImageError() {
+  const img = $('product-main-image');
+  if (img.getAttribute('src') !== gallery[gIdx] && gallery[gIdx]) { img.src = gallery[gIdx]; return; } // resized copy failed: try the original
+  const bad = gallery[gIdx];
+  gallery = gallery.filter(u => u !== bad);
+  if (!gallery.length) { gallery = [FALLBACK]; }
+  if (bad === FALLBACK) return;
+  $('product-thumbnail-strip').innerHTML = thumbsHtml();
+  updateGalleryView(Math.min(gIdx, gallery.length - 1));
+}
+const thumbsHtml = () => gallery.length > 1 ? gallery.map((u, i) => `<button type="button" onclick="updateGalleryView(${i})" class="gthumb w-16 h-12 rounded-xl overflow-hidden border shrink-0 ${i === 0 ? 'border-2 border-pricingBlue' : 'border-hairline opacity-70'}"><img src="${esc(sizedImage(u, 160))}" data-orig="${esc(u)}" alt="ภาพที่ ${i + 1}" width="64" height="48" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="imgFallback(this)" class="w-full h-full object-cover"></button>`).join('') : '';
 function updateGalleryView(i) {
   if (i < 0 || i >= gallery.length) return;
   gIdx = i;
-  $('product-main-image').src = gallery[i];
+  $('product-main-image').src = sizedImage(gallery[i], 1200);
   $('gallery-counter-pill').textContent = `ภาพ ${i + 1} / ${gallery.length}`;
   $('gallery-counter-pill').classList.toggle('hidden', gallery.length < 2);
   document.querySelectorAll('.gthumb').forEach((b, k) => { b.classList.toggle('border-2', k === i); b.classList.toggle('border-pricingBlue', k === i); b.classList.toggle('opacity-70', k !== i); });
 }
-function openImageFull() { $('lightbox-img').src = gallery[gIdx]; $('lightbox').classList.remove('hidden'); $('lightbox').classList.add('flex'); }
+function setLightbox() { const el = $('lightbox-img'); el.dataset.orig = gallery[gIdx]; el.onerror = () => imgFallbackSafe(el); el.src = sizedImage(gallery[gIdx], 2000); }
+const imgFallbackSafe = (el) => window.imgFallback(el);
+function openImageFull() { setLightbox(); $('lightbox').classList.remove('hidden'); $('lightbox').classList.add('flex'); }
 function closeLightbox() { $('lightbox').classList.add('hidden'); $('lightbox').classList.remove('flex'); }
-function lightboxStep(d) { updateGalleryView((gIdx + d + gallery.length) % gallery.length); $('lightbox-img').src = gallery[gIdx]; }
+function lightboxStep(d) { updateGalleryView((gIdx + d + gallery.length) % gallery.length); setLightbox(); }
 let touchX = null;
 document.addEventListener('touchstart', e => { touchX = e.target.id === 'product-main-image' ? e.touches[0].clientX : null; }, { passive: true });
 document.addEventListener('touchend', e => {
@@ -204,6 +223,7 @@ function recalc() {
 }
 
 function updateWalletPanel() {
+  if (isRent()) updateRent();
   const fin = finalPrice();
   $('wallet-balance').textContent = !user ? 'เข้าสู่ระบบเพื่อดูยอด' : balance === null ? 'กำลังโหลด…' : `${money(balance)}฿`;
   const short = user && balance !== null && balance < fin;
@@ -216,8 +236,90 @@ function updateButton() {
   if (submitting) return;
   const out = num(P?.stock) <= 0;
   const fin = baht(finalPrice());
+  $('btn-add-cart').disabled = out;
   btn.disabled = out || (method === 'wallet' && (!workerBase() || (user && balance !== null && balance < finalPrice())));
-  btn.textContent = out ? (isSrv() ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด') : method === 'wallet' ? `ชำระด้วยเครดิต ${fin}` : `แจ้งชำระเงิน ${fin}`;
+  btn.textContent = out ? (isSrv() ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด') : method === 'wallet' ? `ชำระด้วยเครดิต ${fin}` : method === 'angpao' ? `ชำระด้วยซองอั่งเปา ${fin}` : `แจ้งชำระเงิน ${fin}`;
+}
+
+// ---------- Rent (เช่าไอดี) ----------
+// Hourly rental: the Worker (/rent) checks price, deposit, balance and hands out one free ID in a transaction.
+let rentH = 1, renting = false;
+const isRent = () => !isSrv() && isRentProduct(P);
+const rentMin = () => Math.max(1, Math.floor(num(P.rentMinHours)) || 1);
+const rentPacks = () => (Array.isArray(P.rentPackages) ? P.rentPackages : []).map(k => ({ hours: Math.floor(num(k.hours)), price: num(k.price) })).filter(k => k.hours > 0 && k.price > 0).sort((a, b) => a.hours - b.hours);
+const rentPriceFor = (h) => {
+  const pk = rentPacks().find(k => k.hours === h);
+  if (pk) return Math.round(pk.price * 100) / 100;
+  return num(P.rentHourPrice) > 0 && h >= rentMin() ? Math.round(h * num(P.rentHourPrice) * 100) / 100 : 0;
+};
+const rentTotal = () => rentPriceFor(rentH) + Math.max(0, num(P.rentDeposit));
+function applyRentUi() {
+  const on = isRent();
+  ['farm-modes-section', 'packages-section', 'quantity-card', 'checkout-card'].forEach(id => { if (on) $(id).classList.add('hidden'); });
+  if (on) $('checkout-card').classList.add('hidden');
+  $('rent-card').classList.toggle('hidden', !on);
+  if (!on) return;
+  const rate = num(P.rentHourPrice);
+  $('product-unit-price').textContent = baht(rate > 0 ? rate : Math.min(...rentPacks().map(k => k.price)));
+  $('product-unit-suffix').textContent = rate > 0 ? '/ ชั่วโมง' : 'ขึ้นไป (แพ็กเกจ)';
+  $('rent-hint').textContent = rate > 0 ? `${baht(rate)} ต่อชั่วโมง · ขั้นต่ำ ${rentMin()} ชั่วโมง` : 'เลือกแพ็กเกจที่ต้องการ';
+  $('rent-stepper').classList.toggle('hidden', !(rate > 0));
+  $('rent-min-hint').textContent = `ขั้นต่ำ ${rentMin()} ชม. · สูงสุด 720 ชม.`;
+  $('rent-deposit-row').classList.toggle('hidden', !(num(P.rentDeposit) > 0));
+  rentH = rate > 0 ? rentMin() : (rentPacks()[0]?.hours || 1);
+  const pk = rentPacks();
+  $('rent-packs').classList.toggle('hidden', !pk.length);
+  $('rent-packs').innerHTML = pk.map(k => `<button type="button" data-h="${k.hours}" onclick="setRentHours(${k.hours})" class="rpack text-left rounded-2xl p-4 bg-gallery border border-hairline transition"><span class="block text-xs text-slate">แพ็กเกจ ${k.hours} ชั่วโมง</span><span class="block text-lg font-heading font-semibold">฿${k.price.toLocaleString('th-TH')}</span></button>`).join('');
+  updateRent();
+}
+function updateRent() {
+  if (!isRent()) return;
+  const price = rentPriceFor(rentH), dep = Math.max(0, num(P.rentDeposit)), total = price + dep;
+  $('rent-hours').value = rentH;
+  $('rent-hours-label').textContent = `(${rentH} ชม.)`;
+  $('rent-price').textContent = price > 0 ? baht(price) : 'เลือกแพ็กเกจหรือเพิ่มชั่วโมง';
+  $('rent-deposit').textContent = baht(dep);
+  $('rent-total').textContent = baht(total);
+  $('rent-end').textContent = new Date(Date.now() + rentH * 3600e3).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) + ' (นับจากตอนกดเช่า)';
+  document.querySelectorAll('.rpack').forEach(c => { const on = Number(c.dataset.h) === rentH; c.classList.toggle('border-2', on); c.classList.toggle('border-pricingBlue', on); });
+  $('rent-login').classList.toggle('hidden', !!user);
+  $('rent-balance').textContent = !user ? '' : balance === null ? '…' : `${money(balance)}฿`;
+  const short = !!user && balance !== null && balance < total;
+  $('rent-topup-link').classList.toggle('hidden', !short);
+  const out = num(P.stock) <= 0;
+  const btn = $('btn-rent');
+  if (renting) return;
+  btn.disabled = out || !price || !workerBase() || short;
+  btn.textContent = out ? 'ไม่มีไอดีว่างให้เช่า' : !workerBase() ? 'ร้านยังไม่เปิดให้เช่า' : !price ? 'เลือกระยะเวลาเช่า' : `เช่าเลย ${baht(total)}`;
+}
+function setRentHours(v) { rentH = Math.min(720, Math.max(1, Math.floor(num(v)) || 1)); if (num(P.rentHourPrice) > 0) rentH = Math.max(rentMin(), rentH); updateRent(); }
+const changeRentHours = (d) => setRentHours(rentH + d);
+async function payRent() {
+  if (!P || renting || !isRent()) return;
+  if (!user) { toast('กรุณาเข้าสู่ระบบก่อนเช่า', 'error'); setTimeout(() => { location.href = 'login.html?mode=login'; }, 900); return; }
+  const total = rentTotal();
+  renting = true; $('btn-rent').disabled = true; $('btn-rent').textContent = 'กำลังเช่า…';
+  try {
+    const out = await callWorker('/rent', { productId: P.id, hours: rentH, expectedAmount: total });
+    P.stock = num(P.stock) - 1;
+    const r = out.rental;
+    const card = $('product-order-success-card');
+    card.innerHTML = `<div class="flex items-center gap-3">
+        <span class="w-11 h-11 rounded-full bg-emerald-500 text-gallery flex items-center justify-center">${icon(ICONS.check, 'w-6 h-6', 2.5)}</span>
+        <div><p class="text-xs text-slate">เช่าไอดีสำเร็จ</p><h2 class="text-xl font-heading font-semibold">ไอดีพร้อมใช้งานแล้ว</h2></div></div>
+      <div class="rounded-2xl bg-mist p-4 text-[15px] space-y-1">
+        <p class="font-medium">${esc(r.productName)} · ${esc(r.hours)} ชั่วโมง</p>
+        <p class="text-slate">หมดเวลา ${esc(new Date(r.endMs).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }))}</p>
+        <p class="text-slate">ตัดเครดิต ${baht(r.price + r.deposit)} (มัดจำ ${baht(r.deposit)} คืนเมื่อส่งไอดีคืนปกติ)</p></div>
+      <a href="rentals.html" class="apple-pricing-pill w-full h-12 text-[16px] font-semibold">ดูรหัสไอดี</a>`;
+    card.classList.remove('hidden');
+    $('rent-card').classList.add('hidden');
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('เช่าไอดีสำเร็จ', 'success');
+  } catch (e) {
+    console.warn('rent:', e);
+    toast(e.message || 'เช่าไม่สำเร็จ', 'error');
+  } finally { renting = false; updateRent(); }
 }
 
 // ---------- Promo ----------
@@ -243,11 +345,25 @@ const defaultMethod = () => (workerBase() ? 'wallet' : 'promptpay');
 function switchProductPaymentTab(m, auto = false) {
   if (!auto) methodPicked = true;
   method = m;
-  ['wallet', 'promptpay', 'truemoney'].forEach(k => {
+  if (m === 'angpao' && !workerBase()) m = method = 'promptpay';
+  $('tab-pay-angpao').classList.toggle('hidden', !workerBase());
+  $('pay-tabs').classList.toggle('grid-cols-3', !!workerBase()); $('pay-tabs').classList.toggle('grid-cols-2', !workerBase());
+  ['wallet', 'promptpay', 'angpao'].forEach(k => {
     $(`panel-pay-${k}`).classList.toggle('hidden', k !== m);
     $(`tab-pay-${k}`).className = `py-2 rounded-full font-medium transition ${k === m ? 'bg-gallery text-ink shadow-sm' : 'text-slate hover:text-ink'}`;
   });
   updateButton();
+}
+
+// ---------- Cart ----------
+async function addProductToCart() {
+  if (!P || submitting) return;
+  if (!user) { toast('กรุณาเข้าสู่ระบบก่อนใส่ตะกร้า', 'error'); setTimeout(() => { location.href = 'login.html?mode=login'; }, 900); return; }
+  if (num(P.stock) <= 0) { toast('สินค้านี้หมดแล้ว', 'error'); return; }
+  try {
+    await addToCart(user.uid, { productId: P.id, quantity: qty, farmMode }, maxQty());
+    toast('เพิ่มลงตะกร้าแล้ว', 'success');
+  } catch (e) { console.warn('cart:', e); toast(e.message || 'เพิ่มลงตะกร้าไม่สำเร็จ', 'error'); }
 }
 
 // ---------- Submit ----------
@@ -264,7 +380,6 @@ function collectBuyer() {
     gamePassword: $('game-password').value
   };
   const fail = (m, id) => { toast(m, 'error'); $(id)?.focus(); return null; };
-  if (!srv && !/^\S+@\S+\.\S+$/.test(b.buyerEmail)) return fail('กรุณากรอกอีเมลให้ถูกต้อง', 'buyer-email');
   if (srv && b.buyerFacebook.length < 2) return fail('กรุณากรอกชื่อหรือลิงก์ Facebook', 'buyer-facebook');
   if (srv && !self && (!b.gameEmail.includes('@') || !b.gamePassword)) return fail('กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม', b.gameEmail.includes('@') ? 'game-password' : 'game-email');
   if (self && (!b.buyerContact || !b.playTime)) return fail('กรุณากรอกชื่อในเกม / UID และเวลาที่พร้อมเข้าเกม', b.buyerContact ? 'play-time' : 'buyer-contact');
@@ -284,19 +399,46 @@ async function executeProductPurchase() {
   if (num(P.stock) <= 0) { toast('สินค้านี้หมดแล้ว', 'error'); return; }
   const b = collectBuyer(); if (!b) return;
   if (method === 'wallet') return payWithWallet(b);
+  if (method === 'angpao') return payWithAngpao(b);
   return fileManualOrder(b);
+}
+
+const buyBody = (b) => ({
+  productId: P.id, quantity: qty, farmMode: farmMode || null, promoCode: promoCode || null, expectedAmount: finalPrice(),
+  buyerFacebook: b.srv ? b.buyerFacebook : '',
+  buyerContact: b.self ? b.buyerContact : '', playTime: b.self ? b.playTime : '',
+  gameEmail: b.srv && !b.self ? b.gameEmail : '', gamePassword: b.srv && !b.self ? b.gamePassword : ''
+});
+
+/** TrueMoney gift voucher: the Worker redeems it, credits the account, then buys with that credit. */
+async function payWithAngpao(b) {
+  const link = $('product-voucher-input').value.trim();
+  if (!isTrueMoneyVoucher(link)) { toast('กรุณาวางลิงก์ซองอั่งเปา TrueMoney ให้ถูกต้อง', 'error'); $('product-voucher-input').focus(); return; }
+  setBusy(true, 'กำลังรับซอง…');
+  try {
+    const r = await callWorker('/angpao', { link, purpose: 'buy', buy: buyBody(b) });
+    $('product-voucher-input').value = '';
+    if (r.buy?.order) {
+      $('game-password').value = '';
+      showSuccess(r.buy.order, true);
+      P.stock = num(P.stock) - qty;
+      const extra = Math.round((r.credit - finalPrice()) * 100) / 100;
+      toast(`รับซอง ${baht(r.amount)} แล้ว ชำระสำเร็จ${extra > 0 ? ` · เครดิตคงเหลือ +${money(extra)}` : ''}`, 'success');
+    } else {
+      toast(`รับซองแล้ว เครดิต +${money(r.credit)} แต่สั่งซื้อไม่สำเร็จ: ${r.buyError || ''}`, 'error');
+      switchProductPaymentTab('wallet');
+    }
+  } catch (e) {
+    console.warn('angpao:', e);
+    toast(e.message || 'รับซองไม่สำเร็จ', 'error');
+  } finally { setBusy(false); }
 }
 
 async function payWithWallet(b) {
   if (balance !== null && balance < finalPrice()) { toast('เครดิตไม่พอ กรุณาเติมเงินก่อน', 'error'); return; }
   setBusy(true, 'กำลังชำระเงิน…');
   try {
-    const res = await callWorker('/buy', {
-      productId: P.id, quantity: qty, farmMode: farmMode || null, promoCode: promoCode || null, expectedAmount: finalPrice(),
-      buyerEmail: b.srv ? '' : b.buyerEmail, buyerFacebook: b.srv ? b.buyerFacebook : '',
-      buyerContact: b.self ? b.buyerContact : '', playTime: b.self ? b.playTime : '',
-      gameEmail: b.srv && !b.self ? b.gameEmail : '', gamePassword: b.srv && !b.self ? b.gamePassword : ''
-    });
+    const res = await callWorker('/buy', buyBody(b));
     $('game-password').value = '';
     showSuccess(res.order, true);
     toast(res.order?.status === 'completed' ? 'ชำระเงินสำเร็จ รับไอดีได้เลย' : 'ชำระเงินสำเร็จ งานเข้าคิวแล้ว', 'success');
@@ -311,15 +453,10 @@ function isTrueMoneyVoucher(u) { try { const x = new URL(u); return x.protocol =
 
 async function fileManualOrder(b) {
   let proof = '', slip = null;
-  if (method === 'truemoney') {
-    proof = $('product-voucher-input').value.trim();
-    if (!isTrueMoneyVoucher(proof)) { toast('กรุณากรอกลิงก์ซองของขวัญ TrueMoney ให้ถูกต้อง', 'error'); return; }
-  } else {
-    if (!promptpayReady()) { toast('ร้านยังไม่เปิดรับพร้อมเพย์ กรุณาเลือกช่องทางอื่น', 'error'); return; }
-    setBusy(true, 'กำลังเตรียมสลิป…');
-    try { slip = await prepareSlip(pp.getFile()); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
-    proof = 'สลิปแนบในระบบ';
-  }
+  if (!promptpayReady()) { toast('ร้านยังไม่เปิดรับพร้อมเพย์ กรุณาเลือกช่องทางอื่น', 'error'); return; }
+  setBusy(true, 'กำลังเตรียมสลิป…');
+  try { slip = await prepareSlip(pp.getFile()); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
+  proof = 'สลิปแนบในระบบ';
   setBusy(true, 'กำลังส่งคำสั่งซื้อ…');
   const srv = b.srv, modes = P.farmModes || [];
   const sub = subtotal(), fin = finalPrice();
@@ -333,7 +470,7 @@ async function fileManualOrder(b) {
       quantity: qty, bonusQty: bonusFor(qty), receiveQty: qty + bonusFor(qty), unit: unitOf(P, CATS),
       unitPrice: unitRate(), subtotal: sub, discount: Math.min(discount, sub), promoCode: promoCode || null,
       amount: fin, finalPrice: fin, paymentMethod: method, paymentProof: proof,
-      ...(srv ? { buyerFacebook: b.buyerFacebook } : { buyerEmail: b.buyerEmail }),
+      ...(srv ? { buyerFacebook: b.buyerFacebook } : {}),
       ...(b.self ? { buyerContact: b.buyerContact, playTime: b.playTime } : {}),
       ...(srv && !b.self ? { gameEmail: b.gameEmail, gamePassword: b.gamePassword, buyerContact: b.gameEmail } : {}),
       ...(modes.length ? { farmMode } : {}),
@@ -355,7 +492,6 @@ async function fileManualOrder(b) {
     await batch.commit();
     notifyAdmin('order', ref.id);
     $('game-password').value = '';
-    $('product-voucher-input').value = '';
     pp.reset();
     showSuccess({ ...payload, id: ref.id, createdAt: new Date() }, false);
     toast('ส่งคำสั่งซื้อแล้ว ทีมงานกำลังตรวจสอบ', 'success');
@@ -390,7 +526,6 @@ function scrollToCheckoutForm() { $('checkout-anchor-section')?.scrollIntoView({
 onAuthStateChanged(auth, (u) => {
   user = u;
   $('login-needed').classList.toggle('hidden', !!u);
-  if (u?.email && !$('buyer-email').value && !/@tactical\.store$/.test(u.email)) $('buyer-email').value = u.email;
   if (!u) balance = null;
   if (P) { updateWalletPanel(); updateButton(); }
 });
@@ -398,8 +533,6 @@ document.addEventListener('wallet', (e) => {
   balance = e.detail.balance;
   const fb = e.detail.profile?.facebook;
   if (fb && !$('buyer-facebook').value) $('buyer-facebook').value = fb;
-  const ce = e.detail.profile?.contactEmail;
-  if (ce && !$('buyer-email').value) $('buyer-email').value = ce;
   if (P) { updateWalletPanel(); updateButton(); }
 });
 onSettings(() => {
@@ -411,7 +544,8 @@ onSettings(() => {
 });
 
 Object.assign(window, {
-  updateGalleryView, openImageFull, closeLightbox, lightboxStep, changeQuantity, handleQuantityDirectInput, selectValuePack,
-  selectFarmMode, applyProductPromo, switchProductPaymentTab, executeProductPurchase, scrollToCheckoutForm
+  updateGalleryView, onMainImageError, openImageFull, closeLightbox, lightboxStep, changeQuantity, handleQuantityDirectInput, selectValuePack,
+  selectFarmMode, applyProductPromo, switchProductPaymentTab, executeProductPurchase, scrollToCheckoutForm,
+  setRentHours, changeRentHours, payRent, addProductToCart
 });
 load();

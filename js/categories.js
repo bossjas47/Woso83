@@ -1,5 +1,6 @@
 import { db } from "../firebase-config.js";
 import { collection, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { imgAttrs } from "./ui.js";
 
 /**
  * Product categories (Firestore `categories/{id}`), shared by the storefront, product page and admin.
@@ -54,7 +55,7 @@ export function categoryCardsHtml(cats, products) {
   if (none) cards.push({ id: NONE, name: NONE_LABEL, n: none });
   return cards.map(c => {
     const img = c.image
-      ? `<img src="${escCat(c.image)}" alt="" loading="lazy" class="w-full h-full object-cover">`
+      ? `<img ${imgAttrs(c.image, 400, 300)} alt="" class="w-full h-full object-cover">`
       : `<span class="text-5xl font-heading font-semibold text-steel">${escCat([...String(c.name)][0] || '?')}</span>`;
     return `<button type="button" data-cat="${escCat(c.id)}" onclick="filterCategory(${escCat(JSON.stringify(c.id))})" class="text-left apple-card p-3 hover:bg-mist transition active:scale-[0.98]">
       <span class="flex items-center justify-center overflow-hidden rounded-2xl bg-mist aspect-[16/7]">${img}</span>

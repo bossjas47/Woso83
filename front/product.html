@@ -23,8 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="../js/tw-config.js"></script>
+  <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
@@ -56,8 +55,8 @@
     <div id="product-content-stage" class="hidden max-w-2xl mx-auto pt-5 space-y-5">
       <!-- Gallery -->
       <div class="relative overflow-hidden rounded-[28px] bg-mist aspect-[4/3]">
-        <img id="product-main-image" src="" alt="ภาพสินค้า" onclick="openImageFull()" class="w-full h-full object-cover cursor-zoom-in"
-             onerror="this.onerror=null;this.src='https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB'">
+        <img id="product-main-image" alt="ภาพสินค้า" width="1200" height="900" fetchpriority="high" decoding="async" onclick="openImageFull()" class="w-full h-full object-cover cursor-zoom-in"
+             referrerpolicy="no-referrer" onerror="window.onMainImageError && onMainImageError()">
         <div id="product-badges" class="absolute top-4 left-4 flex flex-wrap gap-2"></div>
         <div id="gallery-counter-pill" class="absolute bottom-4 right-4 bg-ink/70 backdrop-blur text-gallery text-xs px-3 py-1 rounded-full">ภาพ 1 / 1</div>
       </div>
@@ -118,12 +117,37 @@
 
       <!-- Checkout -->
       <section id="checkout-anchor-section" class="space-y-5">
+        <div id="rent-card" class="hidden soft-card p-5 sm:p-8 space-y-5">
+          <div id="rent-login" class="hidden rounded-2xl bg-gallery p-4 text-sm flex items-center justify-between gap-3">
+            <span>เข้าสู่ระบบก่อนเช่า</span><a href="login.html?mode=login" class="apple-pricing-pill px-4 py-2 text-sm">เข้าสู่ระบบ</a>
+          </div>
+          <div><h2 class="text-xl font-heading font-semibold">เช่าไอดีนี้</h2><p id="rent-hint" class="text-sm text-slate mt-0.5"></p></div>
+          <div id="rent-packs" class="grid grid-cols-2 gap-3"></div>
+          <div id="rent-stepper" class="flex items-center justify-between gap-3">
+            <div><p class="font-medium">จำนวนชั่วโมง</p><p id="rent-min-hint" class="text-sm text-slate"></p></div>
+            <div class="flex items-center bg-gallery rounded-full p-1">
+              <button type="button" onclick="changeRentHours(-1)" aria-label="ลดชั่วโมง" class="w-10 h-10 rounded-full hover:bg-mist text-2xl leading-none">−</button>
+              <input id="rent-hours" type="number" value="1" min="1" max="720" inputmode="numeric" aria-label="จำนวนชั่วโมง" class="w-16 text-center text-base font-semibold bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onchange="setRentHours(this.value)">
+              <button type="button" onclick="changeRentHours(1)" aria-label="เพิ่มชั่วโมง" class="w-10 h-10 rounded-full hover:bg-mist text-2xl leading-none">+</button>
+            </div>
+          </div>
+          <div class="rounded-2xl bg-mist p-4 space-y-2 text-[15px]">
+            <div class="flex justify-between"><span class="text-slate">ค่าเช่า <span id="rent-hours-label"></span></span><span id="rent-price" class="font-medium">฿0.00</span></div>
+            <div id="rent-deposit-row" class="flex justify-between"><span class="text-slate">มัดจำ <span class="text-xs">(คืนเมื่อส่งไอดีคืนปกติ)</span></span><span id="rent-deposit" class="font-medium">฿0.00</span></div>
+            <div class="flex justify-between border-t border-hairline pt-2"><span class="font-semibold">ตัดจากเครดิตรวม</span><span id="rent-total" class="font-heading font-semibold text-lg">฿0.00</span></div>
+            <p class="text-xs text-slate">หมดเวลา: <span id="rent-end">-</span></p>
+          </div>
+          <div class="flex items-center justify-between text-sm"><span class="text-slate">เครดิตของคุณ <span id="rent-balance" class="font-medium text-ink"></span></span><a id="rent-topup-link" href="topup.html" class="hidden text-appleBlue">เติมเงิน ›</a></div>
+          <button id="btn-rent" onclick="payRent()" type="button" class="w-full apple-pricing-pill py-4 text-[17px]">เช่าเลย</button>
+          <p class="text-xs text-slate">ชำระด้วยเครดิตเท่านั้น (เติมได้ด้วยพร้อมเพย์หรือซองอั่งเปา) · รับรหัสในหน้า "การเช่าของฉัน" ทันที · ห้ามเปลี่ยนรหัสผ่านหรือผูกบัญชี หมดเวลาแล้วรหัสจะถูกซ่อนและบัญชีถูกล็อก</p>
+        </div>
+
         <div id="checkout-card" class="soft-card p-5 sm:p-8 space-y-8">
           <div id="login-needed" class="hidden rounded-2xl bg-gallery p-4 text-sm flex items-center justify-between gap-3">
             <span>เข้าสู่ระบบก่อนสั่งซื้อ</span><a href="login.html?mode=login" class="apple-pricing-pill px-4 py-2 text-sm">เข้าสู่ระบบ</a>
           </div>
 
-          <div>
+          <div id="buyer-block">
             <h2 class="text-xl font-heading font-semibold mb-1">ข้อมูลสำหรับรับสินค้า</h2>
             <p id="buyer-hint" class="text-sm text-slate mb-4">ใช้สำหรับติดต่อและส่งมอบสินค้า</p>
             <div class="space-y-3">
@@ -163,10 +187,10 @@
 
           <div class="space-y-4">
             <h2 class="text-xl font-heading font-semibold">ชำระเงิน</h2>
-            <div class="bg-control/70 p-1 rounded-full grid grid-cols-3 text-sm" role="tablist">
+            <div id="pay-tabs" class="bg-control/70 p-1 rounded-full grid grid-cols-3 text-sm" role="tablist">
               <button type="button" id="tab-pay-wallet" onclick="switchProductPaymentTab('wallet')" class="py-2 rounded-full font-medium">เครดิตในบัญชี</button>
               <button type="button" id="tab-pay-promptpay" onclick="switchProductPaymentTab('promptpay')" class="py-2 rounded-full font-medium">พร้อมเพย์</button>
-              <button type="button" id="tab-pay-truemoney" onclick="switchProductPaymentTab('truemoney')" class="py-2 rounded-full font-medium">TrueMoney</button>
+              <button type="button" id="tab-pay-angpao" onclick="switchProductPaymentTab('angpao')" class="py-2 rounded-full font-medium">ซองอั่งเปา</button>
             </div>
 
             <div id="panel-pay-wallet" class="bg-gallery rounded-2xl p-5 space-y-3">
@@ -175,10 +199,15 @@
               <a id="wallet-topup-link" href="topup.html" class="hidden apple-explore-pill w-full py-2.5 text-sm">เครดิตไม่พอ · ไปหน้าเติมเงิน</a>
             </div>
             <div id="panel-pay-promptpay" class="hidden bg-gallery rounded-2xl p-5"></div>
-            <div id="panel-pay-truemoney" class="hidden bg-gallery rounded-2xl p-5 space-y-3">
-              <label for="product-voucher-input" class="block text-sm font-medium">ลิงก์ซองของขวัญ TrueMoney</label>
-              <input id="product-voucher-input" type="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/..." class="w-full apple-input px-4 py-3">
-              <p class="text-xs text-slate">สร้างซองตามยอดสุทธิ <strong id="voucher-exact-total" class="text-ink">฿0.00</strong> และแบ่งให้ 1 คน</p>
+            <div id="panel-pay-angpao" class="hidden bg-gallery rounded-2xl p-5 space-y-3">
+              <ol class="text-sm text-slate space-y-1 list-decimal pl-5">
+                <li>เปิดแอป TrueMoney › ส่งซองของขวัญ</li>
+                <li>ใส่ยอด <strong id="voucher-exact-total" class="text-ink">฿0.00</strong> แบ่งให้ 1 คน</li>
+                <li>คัดลอกลิงก์ซองมาวางด้านล่าง แล้วกดชำระเงิน</li>
+              </ol>
+              <label for="product-voucher-input" class="block text-sm font-medium">ลิงก์ซองอั่งเปา TrueMoney</label>
+              <input id="product-voucher-input" type="url" inputmode="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/?v=..." class="w-full apple-input px-4 py-3">
+              <p class="text-xs text-slate">ระบบรับซองอัตโนมัติ ถ้ายอดซองเกินราคาสินค้า ส่วนที่เกินจะเข้าเครดิตในบัญชี</p>
             </div>
           </div>
 
@@ -190,6 +219,7 @@
 
           <div>
             <button id="btn-confirm-product-order" onclick="executeProductPurchase()" type="button" class="w-full apple-pricing-pill py-4 text-[17px]">ชำระเงิน</button>
+            <button id="btn-add-cart" onclick="addProductToCart()" type="button" class="w-full apple-explore-pill py-3.5 text-[16px] mt-3">เพิ่มลงตะกร้า</button>
             <p class="text-center text-xs text-slate mt-3">การซื้อขายไอดีอาจขัดต่อข้อกำหนดของผู้พัฒนาเกมและบัญชีอาจถูกระงับ</p>
           </div>
         </div>
@@ -199,7 +229,7 @@
 
       <section class="pt-10">
         <div class="flex items-end justify-between mb-6"><h2 class="font-heading font-semibold text-2xl sm:text-3xl">สินค้าที่คุณอาจสนใจ</h2><a href="category.html" class="text-appleBlue text-[15px] hover:underline">ดูทั้งหมด ›</a></div>
-        <div id="related-products-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-5"></div>
+        <div id="related-products-grid" class="grid grid-cols-2 gap-3 sm:gap-4"></div>
       </section>
     </div>
   </main>
@@ -207,7 +237,7 @@
   <div id="lightbox" class="hidden fixed inset-0 z-[75] bg-ink/90 backdrop-blur-md items-center justify-center" onclick="closeLightbox()">
     <button type="button" onclick="closeLightbox()" aria-label="ปิด" class="absolute top-5 right-5 w-10 h-10 rounded-full bg-gallery/15 text-gallery text-xl">✕</button>
     <button type="button" onclick="event.stopPropagation();lightboxStep(-1)" aria-label="ก่อนหน้า" class="absolute left-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">‹</button>
-    <img id="lightbox-img" src="" alt="" class="max-w-[92vw] max-h-[85vh] object-contain rounded-2xl" onclick="event.stopPropagation()">
+    <img id="lightbox-img" alt="" referrerpolicy="no-referrer" class="max-w-[92vw] max-h-[85vh] object-contain rounded-2xl" onclick="event.stopPropagation()">
     <button type="button" onclick="event.stopPropagation();lightboxStep(1)" aria-label="ถัดไป" class="absolute right-3 w-11 h-11 rounded-full bg-gallery/15 text-gallery text-2xl">›</button>
   </div>
 

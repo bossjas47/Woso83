@@ -18,7 +18,8 @@ const triggerToast = (m, kind) => toast(m, kind);
 window.triggerToast = triggerToast;
 const tsMs = (v) => v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0);
 
-let PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], STATS = {}, SETTINGS = {};
+let PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
+let rentalFilter = 'todo';
 let me = null;
 
 const formatUrl = (url) => {
@@ -130,11 +131,12 @@ function unlockDashboardUI() {
 
 function startListeners() {
   const warn = (what) => (e) => { console.warn(what, e); triggerToast(`โหลด${what}ไม่สำเร็จ`, 'error'); };
-  onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); }, warn('สินค้า'));
+  onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); }, warn('สินค้า'));
   watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
   onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); }, warn('ออเดอร์'));
   onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
-  onSnapshot(collection(db, 'users'), (s) => { USERS = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminUsers(); }, warn('ผู้ใช้'));
+  onSnapshot(collection(db, 'rentals'), (s) => { RENTALS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminRentals(); renderBadges(); }, warn('การเช่า'));
+  onSnapshot(collection(db, 'users'), (s) => { USERS = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminUsers(); renderDashboard(); }, warn('ผู้ใช้'));
   onSnapshot(collection(db, 'topup_promos'), (s) => { TPROMOS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => num(a.minAmount) - num(b.minAmount)); renderTopupPromos(); });
   onSnapshot(doc(db, 'stats', 'public'), (s) => { STATS = s.exists() ? s.data() : {}; renderStatHints(); });
   onSnapshot(doc(db, 'system', 'settings'), (s) => { const first = !Object.keys(SETTINGS).length; SETTINGS = s.exists() ? s.data() : {}; if (first) loadAdminSettings(); });
@@ -145,10 +147,12 @@ function renderBadges() {
   const set = (id, n) => { const el = $(id); if (!el) return; el.textContent = n; el.classList.toggle('hidden', !n); };
   set('badge-orders', ORDERS.filter(o => o.status === 'pending_payment' || o.status === 'processing').length);
   set('badge-topups', TOPUPS.filter(t => t.status === 'pending').length);
+  set('badge-rentals', RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length);
+  renderDashboard();
 }
 
 function switchAdminTab(tab) {
-  ['products', 'categories', 'orders', 'topups', 'users', 'promos', 'settings'].forEach(t => {
+  ['dashboard', 'products', 'categories', 'orders', 'topups', 'users', 'promos', 'rentals', 'settings'].forEach(t => {
     $(`admin-sec-${t}`)?.classList.toggle('hidden', t !== tab);
     const b = $(`admin-tab-btn-${t}`);
     if (b) b.className = `px-4 py-1.5 rounded-button text-xs transition-all flex items-center shrink-0 ${t === tab ? 'bg-ink text-gallery' : 'text-slate hover:text-ink'}`;
@@ -180,7 +184,7 @@ function renderAdminProducts(list = null) {
       <td class="py-3 px-4"><div class="w-14 h-10 rounded-lg overflow-hidden bg-mist border border-hairline"><img src="${adminEsc(p.image)}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'"></div></td>
       <td class="py-3 px-4"><div class="font-medium text-ink text-xs line-clamp-1">${p.featured ? '<span class="text-pricingBlue">★</span> ' : ''}${adminEsc(p.name)}</div><div class="text-[11px] text-slate line-clamp-1">${adminEsc(p.desc || '-')}</div></td>
       <td class="py-3 px-4"><span class="inline-block bg-mist border border-hairline px-2 py-0.5 rounded-full text-[10px] text-slate">${adminEsc(categoryOf(CATS, p.category)?.name || 'ไม่มีหมวดหมู่')}</span>
-        <div class="text-[10px] text-slate mt-0.5">${srv ? `บริการ · ขั้นต่ำ ${minQtyOf(p, CATS)} ${adminEsc(unitOf(p, CATS))}` : 'ไอดีเกม'}</div></td>
+        <div class="text-[10px] text-slate mt-0.5">${srv ? `บริการ · ขั้นต่ำ ${minQtyOf(p, CATS)} ${adminEsc(unitOf(p, CATS))}` : (num(p.rentHourPrice) > 0 || (p.rentPackages || []).length) ? 'ไอดีเช่า' : 'ไอดีเกม'}</div></td>
       <td class="py-3 px-4 font-mono font-semibold">฿${money(p.price)}</td>
       <td class="py-3 px-4 font-mono text-slate">${adminEsc(p.koen || '-')}</td>
       <td class="py-3 px-4">${out ? '<span class="text-launchOrange font-semibold text-[11px]">หมด (0)</span>' : `<span class="text-emerald-600 font-semibold text-[11px]">${num(p.stock)} ${srv ? adminEsc(unitOf(p, CATS)) : 'ชิ้น'}</span>`}</td>
@@ -221,6 +225,8 @@ function applyTypeUi() {
   $('btn-type-account').className = srv ? off : on;
   $('btn-type-service').className = srv ? on : off;
   $('service-config-box')?.classList.toggle('hidden', !srv);
+  $('rent-config-box')?.classList.toggle('hidden', srv);
+  $('rent-fields')?.classList.toggle('hidden', !$('prod-rent-on')?.checked);
   $('lbl-prod-stock').textContent = srv ? 'จำนวนที่รับงานได้ (หน่วย):' : 'จำนวนสต็อก (ชิ้น):';
   $('hint-prod-stock').textContent = srv ? 'จำนวนงานที่รับได้ ระบบลดให้อัตโนมัติเมื่อมีออเดอร์' : 'ไอดีเกม: กดปุ่ม "สต็อก" ในตารางเพื่อเพิ่มไอดีจริง ระบบนับให้เอง';
   if (srv) {
@@ -282,10 +288,14 @@ function openProductModal(productId = null) {
     set('prod-service-unit', p.serviceUnit); set('prod-service-min', p.serviceMin); set('prod-service-rate', p.serviceRate || p.price);
     $('prod-category').value = categoryOf(CATS, p.category) ? p.category : '';
     $('prod-featured').checked = p.featured === true;
+    $('prod-rent-on').checked = num(p.rentHourPrice) > 0 || (p.rentPackages || []).length > 0;
+    set('prod-rent-rate', p.rentHourPrice); set('prod-rent-min', p.rentMinHours); set('prod-rent-deposit', p.rentDeposit);
+    set('prod-rent-packages', (p.rentPackages || []).map(k => `${k.hours} ${k.price}`).join('\n'));
     $('prod-type').value = isServiceProduct(p, CATS) ? 'service' : 'account';
   } else {
     $('prod-stock').value = 0;
     $('prod-featured').checked = false;
+    $('prod-rent-on').checked = false;
     $('prod-type').value = categoryOf(CATS, $('prod-category').value)?.kind === 'service' ? 'service' : 'account';
   }
   updateImagePreview(p?.image || '');
@@ -299,7 +309,11 @@ async function handleProductFormSubmit(e) {
   const editId = $('prod-edit-id').value.trim();
   const category = $('prod-category').value;
   const isSrv = $('prod-type').value === 'service';
-  const price = num($(isSrv ? 'prod-service-rate' : 'prod-price').value) || num($('prod-price').value);
+  const rentOn = !isSrv && $('prod-rent-on').checked;
+  const rentRate = rentOn ? num($('prod-rent-rate').value) : 0;
+  const rentPackages = rentOn ? $('prod-rent-packages').value.split('\n').map(l => l.trim().split(/[\s,]+/).map(Number)).filter(r => r[0] >= 1 && r[1] > 0).map(r => ({ hours: Math.floor(r[0]), price: r[1] })) : [];
+  if (rentOn && !(rentRate > 0) && !rentPackages.length) return triggerToast('ใส่ราคา/ชั่วโมง หรือแพ็กเกจเช่าอย่างน้อย 1 อย่าง', 'error');
+  const price = rentOn ? (rentRate || Math.min(...rentPackages.map(k => k.price))) : (num($(isSrv ? 'prod-service-rate' : 'prod-price').value) || num($('prod-price').value));
   const image = formatUrl($('prod-image').value);
   const galleryText = $('prod-gallery').value.trim();
   const packages = $('prod-packages').value.split('\n').map(l => l.trim().split(/[\s,]+/).map(Number)).filter(r => r[0] >= 1).map(r => ({ qty: Math.floor(r[0]), bonus: Math.max(0, Math.floor(r[1]) || 0) }));
@@ -318,6 +332,10 @@ async function handleProductFormSubmit(e) {
     serviceUnit: isSrv && $('prod-service-unit').value.trim() ? $('prod-service-unit').value.trim() : deleteField(),
     serviceMin: isSrv && Math.floor(num($('prod-service-min').value)) > 0 ? Math.floor(num($('prod-service-min').value)) : deleteField(),
     serviceRate: deleteField(),
+    rentHourPrice: rentRate > 0 ? rentRate : deleteField(),
+    rentMinHours: rentOn && Math.floor(num($('prod-rent-min').value)) > 1 ? Math.floor(num($('prod-rent-min').value)) : deleteField(),
+    rentDeposit: rentOn && num($('prod-rent-deposit').value) > 0 ? num($('prod-rent-deposit').value) : deleteField(),
+    rentPackages: rentPackages.length ? rentPackages : deleteField(),
     packages: packages.length ? packages : deleteField(), farmModes: farmModes || deleteField(),
     serviceHours: opt('prod-hours'), hoursOpen: opt('prod-hours-open'), hoursClose: opt('prod-hours-close'),
     infoLines: opt('prod-info'), howTo: opt('prod-howto'), warrantyText: opt('prod-warranty'),
@@ -405,6 +423,89 @@ async function deleteSingleStockItem(pid, itemId) {
     triggerToast('ลบไอดีออกจากคลังแล้ว', 'success');
     loadAvailableStockItems(pid);
   } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
+}
+
+// ==========================================
+// DASHBOARD (สรุปภาพรวม): computed in the browser from the lists already loaded
+// ==========================================
+const PAID = (o) => o.status === 'completed' || o.status === 'processing'; // a service order is paid once it is processing
+function renderDashboard() {
+  const cards = $('dash-cards'); if (!cards) return;
+  const day0 = new Date().setHours(0, 0, 0, 0), D = 864e5;
+  // shortcut: rental income is counted on the day the rental started (extensions included), fine for a summary
+  const sales = [...ORDERS.filter(PAID).map(o => ({ t: tsMs(o.createdAt), v: num(o.amount), name: o.productName })), ...RENTALS.map(r => ({ t: tsMs(r.createdAt), v: num(r.price), name: r.productName }))];
+  const sum = (rows, from) => rows.filter(x => x.t >= from).reduce((a, x) => a + x.v, 0);
+  const topups = TOPUPS.filter(t => t.status === 'completed').map(t => ({ t: tsMs(t.completedAt) || tsMs(t.createdAt), v: num(t.amount) }));
+  const card = (label, value, sub = '') => `<div class="apple-card p-4"><p class="text-[11px] text-slate">${label}</p><p class="text-2xl font-heading font-semibold mt-1">${value}</p><p class="text-[11px] text-slate mt-0.5">${sub}</p></div>`;
+  const ordersToday = ORDERS.filter(o => tsMs(o.createdAt) >= day0 && o.status !== 'cancelled').length;
+  const newUsers = (from) => USERS.filter(u => tsMs(u.createdAt) >= from).length;
+  const credit = USERS.reduce((a, u) => a + num(u.walletBalance), 0);
+  cards.innerHTML = [
+    card('ยอดขายวันนี้', '฿' + money(sum(sales, day0)), `${ordersToday} ออเดอร์`),
+    card('ยอดขาย 7 วัน', '฿' + money(sum(sales, day0 - 6 * D)), `เฉลี่ย ฿${money(sum(sales, day0 - 6 * D) / 7)}/วัน`),
+    card('ยอดขาย 30 วัน', '฿' + money(sum(sales, day0 - 29 * D)), `ทั้งหมด ฿${money(sum(sales, 0))}`),
+    card('เงินเติมเข้า 30 วัน', '฿' + money(sum(topups, day0 - 29 * D)), `วันนี้ ฿${money(sum(topups, day0))}`),
+    card('ผู้ใช้ใหม่', newUsers(day0), `7 วัน ${newUsers(day0 - 6 * D)} · ทั้งหมด ${USERS.length}`),
+    card('เครดิตค้างในระบบ', '฿' + money(credit), 'ยอดรวมของทุกบัญชี'),
+    card('กำลังเช่า', RENTALS.filter(r => r.status === 'active' && num(r.endMs) > Date.now()).length, `รอตรวจ ${RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length}`),
+    card('คิวบริการที่ค้าง', ORDERS.filter(o => o.productType === 'service' && o.status === 'processing').length, 'กำลังดำเนินการ / รอคิว')
+  ].join('');
+  // 14-day bars
+  const days = Array.from({ length: 14 }, (_, k) => day0 - (13 - k) * D);
+  const vals = days.map(d => sum(sales.filter(x => x.t < d + D), d));
+  const max = Math.max(...vals, 1);
+  $('dash-chart').innerHTML = days.map((d, k) => `<div class="flex-1 flex flex-col items-center justify-end h-full min-w-0" title="${new Date(d).toLocaleDateString('th-TH')} ฿${money(vals[k])}"><div class="w-full rounded-t-md ${k === 13 ? 'bg-pricingBlue' : 'bg-control'}" style="height:${Math.max(vals[k] ? 4 : 1, vals[k] / max * 100)}%"></div><span class="text-[9px] text-slate mt-1">${new Date(d).getDate()}</span></div>`).join('');
+  // top products (30 days)
+  const by = {};
+  sales.filter(x => x.t >= day0 - 29 * D).forEach(x => { const k = String(x.name || '').replace(/\s*\(.*\)$/, ''); by[k] = by[k] || { n: 0, v: 0 }; by[k].n++; by[k].v += x.v; });
+  const top = Object.entries(by).sort((a, b) => b[1].v - a[1].v).slice(0, 5);
+  $('dash-top').innerHTML = top.length ? top.map(([n, x], k) => `<div class="flex justify-between gap-3"><span class="truncate">${k + 1}. ${adminEsc(n)}</span><span class="shrink-0 text-slate">${x.n} รายการ · <b class="text-ink">฿${money(x.v)}</b></span></div>`).join('') : '<p class="text-slate">ยังไม่มีข้อมูล</p>';
+  // to-do
+  const low = PRODUCTS.filter(p => !isServiceProduct(p, CATS) && num(p.stock) <= 3).sort((a, b) => num(a.stock) - num(b.stock));
+  const todo = [
+    [ORDERS.filter(o => o.status === 'pending_payment').length, 'ออเดอร์รอตรวจการชำระเงิน', 'orders'],
+    [TOPUPS.filter(t => t.status === 'pending').length, 'รายการเติมเงินรอตรวจ', 'topups'],
+    [RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length, 'การเช่ารอตรวจ (เปลี่ยนรหัส/คืนมัดจำ)', 'rentals']
+  ].filter(x => x[0]);
+  $('dash-todo').innerHTML = todo.map(([n, t, tab]) => `<button type="button" onclick="switchAdminTab('${tab}')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span>${t}</span><b class="text-launchOrange">${n}</b></button>`).join('')
+    + low.slice(0, 6).map(p => `<button type="button" onclick="switchAdminTab('products')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span class="truncate">สต็อกเหลือน้อย: ${adminEsc(p.name)}</span><b class="${num(p.stock) <= 0 ? 'text-red-500' : 'text-launchOrange'}">${num(p.stock)}</b></button>`).join('')
+    || '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
+  if (!todo.length && !low.length) $('dash-todo').innerHTML = '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
+}
+
+// ==========================================
+// RENTALS (เช่าไอดี): the Worker does every state change; this tab only lists and closes them
+// ==========================================
+const RENT_STATUS = { active: ['กำลังเช่า', 'text-appleBlue'], expired: ['หมดเวลา · รอตรวจ', 'text-launchOrange'], returned: ['คืนแล้ว · รอตรวจ', 'text-launchOrange'], closed: ['ปิดรายการแล้ว', 'text-slate'] };
+function setRentalFilter(f) { rentalFilter = f; renderAdminRentals(); }
+function renderAdminRentals() {
+  const body = $('admin-rentals-body'); if (!body) return;
+  ['todo', 'active', 'all'].forEach(k => { const b = $(`rf-${k}`); if (b) { b.classList.toggle('!bg-ink', k === rentalFilter); b.classList.toggle('!text-gallery', k === rentalFilter); } });
+  const rows = RENTALS.filter(r => rentalFilter === 'all' || (rentalFilter === 'active' ? r.status === 'active' : r.status === 'returned' || r.status === 'expired'));
+  $('admin-rentals-empty').classList.toggle('hidden', rows.length > 0);
+  const t = (ms) => new Date(num(ms)).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+  body.innerHTML = rows.map(r => {
+    const [label, cls] = RENT_STATUS[r.status] || [r.status, 'text-slate'];
+    const id = adminEsc(JSON.stringify(r.id));
+    const todo = r.status === 'returned' || r.status === 'expired';
+    const dep = { held: 'ถือมัดจำ', refunded: 'คืนแล้ว', forfeited: 'ยึดแล้ว', none: '' }[r.depositStatus] || '';
+    return `<tr class="border-b border-hairline">
+      <td class="py-3 px-4"><div class="font-medium">${adminEsc(r.userEmail || r.nameMask || '-')}</div><div class="text-[11px] text-slate line-clamp-1">${adminEsc(r.productName)}</div>${r.problem ? `<div class="text-[11px] text-red-500">⚠ แจ้งปัญหา${r.note ? ': ' + adminEsc(r.note) : ''}</div>` : ''}</td>
+      <td class="py-3 px-4 text-slate">${t(r.startMs)}<br>ถึง ${t(r.endMs)}<div class="text-[11px]">${adminEsc(r.hours)} ชม.${num(r.extended) ? ` · ต่อ ${adminEsc(r.extended)} ครั้ง` : ''} · ดูรหัส ${adminEsc(r.viewCount || 0)} ครั้ง</div></td>
+      <td class="py-3 px-4 font-mono">฿${money(r.price)}<div class="text-[11px] text-slate">มัดจำ ฿${money(r.deposit)} ${dep}</div></td>
+      <td class="py-3 px-4 font-medium ${cls}">${label}</td>
+      <td class="py-3 px-4 text-right whitespace-nowrap">${todo ? `<button onclick='closeRental(${id}, "refund")' class="apple-pricing-pill px-3 py-1 text-[11px]">คืนมัดจำ</button> <button onclick='closeRental(${id}, "forfeit")' class="apple-explore-pill px-3 py-1 text-[11px] text-red-500 border-red-200">ยึดมัดจำ</button>` : ''}</td></tr>`;
+  }).join('');
+}
+async function closeRental(id, action) {
+  const r = RENTALS.find(x => x.id === id); if (!r) return;
+  const word = action === 'refund' ? `คืนมัดจำ ฿${money(r.deposit)} ให้ลูกค้า` : `ยึดมัดจำ ฿${money(r.deposit)}`;
+  const pw = prompt(`${word}\nและเปิดไอดีให้เช่าต่อ\n\nถ้าเปลี่ยนรหัสผ่านไอดีแล้ว ใส่รหัสผ่านใหม่ตรงนี้ (เว้นว่างถ้าไม่เปลี่ยน)\nกดยกเลิกเพื่อไม่ทำอะไร`, '');
+  if (pw === null) return;
+  try {
+    await callWorker('/admin/rent', { rentalId: id, action, ...(pw.trim() ? { password: pw.trim() } : {}) });
+    triggerToast(action === 'refund' ? 'คืนมัดจำและเปิดไอดีแล้ว' : 'ยึดมัดจำและเปิดไอดีแล้ว', 'success');
+  } catch (e) { triggerToast(e.message || 'ทำรายการไม่สำเร็จ', 'error'); }
 }
 
 // ==========================================
@@ -649,7 +750,7 @@ function renderAdminTopups() {
     return `<article class="apple-card p-4 sm:p-5 text-xs flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
       <div class="min-w-0">
         <p class="font-mono font-bold">${adminEsc(t.txnId || t.id)} <span class="font-normal text-slate">· ${adminEsc(fmtDate(t.createdAt))}</span></p>
-        <p class="mt-0.5">ผู้ใช้: <button type="button" class="text-appleBlue hover:underline" onclick='openUserModal(${adminEsc(JSON.stringify(t.uid || ''))})'>${adminEsc(u.username || String(t.email || '').split('@')[0] || t.uid)}</button> · ${t.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}${t.verifiedVia ? ` · ตรวจอัตโนมัติ (${adminEsc(t.verifiedVia)})` : ''}</p>
+        <p class="mt-0.5">ผู้ใช้: <button type="button" class="text-appleBlue hover:underline" onclick='openUserModal(${adminEsc(JSON.stringify(t.uid || ''))})'>${adminEsc(u.username || String(t.email || '').split('@')[0] || t.uid)}</button> · ${t.paymentMethod === 'angpao' ? 'ซองอั่งเปา (อัตโนมัติ)' : t.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}${t.verifiedVia ? ` · ตรวจอัตโนมัติ (${adminEsc(t.verifiedVia)})` : ''}</p>
         ${t.paymentMethod === 'truemoney' && t.proofRef ? `<p class="text-slate break-all"><a class="text-appleBlue select-all" href="${adminEsc(t.proofRef)}" target="_blank" rel="noopener">${adminEsc(t.proofRef)}</a></p>` : (t.proofRef && !t.hasSlip ? `<p class="text-slate break-all select-all">อ้างอิง: ${adminEsc(t.proofRef)}</p>` : '')}
         ${t.adminNote ? `<p class="text-slate">หมายเหตุ: ${adminEsc(t.adminNote)}</p>` : ''}
       </div>
@@ -827,7 +928,7 @@ async function loadWalletLogs() {
 }
 function loadUserHistory() {
   const t = TOPUPS.filter(x => x.uid === umUid), o = ORDERS.filter(x => x.userId === umUid);
-  $('um-topups').innerHTML = t.length ? t.map(x => `<div class="py-2 flex justify-between gap-3"><span>${adminEsc(fmtDate(x.createdAt))} · ${x.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}</span><span class="font-mono">฿${money(x.amount)} · ${(TOPUP_UI[x.status] || [x.status])[0]}</span></div>`).join('') : '<p class="py-2 text-slate">ไม่มีรายการ</p>';
+  $('um-topups').innerHTML = t.length ? t.map(x => `<div class="py-2 flex justify-between gap-3"><span>${adminEsc(fmtDate(x.createdAt))} · ${x.paymentMethod === 'angpao' ? 'ซองอั่งเปา (อัตโนมัติ)' : x.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}</span><span class="font-mono">฿${money(x.amount)} · ${(TOPUP_UI[x.status] || [x.status])[0]}</span></div>`).join('') : '<p class="py-2 text-slate">ไม่มีรายการ</p>';
   $('um-orders').innerHTML = o.length ? o.map(x => `<div class="py-2 flex justify-between gap-3"><span class="min-w-0 truncate">${adminEsc(fmtDate(x.createdAt))} · ${adminEsc(x.productName)} ×${adminEsc(x.quantity || 1)}</span><span class="font-mono whitespace-nowrap">฿${money(x.amount)} · ${(ORDER_UI[x.status] || [x.status])[0]}</span></div>`).join('') : '<p class="py-2 text-slate">ไม่มีรายการ</p>';
 }
 
@@ -842,6 +943,8 @@ async function loadAdminSettings() {
   $('setting-announce-on').checked = d.announcementEnabled === true;
   set('setting-announce-text', d.announcementText ?? d.marqueeText);
   set('setting-announce-link', d.announcementLink);
+  $('setting-popup-on').checked = d.popupEnabled === true;
+  set('setting-popup-images', (d.popupImages || []).join('\n'));
   set('setting-contact-line', d.contactLine ?? d.lineId);
   set('setting-contact-facebook', d.contactFacebook);
   set('setting-contact-discord', d.contactDiscord ?? d.discordLink);
@@ -867,6 +970,7 @@ async function handleSaveSettings(e) {
   const n = (id) => Math.max(0, Math.floor(num(v(id))));
   const payload = {
     announcementEnabled: $('setting-announce-on').checked, announcementText: v('setting-announce-text'), announcementLink: v('setting-announce-link'),
+    popupEnabled: $('setting-popup-on').checked, popupImages: v('setting-popup-images').split('\n').map(x => formatUrl(x.trim())).filter(Boolean).slice(0, 6),
     contactLine: v('setting-contact-line'), contactFacebook: formatUrl(v('setting-contact-facebook')), contactDiscord: formatUrl(v('setting-contact-discord')),
     baseStats: { users: n('setting-base-users'), sales: n('setting-base-sales'), orders: n('setting-base-orders') },
     promptpayName: v('setting-promptpay-name'), promptpayNumber: v('setting-promptpay-number'), promptpayQrUrl: formatUrl(v('setting-promptpay-qr-url')),
@@ -902,6 +1006,7 @@ async function testWebhook() {
 }
 
 Object.assign(window, {
+  renderDashboard, applyTypeUi, setRentalFilter, closeRental, renderAdminRentals,
   handlePinSetupSubmit, handlePinUnlockSubmit, promptResetPin, lockAdminSession, switchAdminTab,
   openStockModal, closeStockModal, handleStockTextareaInput, submitBulkStockImport, deleteSingleStockItem, openStockModalQuick,
   openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,

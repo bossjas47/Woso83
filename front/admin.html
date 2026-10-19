@@ -12,44 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            gallery: '#ffffff',
-            mist: '#f5f5f7',
-            frost: '#fafafc',
-            hairline: '#d6d6d6',
-            control: '#e6e6e8',
-            ink: '#1d1d1f',
-            slate: '#707070',
-            steel: '#86868b',
-            appleBlue: '#0066cc',
-            pricingBlue: '#0071e3',
-            launchOrange: '#b64400'
-          },
-          fontFamily: {
-            display: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Outfit', 'sans-serif'],
-            body: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Prompt', 'sans-serif'],
-            mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace']
-          },
-          borderRadius: {
-            'card': '28px',
-            'links': '10px',
-            'pill': '36px',
-            'images': '28px',
-            'input': '980px',
-            'button': '9999px',
-            'nav': '20px'
-          }
-        }
-      }
-    }
-  </script>
+  <link rel="stylesheet" href="../css/tw.css">
 
   <link rel="stylesheet" href="../css/style.css">
 
@@ -334,7 +297,7 @@
         
         <div class="flex items-center gap-3">
           <a href="../index.html" class="flex items-center gap-2">
-            <img src="../assets/logo-icon.png" alt="" width="28" height="28" class="w-7 h-7 object-contain">
+            <img src="../assets/logo-icon-96.png" alt="" width="28" height="28" class="w-7 h-7 object-contain">
             <span class="font-display font-bold text-sm tracking-tight text-ink">ASTRAPHEX HUB</span>
             <span class="text-[11px] text-launchOrange font-semibold uppercase">Admin</span>
           </a>
@@ -367,9 +330,11 @@
     <!-- Sub-navigation Bar (5 Sections) -->
     <div class="border-b border-hairline bg-mist py-2.5">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto">
+        <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">สรุปภาพรวม</button>
         <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">สินค้า &amp; สต็อก</button>
         <button id="admin-tab-btn-categories" onclick="switchAdminTab('categories')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">หมวดหมู่</button>
         <button id="admin-tab-btn-orders" onclick="switchAdminTab('orders')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ออเดอร์ <span id="badge-orders" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
+        <button id="admin-tab-btn-rentals" onclick="switchAdminTab('rentals')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">เช่าไอดี <span id="badge-rentals" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
         <button id="admin-tab-btn-topups" onclick="switchAdminTab('topups')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">เติมเงิน &amp; โปรโมชั่น <span id="badge-topups" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
         <button id="admin-tab-btn-users" onclick="switchAdminTab('users')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ผู้ใช้</button>
         <button id="admin-tab-btn-promos" onclick="switchAdminTab('promos')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">โค้ดส่วนลด</button>
@@ -381,6 +346,16 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
       <!-- SECTION 1: PRODUCT & STOCK MANAGEMENT -->
+      <!-- SECTION: DASHBOARD -->
+      <section id="admin-sec-dashboard" class="hidden space-y-4">
+        <div id="dash-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+        <div class="apple-card p-4 sm:p-5"><div class="flex items-center justify-between"><p class="text-sm font-semibold">ยอดขายรายวัน 14 วันล่าสุด</p><p class="text-[11px] text-slate">ออเดอร์ที่ชำระแล้ว + ค่าเช่า</p></div><div id="dash-chart" class="mt-4 flex items-end gap-1.5 h-40"></div></div>
+        <div class="grid lg:grid-cols-2 gap-4">
+          <div class="apple-card p-4 sm:p-5"><p class="text-sm font-semibold">สินค้าขายดี 30 วัน</p><div id="dash-top" class="mt-3 space-y-2 text-xs"></div></div>
+          <div class="apple-card p-4 sm:p-5"><p class="text-sm font-semibold">ต้องจัดการ</p><div id="dash-todo" class="mt-3 space-y-2 text-xs"></div></div>
+        </div>
+      </section>
+
       <section id="admin-sec-products" class="block space-y-6">
         
         <!-- Metrics Cards -->
@@ -614,6 +589,27 @@
       </section>
 
       <!-- SECTION: SETTINGS -->
+      <!-- SECTION: RENTALS -->
+      <section id="admin-sec-rentals" class="hidden space-y-4">
+        <div class="apple-card p-4 sm:p-5 text-xs text-slate space-y-1">
+          <p class="font-semibold text-ink">เช่าไอดี</p>
+          <p>หมดเวลาหรือลูกค้าคืนแล้ว ไอดีจะถูกล็อก (รอเปลี่ยนรหัส) · เปลี่ยนรหัสในเกม แล้วกด "คืนมัดจำ" หรือ "ยึดมัดจำ" ไอดีจะกลับมาให้เช่าต่อ</p>
+          <p>ต้องตั้ง Cron Trigger <span class="font-mono">*/5 * * * *</span> ที่ Worker เพื่อให้ระบบล็อกไอดีและแจ้ง Discord ตอนหมดเวลา</p>
+        </div>
+        <div class="flex gap-2 text-xs" id="rental-filter">
+          <button type="button" onclick="setRentalFilter('todo')" id="rf-todo" class="apple-explore-pill px-3 py-1.5">รอตรวจ</button>
+          <button type="button" onclick="setRentalFilter('active')" id="rf-active" class="apple-explore-pill px-3 py-1.5">กำลังเช่า</button>
+          <button type="button" onclick="setRentalFilter('all')" id="rf-all" class="apple-explore-pill px-3 py-1.5">ทั้งหมด</button>
+        </div>
+        <div class="apple-card overflow-hidden"><div class="overflow-x-auto">
+          <table class="w-full text-left text-xs admin-table">
+            <thead><tr><th class="py-3 px-4">ผู้เช่า / สินค้า</th><th class="py-3 px-4">เวลา</th><th class="py-3 px-4">ค่าเช่า / มัดจำ</th><th class="py-3 px-4">สถานะ</th><th class="py-3 px-4 text-right">ดำเนินการ</th></tr></thead>
+            <tbody id="admin-rentals-body" class="divide-y divide-hairline"></tbody>
+          </table>
+        </div></div>
+        <p id="admin-rentals-empty" class="hidden text-center text-slate text-xs py-8">ยังไม่มีรายการ</p>
+      </section>
+
       <section id="admin-sec-settings" class="hidden">
         <form id="settings-form" onsubmit="handleSaveSettings(event)" class="max-w-3xl mx-auto space-y-6">
           <div class="apple-card p-6 space-y-4">
@@ -621,6 +617,8 @@
             <label class="flex items-center gap-2 text-sm"><input id="setting-announce-on" type="checkbox"> แสดงแถบประกาศทุกหน้า</label>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-announce-text">ข้อความประกาศ</label><input id="setting-announce-text" type="text" maxlength="300" placeholder="เช่น เติมเงินวันนี้รับโบนัส 10%" class="w-full apple-input px-3.5 py-2 text-xs"></div>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-announce-link">ลิงก์เมื่อกดประกาศ (ไม่บังคับ)</label><input id="setting-announce-link" type="text" placeholder="https://... หรือ /front/topup.html" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <label class="flex items-center gap-2 text-sm pt-2"><input id="setting-popup-on" type="checkbox"> แสดงป็อปอัปรูปภาพหน้าแรก</label>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-popup-images">ลิงก์รูปป็อปอัป — บรรทัดละ 1 รูป (สูงสุด 6)</label><textarea id="setting-popup-images" rows="3" placeholder="https://.../promo1.jpg" class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"></textarea><span class="text-[10px] text-steel">ขึ้นทุกครั้งที่เข้าหน้าแรก จนลูกค้ากด "ไม่แสดงอีก 1 ชม."</span></div>
           </div>
 
           <div class="apple-card p-6 space-y-4">
@@ -868,7 +866,7 @@
               min="0" 
               placeholder="350.00" 
               class="w-full apple-input px-3.5 py-2 text-xs font-mono"
-              required
+
             />
           </div>
 
@@ -1057,6 +1055,21 @@
             class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"
             required
           ></textarea>
+        </div>
+
+        <div id="rent-config-box" class="space-y-3 p-4 rounded-2xl bg-mist">
+          <label class="flex items-center gap-2 text-xs font-semibold"><input id="prod-rent-on" type="checkbox" class="w-4 h-4" onchange="applyTypeUi()"> เปิดให้เช่าไอดีนี้ (คิดเป็นชั่วโมง)</label>
+          <div id="rent-fields" class="hidden space-y-3">
+            <div class="grid grid-cols-3 gap-3">
+              <div><label class="block text-[11px] font-medium text-slate mb-1">ราคา/ชั่วโมง (฿):</label><input id="prod-rent-rate" type="number" min="0" step="0.01" placeholder="30" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1">ขั้นต่ำ (ชม.):</label><input id="prod-rent-min" type="number" min="1" step="1" placeholder="2" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1">มัดจำ (฿):</label><input id="prod-rent-deposit" type="number" min="0" step="1" placeholder="100" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+            </div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1">แพ็กเกจเหมา — บรรทัดละ 1 แพ็ก: <span class="font-mono">ชั่วโมง ราคา</span></label>
+              <textarea id="prod-rent-packages" rows="3" placeholder="24 500&#10;72 1200" class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"></textarea>
+              <span class="text-[10px] text-steel">เลือกชั่วโมงตรงกับแพ็ก = ราคาแพ็ก, ชั่วโมงอื่น = ชั่วโมง × ราคา/ชั่วโมง. ว่างราคา/ชั่วโมงได้ ถ้าขายเป็นแพ็กอย่างเดียว</span></div>
+            <p class="text-[10px] text-steel">เพิ่มไอดีให้เช่าด้วยปุ่ม "สต็อก" เหมือนไอดีขาย · ลูกค้าเห็นรหัสเฉพาะช่วงที่เช่าอยู่</p>
+          </div>
         </div>
 
         <div class="space-y-3 p-4 rounded-2xl bg-mist">

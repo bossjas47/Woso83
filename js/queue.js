@@ -15,7 +15,8 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 const when = (v) => v?.toDate ? v.toDate() : (v ? new Date(v) : new Date());
 const fmt = (d) => d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
 
-let CATS = [], PRODUCTS = [], QUEUE = [], uid = '';
+let CATS = [], PRODUCTS = [], QUEUE = [], uid = '', authReady = false;
+let view = location.hash === '#mine' ? 'mine' : 'all';
 
 function isOpen(open, close, now = new Date()) {
   if (!open || !close) return null;
@@ -25,7 +26,48 @@ function isOpen(open, close, now = new Date()) {
   return o <= c ? m >= o && m < c : m >= o || m < c; // closing time past midnight, e.g. 20:00-07:00
 }
 
+function setQueueView(v) {
+  view = v;
+  history.replaceState(null, '', v === 'mine' ? '#mine' : location.pathname + location.search);
+  render();
+}
+window.setQueueView = setQueueView;
+
+/** Position of each queue row inside its own service (oldest first), the same numbers the public list shows. */
+function seqOf(rows) {
+  const by = new Map();
+  [...rows].sort((a, b) => when(a.createdAt) - when(b.createdAt)).forEach(q => { const n = (by.get(q.productId) || 0) + 1; by.set(q.productId, n); q._seq = n; });
+}
+const STEPS = ['pending_payment', 'waiting', 'working', 'done'];
+function renderMine() {
+  const el = document.getElementById('queue-mine');
+  if (!authReady) { el.innerHTML = '<div class="skeleton h-28 !rounded-[28px]"></div>'; return; }
+  if (!uid) { el.innerHTML = `<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">เข้าสู่ระบบเพื่อดูการจ้างของคุณ</p><a href="login.html?mode=login&next=queue.html%23mine" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a></div>`; return; }
+  seqOf(QUEUE.filter(q => q.status !== 'cancelled' && when(q.createdAt).getTime() >= Date.now() - DAY30));
+  const mine = QUEUE.filter(q => q.uid === uid && q.status !== 'cancelled').sort((a, b) => when(b.createdAt) - when(a.createdAt));
+  if (!mine.length) { el.innerHTML = `<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ยังไม่มีการจ้างงาน</p><p class="text-slate text-sm mt-1">เมื่อคุณสั่งงานบริการ คิวของคุณจะแสดงที่นี่</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูบริการ</a></div>`; return; }
+  el.innerHTML = mine.map(q => {
+    const [label, cls] = STATUS[q.status] || [q.status, 'text-slate'];
+    const step = STEPS.indexOf(q.status);
+    const ahead = q.status === 'waiting' ? QUEUE.filter(o => o.productId === q.productId && ['waiting', 'working'].includes(o.status) && when(o.createdAt) < when(q.createdAt)).length : 0;
+    return `<article class="apple-card p-5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0"><p class="text-xs text-slate">${esc(q.orderNumber || '')}</p>
+          <h2 class="text-[17px] font-semibold leading-snug">${esc(q.productName)}</h2>
+          <p class="text-sm text-slate mt-0.5">${esc(q.quantity)} ${esc(q.unit)} · ${fmt(when(q.createdAt))}</p></div>
+        <div class="text-right shrink-0">${q._seq ? `<p class="text-2xl font-heading font-semibold">#${q._seq}</p>` : ''}<p class="text-sm font-medium ${cls}">${label}</p></div>
+      </div>
+      <div class="stepper mt-4" style="grid-template-columns:repeat(4,1fr)">${['รอตรวจสอบ', 'รอคิว', 'กำลังทำ', 'สำเร็จ'].map((t, i) => `<div class="step ${i <= step ? 'done' : ''}"><div class="step-bar"></div>${t}</div>`).join('')}</div>
+      ${q.status === 'waiting' ? `<p class="text-sm text-slate mt-3">${ahead ? `มีคิวก่อนหน้าคุณ ${ahead} คิว` : 'คุณเป็นคิวถัดไป'}</p>` : ''}
+    </article>`;
+  }).join('') + `<a href="account.html#orders" class="block text-center text-appleBlue text-[15px] pt-2">ดูรายละเอียดในออเดอร์ของฉัน ›</a>`;
+}
+
 function render() {
+  ['all', 'mine'].forEach(k => { const b = document.getElementById(`qtab-${k}`); if (b) { b.className = `py-2.5 rounded-full font-medium transition ${view === k ? 'bg-gallery text-ink shadow-sm' : 'text-slate'}`; b.setAttribute('aria-selected', String(view === k)); } });
+  document.getElementById('queue-mine').classList.toggle('hidden', view !== 'mine');
+  document.getElementById('queue-groups').classList.toggle('hidden', view !== 'all');
+  if (view === 'mine') { renderMine(); return; }
   const el = document.getElementById('queue-groups');
   const cutoff = Date.now() - DAY30;
   const rows = QUEUE.filter(q => q.status !== 'cancelled' && when(q.createdAt).getTime() >= cutoff);
@@ -74,5 +116,5 @@ function render() {
   // shortcut: reads the whole queue collection and filters 30 days client-side; add a createdAt range query when it grows
   onSnapshot(collection(db, 'queue'), (s) => { QUEUE = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); },
     (e) => { document.getElementById('queue-groups').innerHTML = '<p class="text-slate text-sm">โหลดคิวไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; console.warn(e); });
-  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; render(); });
+  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; authReady = true; render(); });
 })();

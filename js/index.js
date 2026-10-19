@@ -1,4 +1,5 @@
 import { db } from "../firebase-config.js";
+import "./popup.js";
 import { collection, doc, limit, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { esc, num, money, timeAgo, onSettings, icon, ICONS } from "./ui.js";
 import { mountCatalog, cardFor, stockOf } from "./catalog.js";

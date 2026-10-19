@@ -23,8 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="../js/tw-config.js"></script>
+  <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
@@ -69,19 +68,20 @@
       <!-- Step 2 -->
       <section class="lg:col-span-7 apple-card p-5 sm:p-7 space-y-5">
         <h2 class="text-xl font-heading font-semibold">2. ช่องทางชำระเงิน</h2>
-        <div class="bg-control/70 p-1 rounded-full grid grid-cols-2 text-sm" role="tablist">
+        <div id="topup-tabs" class="bg-control/70 p-1 rounded-full grid grid-cols-2 text-sm" role="tablist">
           <button type="button" id="tab-promptpay" onclick="switchTopupPaymentTab('promptpay')" class="py-2 rounded-full font-medium">พร้อมเพย์ QR</button>
-          <button type="button" id="tab-truemoney" onclick="switchTopupPaymentTab('truemoney')" class="py-2 rounded-full font-medium">ซอง TrueMoney</button>
+          <button type="button" id="tab-angpao" onclick="switchTopupPaymentTab('angpao')" class="py-2 rounded-full font-medium">ซองอั่งเปา TrueMoney</button>
         </div>
         <div id="panel-promptpay" class="soft-card p-5"></div>
-        <div id="panel-truemoney" class="hidden soft-card p-5 space-y-3">
+        <div id="panel-angpao" class="hidden soft-card p-5 space-y-3">
           <ol class="text-sm text-slate space-y-1 list-decimal pl-5">
-            <li>เปิดแอป TrueMoney › ส่งซองของขวัญ</li>
-            <li>ใส่ยอด <strong id="tm-amount" class="text-ink">฿0.00</strong> แบ่งให้ 1 คน</li>
+            <li>เปิดแอป TrueMoney › ส่งซองของขวัญ (อั่งเปา)</li>
+            <li>ใส่ยอดที่ต้องการเติม <span id="tm-amount-wrap">(<strong id="tm-amount" class="text-ink">฿0.00</strong>)</span> แบ่งให้ 1 คน</li>
             <li>คัดลอกลิงก์ซองมาวางด้านล่าง</li>
           </ol>
-          <label for="tm-link" class="block text-sm font-medium">ลิงก์ซองของขวัญ</label>
-          <input id="tm-link" type="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/?v=..." class="w-full apple-input px-4 py-3">
+          <label for="tm-link" class="block text-sm font-medium">ลิงก์ซองอั่งเปา</label>
+          <input id="tm-link" type="url" inputmode="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/?v=..." class="w-full apple-input px-4 py-3">
+          <p class="text-xs text-slate">ระบบรับซองให้อัตโนมัติ เครดิตเข้าตามยอดในซอง พร้อมโบนัสโปรโมชั่น</p>
         </div>
         <button id="btn-topup" type="button" onclick="executeTopup()" class="w-full apple-pricing-pill py-4 text-[17px]">ส่งหลักฐานการโอน</button>
         <p id="topup-mode-note" class="text-xs text-slate text-center"></p>

@@ -58,6 +58,7 @@ img { max-width: 100%; }
 }
 .apple-select:focus { outline: none; border-color: #0071e3; box-shadow: 0 0 0 4px rgba(0,113,227,.16); }
 .row { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; }
+.row.hidden { display: none; }
 
 /* Badges on product cards */
 .badge { display: inline-flex; align-items: center; gap: .25rem; font-size: 11px; font-weight: 600; padding: .25rem .625rem; border-radius: 9999px; white-space: nowrap; }
@@ -74,17 +75,8 @@ img { max-width: 100%; }
 .marquee-track:hover { animation-play-state: paused; }
 @keyframes marquee { to { transform: translate3d(-50%, 0, 0); } }
 
-/* Smooth page changes: cross-document view transition (Chrome/Edge/Safari 18+), header and bottom nav stay put */
-@view-transition { navigation: auto; }
-::view-transition-old(root) { animation: vt-out .14s ease-in both; }
-::view-transition-new(root) { animation: vt-in .22s ease-out both; }
-@keyframes vt-out { to { opacity: 0; } }
-@keyframes vt-in { from { opacity: 0; } }
-#site-header { view-transition-name: site-header; min-height: 56px; }
-.bottom-nav { view-transition-name: bottom-nav; }
-::view-transition-group(site-header), ::view-transition-group(bottom-nav) { animation-duration: 0s; }
-@keyframes page-in { from { opacity: 0; } }
-main { animation: page-in .24s ease-out both; }
+/* Page changes: see css/transition.css. Reserve the shell's space so the page does not jump while it loads. */
+#site-header { min-height: 56px; }
 @media (max-width: 767px) { body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); } }
 
 /* Shell: header */
@@ -152,4 +144,4 @@ body.has-bottom-nav { padding-bottom: calc(84px + env(safe-area-inset-bottom)); 
 .step.done .step-bar { background: #0071e3; }
 .step.done { color: #1d1d1f; font-weight: 600; }
 
-@media (prefers-reduced-motion: reduce) { .marquee-track, main { animation: none; } ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } * { scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } * { scroll-behavior: auto !important; } }
