@@ -606,45 +606,23 @@ function closeDetailModal() {
 // ==========================================
 // 5. CHECKOUT & ATOMIC STOCK CLAIM ENGINE
 // ==========================================
+
+/**
+ * ✅ FIXED: ทุกสินค้า (ทั้งไอดีและบริการ) จะพาไปหน้า front/product.html?id=...
+ * เดิม: สินค้าไอดีจะไปหน้า checkout ใน index.html (ไม่เปลี่ยนหน้า)
+ */
 function startCheckout(productId) {
   const product = PRODUCTS.find(p => String(p.id) === String(productId));
-  if (!product || getEffectiveStock(product) <= 0) return;
-  // services need the game login + packages, which live on the product page
-  if (isServiceProduct(product, CATS)) { window.location.href = `front/product.html?id=${encodeURIComponent(product.id)}`; return; }
-  if (!currentUser) {
-    triggerToast('กรุณาเข้าสู่ระบบก่อนสั่งซื้อ เพื่อให้ดูไอดีที่ได้รับในเมนูออเดอร์ของฉันได้');
-    setTimeout(() => { window.location.href = 'front/login.html?mode=login'; }, 1200);
+  if (!product) {
+    triggerToast('ไม่พบสินค้าที่ต้องการ');
     return;
   }
-  selectedProduct = product;
-
-  const isService = isServiceProduct(selectedProduct);
-  const minQty = minQtyOf(selectedProduct, CATS);
-  serviceOrderQty = Math.min(minQty, getEffectiveStock(selectedProduct));
-
-  promoDiscountFn = null;
-  appliedPromoCode = null;
-  document.getElementById('promo-input').value = '';
-
-  const srvBox = document.getElementById('checkout-service-options');
-  if (srvBox) {
-    if (isService) {
-      srvBox.classList.remove('hidden');
-      document.getElementById('checkout-service-unit').innerText = unitOf(selectedProduct, CATS);
-      document.getElementById('checkout-service-qty').innerText = serviceOrderQty;
-    } else {
-      srvBox.classList.add('hidden');
-    }
+  if (getEffectiveStock(product) <= 0) {
+    triggerToast('สินค้าหมดหรือคิวเต็มชั่วคราว');
+    return;
   }
-
-  document.getElementById('checkout-product-img').src = selectedProduct.image || FALLBACK_IMG;
-  document.getElementById('checkout-product-name').innerText = selectedProduct.name;
-  document.getElementById('checkout-product-koen').innerText = formatKoenText(selectedProduct);
-  document.getElementById('checkout-product-desc').innerText = selectedProduct.desc || '-';
-  
-  updateCheckoutTotal();
-  switchPaymentTab('promptpay');
-  navigateTo('checkout');
+  // Redirect ไปหน้า product รายละเอียดสินค้าเสมอ
+  window.location.href = `front/product.html?id=${encodeURIComponent(product.id)}`;
 }
 
 function adjustServiceQty(delta) {
@@ -687,15 +665,26 @@ function updateCheckoutTotal() {
   document.getElementById('qr-amount-label').innerText = `฿${finalPrice.toFixed(2)}`;
   document.getElementById('promptpay-sum-label').innerText = `฿${finalPrice.toFixed(2)}`;
   document.getElementById('voucher-exact-amount').innerText = `฿${finalPrice.toFixed(2)}`;
-  document.getElementById('nav-cart-text').innerText = `฿${finalPrice.toFixed(2)}`;
+  
+  // ป้องกัน Error: ตรวจสอบว่ามี element nav-cart-text หรือไม่ ก่อนเปลี่ยนค่า
+  const cartText = document.getElementById('nav-cart-text');
+  if (cartText) cartText.innerText = `฿${finalPrice.toFixed(2)}`;
 }
 
 async function applyPromoCode() {
   const now = Date.now();
+
+  // ✅ FIXED: reset attempts เมื่อ lockout หมดอายุ
   if (now < promoLockoutExpiry) {
     const secLeft = Math.ceil((promoLockoutExpiry - now) / 1000);
     triggerToast(`โปรดรอ ${secLeft} วินาที ก่อนลองใส่โค้ดส่วนลดอีกครั้ง`);
     return;
+  }
+  if (promoLockoutExpiry && now >= promoLockoutExpiry) {
+    promoFailedAttempts = 0;
+    promoLockoutExpiry = 0;
+    const warning = document.getElementById('promo-rate-warning');
+    if (warning) warning.classList.add('hidden');
   }
 
   const input = document.getElementById('promo-input');
@@ -737,10 +726,13 @@ async function applyPromoCode() {
     if (promoFailedAttempts >= 5) {
       promoLockoutExpiry = Date.now() + 60000;
       triggerToast('กรอกโค้ดผิดเกิน 5 ครั้ง ระบบล็อกการใช้งานโค้ด 60 วินาที');
-      document.getElementById('promo-rate-warning').classList.remove('hidden');
+      const warning = document.getElementById('promo-rate-warning');
+      if (warning) warning.classList.remove('hidden');
       setTimeout(() => {
-        document.getElementById('promo-rate-warning').classList.add('hidden');
+        const w = document.getElementById('promo-rate-warning');
+        if (w) w.classList.add('hidden');
         promoFailedAttempts = 0;
+        promoLockoutExpiry = 0;
       }, 60000);
     } else {
       triggerToast(`โค้ดไม่ถูกต้อง (เหลือโอกาสลองอีก ${5 - promoFailedAttempts} ครั้ง)`);
@@ -1125,7 +1117,8 @@ function navigateTo(viewName) {
   } else if (viewName === 'success' && successView) {
     successView.classList.remove('hidden');
     successView.classList.add('flex');
-    document.getElementById('nav-cart-text').innerText = '฿0.00';
+    const cartText = document.getElementById('nav-cart-text');
+    if (cartText) cartText.innerText = '฿0.00';
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
