@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>เข้าสู่ระบบ & สมัครสมาชิก — TACTICAL STORE</title>
+  
+  <!-- Apple System Font Stack Fallback & Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gallery: '#ffffff',
+            mist: '#f5f5f7',
+            frost: '#fafafc',
+            hairline: '#d6d6d6',
+            control: '#e6e6e8',
+            ink: '#1d1d1f',
+            slate: '#707070',
+            steel: '#86868b',
+            appleBlue: '#0066cc',
+            pricingBlue: '#0071e3',
+            launchOrange: '#b64400'
+          },
+          fontFamily: {
+            heading: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Outfit', 'Prompt', 'sans-serif'],
+            body: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Prompt', 'sans-serif'],
+            mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace']
+          },
+          borderRadius: {
+            'card': '28px',
+            'links': '10px',
+            'pill': '36px',
+            'input': '980px',
+            'button': '9999px',
+            'nav': '20px'
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="../css/style.css">
+
+  <style>
+    :root {
+      /* Apple Design System Tokens */
+      --color-gallery-white: #ffffff;
+      --color-studio-mist: #f5f5f7;
+      --color-paper-frost: #fafafc;
+      --color-hairline-silver: #d6d6d6;
+      --color-control-gray: #e6e6e8;
+      --color-ink: #1d1d1f;
+      --color-slate: #707070;
+      --color-steel: #86868b;
+      --color-apple-blue: #0066cc;
+      --color-pricing-blue: #0071e3;
+      --color-launch-orange: #b64400;
+
+      --radius-cards: 28px;
+      --radius-inputs: 980px;
+      --radius-buttons: 9999px;
+      --radius-navigation: 20px;
+    }
+
+    body {
+      background-color: var(--color-studio-mist);
+      color: var(--color-ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Prompt', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .apple-hairline {
+      border: 1px solid var(--color-hairline-silver);
+    }
+
+    /* Apple 28px Surface Card: Shadowless & Flat */
+    .apple-card {
+      background-color: var(--color-gallery-white);
+      border-radius: var(--radius-cards);
+      border: 1px solid var(--color-hairline-silver);
+      box-shadow: none;
+    }
+
+    /* Apple Pricing Blue Pill */
+    .apple-pricing-pill {
+      background-color: var(--color-pricing-blue);
+      color: var(--color-gallery-white);
+      border-radius: var(--radius-buttons);
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity 0.2s ease;
+    }
+    .apple-pricing-pill:hover {
+      opacity: 0.9;
+    }
+
+    /* Apple Outlined Explore Pill */
+    .apple-explore-pill {
+      background-color: transparent;
+      color: var(--color-ink);
+      border: 1px solid var(--color-hairline-silver);
+      border-radius: var(--radius-buttons);
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .apple-explore-pill:hover {
+      background-color: var(--color-studio-mist);
+      border-color: var(--color-steel);
+    }
+
+    /* Apple 980px Rounded Input Field */
+    .apple-input {
+      background-color: var(--color-gallery-white);
+      border: 1px solid var(--color-hairline-silver);
+      border-radius: 14px;
+      color: var(--color-ink);
+      font-size: 13px;
+      transition: border-color 0.2s ease;
+    }
+    .apple-input:focus {
+      outline: none;
+      border-color: var(--color-pricing-blue);
+    }
+
+    /* Override dynamic JS states to match Apple theme */
+    #tab-btn-login.bg-amber-500,
+    #tab-btn-register.bg-amber-500 {
+      background-color: var(--color-ink) !important;
+      color: var(--color-gallery-white) !important;
+      box-shadow: none !important;
+    }
+
+    #btn-login-submit,
+    #btn-register-submit {
+      background-color: var(--color-pricing-blue) !important;
+      color: var(--color-gallery-white) !important;
+      border-radius: var(--radius-buttons) !important;
+      box-shadow: none !important;
+    }
+    #btn-login-submit:hover,
+    #btn-register-submit:hover {
+      opacity: 0.9 !important;
+    }
+  </style>
+  <link rel="stylesheet" href="../css/transition.css">
+  <link rel="stylesheet" href="../css/theme.css">
+  <script src="../js/theme.js"></script>
+  <script src="../js/transition.js" defer></script>
+  <script type="module" src="../js/shell.js"></script>
+</head>
+<body class="selection:bg-pricingBlue/20 selection:text-ink min-h-screen flex flex-col justify-between">
+
+  <!-- Toast Notification Wrapper -->
+  <div id="toast-box" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 scale-95 hidden items-center gap-2.5 bg-gallery border border-hairline text-ink px-5 py-2.5 rounded-button shadow-sm">
+    <span class="w-2 h-2 rounded-full bg-appleBlue shrink-0"></span>
+    <span id="toast-text" class="text-xs font-medium tracking-tight">ข้อความแจ้งเตือน</span>
+  </div>
+
+  <!-- Global Header Bar (Apple Minimalist Gallery Header) -->
+  <header class="w-full bg-gallery/90 backdrop-blur-xl border-b border-hairline sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
+      
+      <!-- Logo Branding -->
+      <a href="../index.html" class="flex items-center gap-2 group">
+        <div class="w-6 h-6 rounded-full bg-ink text-gallery flex items-center justify-center font-bold text-xs group-hover:bg-pricingBlue transition-colors">
+          <svg width="14" height="14" class="w-3.5 h-3.5 stroke-gallery fill-none" stroke-width="2.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+          </svg>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span class="font-heading font-semibold text-sm tracking-tight text-ink">TACTICAL</span>
+          <span class="text-[10px] text-slate font-normal uppercase tracking-wider">Store</span>
+        </div>
+      </a>
+
+      <!-- Back to Store Pill Button -->
+      <a href="../index.html" class="apple-explore-pill px-4 py-1.5 flex items-center gap-1.5 text-xs text-slate hover:text-ink">
+        <svg width="14" height="14" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        <span>กลับหน้าร้านค้า</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Auth Main Center Stage -->
+  <main class="flex-1 flex items-center justify-center px-4 py-12 md:py-16">
+    <div class="w-full max-w-[420px]">
+      
+      <!-- Launch Status Annotation: Bare #b64400 12px text as per Apple spec -->
+      <div class="text-center mb-3">
+        <span class="text-launchOrange text-[12px] font-semibold tracking-[-0.12px]">
+          SECURE AUTH GATEWAY
+        </span>
+      </div>
+
+      <!-- Apple 28px White Card Surface -->
+      <div class="apple-card p-7 sm:p-9">
+        
+        <!-- Segmented Mode Switcher (Apple Pill Container) -->
+        <div class="grid grid-cols-2 gap-1 bg-mist p-1 rounded-button border border-hairline mb-7">
+          <button 
+            id="tab-btn-login" 
+            onclick="switchAuthMode('login')"
+            class="py-1.5 rounded-button font-medium text-xs transition-all flex items-center justify-center gap-1.5 bg-ink text-gallery shadow-sm">
+            <svg width="14" height="14" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <span>เข้าสู่ระบบ</span>
+          </button>
+          <button 
+            id="tab-btn-register" 
+            onclick="switchAuthMode('register')"
+            class="py-1.5 rounded-button font-medium text-xs transition-all flex items-center justify-center gap-1.5 text-slate hover:text-ink">
+            <svg width="14" height="14" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+            </svg>
+            <span>สมัครสมาชิก</span>
+          </button>
+        </div>
+
+        <!-- 1. ฟอร์มเข้าสู่ระบบ (LOGIN WITH USERNAME) -->
+        <form id="form-login" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+          <div class="text-left mb-5">
+            <h1 class="text-2xl font-heading font-semibold text-ink tracking-tight">เข้าสู่ระบบ</h1>
+            <p class="text-slate text-xs mt-1">ยินดีต้อนรับกลับ ระบุชื่อผู้ใช้งานเพื่อเข้าดูออเดอร์ของคุณ</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate mb-1.5">ชื่อผู้ใช้งาน (USERNAME)</label>
+            <div class="relative">
+              <input 
+                id="login-username" 
+                type="text" 
+                required 
+                placeholder="เช่น TacticalAgent99"
+                class="apple-input w-full px-4 py-2.5 pl-10 text-xs placeholder-steel"
+                autocomplete="username"
+              />
+              <svg width="16" height="16" class="w-4 h-4 text-steel absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1.5">
+              <label class="text-xs font-medium text-slate">รหัสผ่าน (PASSWORD)</label>
+              <a href="javascript:void(0)" onclick="triggerToast('หากลืมรหัสผ่าน กรุณาติดต่อฝ่ายสนับสนุนทาง Line ID: @tacticalstore')" class="text-[11px] text-appleBlue hover:underline">ลืมรหัสผ่าน?</a>
+            </div>
+            <div class="relative">
+              <input 
+                id="login-password" 
+                type="password" 
+                required 
+                placeholder="••••••••••••"
+                class="apple-input w-full px-4 py-2.5 pl-10 pr-10 text-xs placeholder-steel"
+                autocomplete="current-password"
+              />
+              <svg width="16" height="16" class="w-4 h-4 text-steel absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+              <button type="button" onclick="togglePasswordInput('login-password', this)" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-steel hover:text-ink">
+                <svg width="16" height="16" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <input type="checkbox" id="remember-me" class="w-3.5 h-3.5 rounded border-hairline text-pricingBlue focus:ring-0">
+            <label for="remember-me" class="text-xs text-slate cursor-pointer">จดจำการเข้าสู่ระบบบนอุปกรณ์นี้</label>
+          </div>
+
+          <!-- Pricing Blue Conversion Pill Button -->
+          <button 
+            type="submit" 
+            id="btn-login-submit"
+            class="w-full apple-pricing-pill py-3 text-xs tracking-tight mt-2 flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform">
+            <span>ยืนยันเข้าสู่ระบบ</span>
+            <svg width="14" height="14" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          </button>
+        </form>
+
+        <!-- 2. ฟอร์มสมัครสมาชิก (REGISTER WITH USERNAME & PASSWORD) -->
+        <form id="form-register" onsubmit="handleRegisterSubmit(event)" class="space-y-4 hidden">
+          <div class="text-left mb-5">
+            <h1 class="text-2xl font-heading font-semibold text-ink tracking-tight">ลงทะเบียนสมาชิก</h1>
+            <p class="text-slate text-xs mt-1">สร้างบัญชีผู้ใช้งานเพื่อเก็บบันทึกประวัติคำสั่งซื้อไอดี</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate mb-1.5">ชื่อผู้ใช้งาน (USERNAME)</label>
+            <div class="relative">
+              <input 
+                id="register-username" 
+                type="text" 
+                required 
+                placeholder="ตั้งชื่อผู้ใช้ (3-24 ตัวอักษร)"
+                class="apple-input w-full px-4 py-2.5 pl-10 text-xs placeholder-steel"
+                autocomplete="username"
+              />
+              <svg width="16" height="16" class="w-4 h-4 text-steel absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </div>
+            <span class="text-[10px] text-steel mt-1 block">รองรับทั้งภาษาไทยและอังกฤษ 3-24 ตัวอักษร</span>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate mb-1.5">รหัสผ่าน (PASSWORD)</label>
+            <div class="relative">
+              <input 
+                id="register-password" 
+                type="password" 
+                required 
+                minlength="6"
+                placeholder="ตั้งรหัสผ่านอย่างน้อย 6 ตัวอักษร"
+                class="apple-input w-full px-4 py-2.5 pl-10 pr-10 text-xs placeholder-steel"
+                autocomplete="new-password"
+              />
+              <svg width="16" height="16" class="w-4 h-4 text-steel absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+              <button type="button" onclick="togglePasswordInput('register-password', this)" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-steel hover:text-ink">
+                <svg width="16" height="16" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate mb-1.5">ยืนยันรหัสผ่าน (CONFIRM PASSWORD)</label>
+            <div class="relative">
+              <input 
+                id="register-confirm-password" 
+                type="password" 
+                required 
+                minlength="6"
+                placeholder="กรอกรหัสผ่านซ้ำอีกครั้ง"
+                class="apple-input w-full px-4 py-2.5 pl-10 pr-10 text-xs placeholder-steel"
+                autocomplete="new-password"
+              />
+              <svg width="16" height="16" class="w-4 h-4 text-steel absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-2 pt-1 text-left">
+            <input type="checkbox" id="accept-terms" required class="w-3.5 h-3.5 mt-0.5 rounded border-hairline text-pricingBlue focus:ring-0">
+            <label for="accept-terms" class="text-[11px] text-slate leading-tight">
+              ฉันยอมรับ <span class="text-appleBlue hover:underline cursor-pointer">ข้อกำหนดการใช้งาน</span> และนโยบายความเป็นส่วนตัว
+            </label>
+          </div>
+
+          <button 
+            type="submit" 
+            id="btn-register-submit"
+            class="w-full apple-pricing-pill py-3 text-xs tracking-tight mt-2 flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform">
+            <span>สร้างบัญชีผู้ใช้งาน</span>
+            <svg width="14" height="14" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          </button>
+        </form>
+
+        <!-- Divider Strip -->
+        <div class="my-6 flex items-center gap-3">
+          <div class="h-px bg-hairline flex-1"></div>
+          <span class="text-[10px] text-steel font-normal">หรือดำเนินการต่อด้วย</span>
+          <div class="h-px bg-hairline flex-1"></div>
+        </div>
+
+        <!-- Apple Outlined Explore Buttons for Social Connect -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button onclick="triggerToast('ระบบเข้าสู่ระบบด้วย Google เตรียมเปิดให้บริการเร็วๆ นี้')" class="apple-explore-pill py-2.5 px-3 flex items-center justify-center gap-2 text-xs">
+            <svg width="15" height="15" class="w-3.5 h-3.5" viewBox="0 0 24 24">
+              <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/>
+              <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/>
+              <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3 0-.8.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z"/>
+              <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"/>
+            </svg>
+            <span>Google</span>
+          </button>
+          
+          <button onclick="triggerToast('ระบบเข้าสู่ระบบด้วย Discord เตรียมเปิดให้บริการเร็วๆ นี้')" class="apple-explore-pill py-2.5 px-3 flex items-center justify-center gap-2 text-xs">
+            <svg width="15" height="15" class="w-3.5 h-3.5 fill-[#5865F2]" viewBox="0 0 24 24">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+            </svg>
+            <span>Discord</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Clean Studio Mist Footer -->
+  <footer class="w-full border-t border-hairline py-6 text-center text-slate text-xs bg-mist">
+    <span>© 2026 Tactical Store — Arena Breakout Instant Market</span>
+  </footer>
+
+  <script type="module" src="../js/login.js"></script>
+</body>
+</html>

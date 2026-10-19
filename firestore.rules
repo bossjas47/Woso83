@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    // Admin = Firebase custom claim {admin: true}. Set it once with scripts/set-admin-claim.js.
+    // Do NOT gate on an email address: login.js lets anyone register any username@tactical.store.
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+
+    // Catalog: public read, admin write. Account credentials (stock_items) are admin-only and
+    // are never readable by shoppers.
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /stock_items/{itemId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // Reserved for a server-side vault; closed to every client.
+    match /inventory_vault/{vaultId} {
+      allow read, write: if false;
+    }
+
+    // Customers can only file a pending order for themselves. Status, credentials and delivery
+    // can only be set by an admin after the payment is verified.
+    match /orders/{orderId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending_payment'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && request.resource.data.amount <= 1000000
+        // Arithmetic must be consistent and the unit price cannot be below the catalogue price.
+        // (A promo code's validity is still checked by the admin when approving.)
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.quantity <= 100000
+        && request.resource.data.subtotal is number
+        && request.resource.data.discount is number
+        && request.resource.data.discount >= 0
+        && request.resource.data.discount <= request.resource.data.subtotal
+        && request.resource.data.finalPrice == request.resource.data.amount
+        && math.abs(request.resource.data.subtotal - request.resource.data.discount - request.resource.data.amount) < 0.011
+        && math.abs(request.resource.data.quantity * request.resource.data.unitPrice - request.resource.data.subtotal) < 0.011
+        && request.resource.data.unitPrice >= get(/databases/$(database)/documents/products/$(request.resource.data.productId)).data.price
+        && request.resource.data.get('gamePassword', '').size() <= 200
+        && request.resource.data.get('gameEmail', '').size() <= 200
+        && request.resource.data.get('paymentProof', '').size() <= 300
+        && request.resource.data.get('buyerContact', '').size() <= 200
+        && request.resource.data.get('playTime', '').size() <= 200
+        && request.resource.data.keys().hasOnly([
+             'orderNumber', 'orderId', 'productId', 'productName', 'productType',
+             'quantity', 'bonusQty', 'receiveQty', 'unit', 'unitPrice', 'subtotal', 'discount', 'promoCode',
+             'amount', 'finalPrice', 'paymentMethod', 'paymentProof',
+             'buyerEmail', 'buyerContact', 'gameEmail', 'gamePassword', 'farmMode', 'playTime', 'status', 'userEmail', 'userId', 'createdAt'
+           ]);
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // Public service queue: display-only copy of a service order (masked name, no contact/credentials).
+    match /queue/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending_payment'
+        && request.resource.data.createdAt == request.time
+        // must belong to an order created in the same batch, so nobody can post fake queue entries
+        && getAfter(/databases/$(database)/documents/orders/$(id)).data.userId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/orders/$(id)).data.productId == request.resource.data.productId
+        && getAfter(/databases/$(database)/documents/orders/$(id)).data.quantity == request.resource.data.quantity
+        && request.resource.data.nameMask.size() <= 8
+        && request.resource.data.productName.size() <= 200
+        && request.resource.data.unit.size() <= 20
+        && request.resource.data.keys().hasOnly([
+             'orderNumber', 'productId', 'productName', 'unit', 'quantity', 'nameMask', 'uid', 'status', 'createdAt'
+           ]);
+      allow update, delete: if isAdmin();
+    }
+
+    // Category list (names, kind, default minimum order): public read, admin write.
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Promo codes can be looked up by exact code but not listed; usage counts are admin-managed.
+    match /promo_codes/{code} {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    // Public storefront settings (banner text, QR image, shop name). Secrets must NOT live here.
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin PIN hash (UI lock only; the real gate is the admin claim above).
+    match /system_settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Payment-provider keys (SlipOK, TrueMoney): admin only.
+    match /system_private/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Wallet balances and top-up records can only change through an admin until a server verifies
+    // payments. A browser must never be able to credit its own balance.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+    match /topup_transactions/{txnId} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 20
+        && request.resource.data.bonusCredit is number
+        && request.resource.data.bonusCredit >= 0
+        && request.resource.data.bonusCredit <= request.resource.data.amount * 0.1
+        && math.abs(request.resource.data.finalCredit - request.resource.data.amount - request.resource.data.bonusCredit) < 0.011
+        && request.resource.data.get('proofRef', '').size() <= 300
+        && request.resource.data.keys().hasOnly([
+             'txnId', 'uid', 'email', 'amount', 'bonusCredit', 'finalCredit',
+             'paymentMethod', 'proofRef', 'status', 'createdAt'
+           ]);
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

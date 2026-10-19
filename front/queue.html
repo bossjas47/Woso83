@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>คิวงาน — TACTICAL STORE</title>
+  
+  <!-- Fonts: SF Pro Display / SF Pro Text Fallbacks & Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gallery: '#ffffff',
+            mist: '#f5f5f7',
+            frost: '#fafafc',
+            hairline: '#d6d6d6',
+            control: '#e6e6e8',
+            ink: '#1d1d1f',
+            slate: '#707070',
+            steel: '#86868b',
+            appleBlue: '#0066cc',
+            pricingBlue: '#0071e3',
+            launchOrange: '#b64400'
+          },
+          fontFamily: {
+            heading: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Outfit', 'Prompt', 'sans-serif'],
+            body: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Prompt', 'sans-serif'],
+            mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace']
+          },
+          borderRadius: {
+            'card': '28px',
+            'links': '10px',
+            'pill': '36px',
+            'images': '28px',
+            'input': '980px',
+            'button': '9999px',
+            'nav': '20px'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --color-gallery-white: #ffffff;
+      --color-studio-mist: #f5f5f7;
+      --color-paper-frost: #fafafc;
+      --color-hairline-silver: #d6d6d6;
+      --color-control-gray: #e6e6e8;
+      --color-ink: #1d1d1f;
+      --color-slate: #707070;
+      --color-steel: #86868b;
+      --color-apple-blue: #0066cc;
+      --color-pricing-blue: #0071e3;
+      --color-launchOrange: #b64400;
+
+      --font-sf-pro-display: 'SF Pro Display', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-sf-pro-text: 'SF Pro Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+      --radius-cards: 28px;
+      --radius-links: 10px;
+      --radius-pills: 36px;
+      --radius-images: 28px;
+      --radius-inputs: 980px;
+      --radius-buttons: 9999px;
+      --radius-navigation: 20px;
+    }
+
+    body {
+      background-color: var(--color-gallery-white);
+      color: var(--color-ink);
+      font-family: var(--font-sf-pro-text);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.224px;
+    }
+
+    .apple-card {
+      background-color: var(--color-gallery-white);
+      border-radius: var(--radius-cards);
+      border: 1px solid var(--color-hairline-silver);
+      box-shadow: none;
+    }
+
+    .apple-pricing-pill {
+      background-color: var(--color-pricing-blue) !important;
+      color: var(--color-gallery-white) !important;
+      border-radius: var(--radius-buttons);
+      font-size: 13px;
+      line-height: 18px;
+      letter-spacing: -0.12px;
+      font-weight: 500;
+      transition: opacity 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .apple-pricing-pill:hover {
+      opacity: 0.92;
+    }
+
+    .apple-explore-pill {
+      background-color: transparent !important;
+      color: var(--color-ink) !important;
+      border: 1px solid var(--color-hairline-silver) !important;
+      border-radius: var(--radius-buttons);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .apple-explore-pill:hover {
+      background-color: var(--color-studio-mist) !important;
+      border-color: var(--color-steel) !important;
+    }
+
+    .apple-input {
+      background-color: var(--color-gallery-white);
+      border: 1px solid var(--color-hairline-silver);
+      border-radius: 14px;
+      color: var(--color-ink);
+      font-size: 13px;
+      transition: border-color 0.2s ease;
+    }
+    .apple-input:focus {
+      outline: none;
+      border-color: var(--color-pricing-blue);
+    }
+  </style>
+
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/transition.css">
+  <link rel="stylesheet" href="../css/theme.css">
+  <script src="../js/theme.js"></script>
+  <script src="../js/transition.js" defer></script>
+  <script type="module" src="../js/shell.js"></script>
+</head>
+<body class="selection:bg-pricingBlue/20 selection:text-ink pb-24 md:pb-16 min-h-screen">
+
+  <!-- Toast Notification Wrapper -->
+  <div id="toast-box" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 scale-95 flex items-center gap-3 bg-gallery border border-hairline text-ink px-5 py-2.5 rounded-pill shadow-sm">
+    <span class="w-2 h-2 rounded-full bg-appleBlue shrink-0"></span>
+    <span id="toast-text" class="text-xs font-medium tracking-tight">ข้อความแจ้งเตือน</span>
+  </div>
+
+  <!-- Global Store Navigation (Apple 48px Gallery Navigation Bar) -->
+  <header class="sticky top-0 z-40 bg-gallery/90 backdrop-blur-xl border-b border-hairline">
+    <nav class="max-w-[1200px] mx-auto px-4 sm:px-6 h-12 flex justify-between items-center text-xs">
+      
+      <!-- Brand Logo -->
+      <a href="../index.html" class="flex items-center gap-2 group cursor-pointer">
+        <div class="w-6 h-6 rounded-full bg-ink text-gallery flex items-center justify-center font-bold text-xs group-hover:bg-pricingBlue transition-colors">
+          <svg class="w-3.5 h-3.5 stroke-gallery fill-none" stroke-width="2.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+          </svg>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span class="font-heading font-semibold text-sm tracking-tight text-ink">TACTICAL</span>
+          <span class="text-[10px] text-slate font-normal uppercase tracking-wider">Store</span>
+        </div>
+      </a>
+
+      <!-- Center Desktop Navigation Links -->
+      <div class="hidden md:flex items-center gap-7 text-[12px] tracking-[-0.12px]">
+        <a href="../index.html" class="text-slate hover:text-ink transition-colors">หน้าแรก</a>
+        <a href="category.html" class="text-slate hover:text-ink transition-colors">สินค้า</a>
+        <a href="queue.html" class="text-ink font-semibold transition-colors">คิวงาน</a>
+        <a href="topup.html" class="text-slate hover:text-ink transition-colors">เติมเงิน</a>
+        <a href="account.html" class="text-slate hover:text-ink transition-colors">บัญชีผู้ใช้</a>
+      </div>
+
+      <div></div>
+    </nav>
+  </header>
+
+  <main class="max-w-[720px] mx-auto px-4 sm:px-6 pt-10 pb-16">
+    <h1 class="font-heading font-semibold text-3xl sm:text-4xl">คิวงานบริการ</h1>
+    <p class="text-slate mt-2">ดูคิวและประวัติการใช้บริการ 30 วันล่าสุด ชื่อบัญชีถูกเซ็นเซอร์บางส่วนเพื่อความเป็นส่วนตัว</p>
+    <div id="queue-groups" class="mt-8 space-y-6">
+      <p class="text-slate text-sm">กำลังโหลดคิว...</p>
+    </div>
+  </main>
+
+  <script type="module" src="../js/queue.js"></script>
+</body>
+</html>
