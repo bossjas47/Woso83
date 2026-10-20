@@ -1,20 +1,22 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
-import { esc, num, baht, money, toast, icon, ICONS, onSettings, workerBase, callWorker, notifyAdmin, maskName, fixImageUrl, sizedImage } from "./ui.js";
+import { esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, workerBase, callWorker, readSlipQr, fixImageUrl, sizedImage } from "./ui.js";
 import { deliveryBadge, productCardHtml, isRentProduct } from "./card.js";
-import { mountPromptPay, promptpayReady, prepareSlip, slipErrorText } from "./pay.js";
+import { mountPromptPay, promptpayReady } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
 import { orderCardHtml } from "./orders-ui.js";
 import { addToCart } from "./cart-store.js";
+import { readProducts, writeProducts } from "./products-cache.js";
 
 /**
  * Product page: details, quantity / packages / farm modes, and checkout.
  * Payment:
  *  - เครดิตในบัญชี: the Worker (/buy) checks price, promo and balance, then delivers a game ID at once
  *    (or queues a service) in one transaction. Needs the Worker URL in admin settings.
- *  - พร้อมเพย์ (with slip image) / TrueMoney: files a pending_payment order for an admin to approve.
+ *  - พร้อมเพย์ (slip image): the Worker checks the slip with the slip API, credits the price and buys at once (no manual approval).
+ *  - ซองอั่งเปา TrueMoney: redeemed by the Worker, then bought with that credit.
  */
 const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
 let allProducts = [], CATS = [], P = null;
@@ -32,18 +34,21 @@ const isSrv = () => isServiceProduct(P, CATS);
 // ---------- Load ----------
 async function load() {
   const id = new URLSearchParams(location.search).get('id');
-  CATS = await loadCategories();
-  try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })); }
-  catch (e) { console.warn('products:', e); }
-  P = allProducts.find(p => String(p.id) === String(id)) || null;
+  let one = null;
+  [CATS, one] = await Promise.all([loadCategories(), /^[\w-]{1,128}$/.test(String(id)) ? getDoc(doc(db, 'products', String(id))).catch((e) => { console.warn('product:', e); return null; }) : null]);
+  P = one?.exists() ? { ...one.data(), id: one.id } : null;
   $('product-loading-state').classList.add('hidden');
   if (!P) { $('product-not-found').classList.remove('hidden'); return; }
   $('product-content-stage').classList.remove('hidden');
   render();
+  allProducts = readProducts() || [];
   renderRelated();
   pp = mountPromptPay($('panel-pay-promptpay'), { getAmount: () => finalPrice(), idPrefix: 'pp' });
   switchProductPaymentTab(defaultMethod(), true);
   if (new URLSearchParams(location.search).get('action') === 'buy') setTimeout(scrollToCheckoutForm, 300);
+  // the rest of the shop (related items) comes after the page is already showing
+  try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })); writeProducts(allProducts); renderRelated(); }
+  catch (e) { console.warn('products:', e); }
 }
 
 function render() {
@@ -400,7 +405,7 @@ async function executeProductPurchase() {
   const b = collectBuyer(); if (!b) return;
   if (method === 'wallet') return payWithWallet(b);
   if (method === 'angpao') return payWithAngpao(b);
-  return fileManualOrder(b);
+  return payWithSlip(b);
 }
 
 const buyBody = (b) => ({
@@ -451,54 +456,30 @@ async function payWithWallet(b) {
 
 function isTrueMoneyVoucher(u) { try { const x = new URL(u); return x.protocol === 'https:' && x.hostname === 'gift.truemoney.com'; } catch { return false; } }
 
-async function fileManualOrder(b) {
-  let proof = '', slip = null;
+/** Bank slip: the Worker checks it with the slip API, credits exactly the price, then buys (no manual approval). */
+async function payWithSlip(b) {
   if (!promptpayReady()) { toast('ร้านยังไม่เปิดรับพร้อมเพย์ กรุณาเลือกช่องทางอื่น', 'error'); return; }
-  setBusy(true, 'กำลังเตรียมสลิป…');
-  try { slip = await prepareSlip(pp.getFile()); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
-  proof = 'สลิปแนบในระบบ';
-  setBusy(true, 'กำลังส่งคำสั่งซื้อ…');
-  const srv = b.srv, modes = P.farmModes || [];
-  const sub = subtotal(), fin = finalPrice();
+  if (getSettings().slipAutoVerify !== true) { toast('ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาเลือกช่องทางอื่น', 'error'); return; }
+  const file = pp.getFile();
+  if (!file) { toast('กรุณาแนบรูปสลิปโอนเงิน', 'error'); return; }
+  setBusy(true, 'กำลังตรวจสลิป…');
   try {
-    const ref = doc(collection(db, 'orders'));
-    const orderId = `ORD-${ref.id.slice(0, 8).toUpperCase()}`;
-    const payload = {
-      orderNumber: orderId, orderId, productId: P.id,
-      productName: modes.length ? `${P.name} (${modes.find(m => m.key === farmMode)?.label || ''})` : P.name,
-      productType: srv ? 'service' : 'account',
-      quantity: qty, bonusQty: bonusFor(qty), receiveQty: qty + bonusFor(qty), unit: unitOf(P, CATS),
-      unitPrice: unitRate(), subtotal: sub, discount: Math.min(discount, sub), promoCode: promoCode || null,
-      amount: fin, finalPrice: fin, paymentMethod: method, paymentProof: proof,
-      ...(srv ? { buyerFacebook: b.buyerFacebook } : {}),
-      ...(b.self ? { buyerContact: b.buyerContact, playTime: b.playTime } : {}),
-      ...(srv && !b.self ? { gameEmail: b.gameEmail, gamePassword: b.gamePassword, buyerContact: b.gameEmail } : {}),
-      ...(modes.length ? { farmMode } : {}),
-      ...(slip ? { slipHash: slip.hash, hasSlip: true } : {}),
-      status: 'pending_payment', userEmail: user.email || '', userId: user.uid, createdAt: serverTimestamp()
-    };
-    const batch = writeBatch(db);
-    batch.set(ref, payload);
-    if (slip) {
-      batch.set(doc(db, 'slip_images', ref.id), { kind: 'order', uid: user.uid, image: slip.image, createdAt: serverTimestamp() });
-      batch.set(doc(db, 'slip_hashes', slip.hash), { kind: 'order', refId: ref.id, uid: user.uid, createdAt: serverTimestamp() });
-    }
-    if (srv) {
-      batch.set(doc(db, 'queue', ref.id), {
-        orderNumber: orderId, productId: P.id, productName: P.name, unit: unitOf(P, CATS), quantity: qty,
-        nameMask: maskName(user.displayName || (user.email || '').split('@')[0]).slice(0, 8), uid: user.uid, status: 'pending_payment', createdAt: serverTimestamp()
-      });
-    }
-    await batch.commit();
-    notifyAdmin('order', ref.id);
-    $('game-password').value = '';
+    const payload = await readSlipQr(file);
+    if (!payload) { toast('อ่าน QR บนสลิปไม่ได้ กรุณาใช้รูปสลิปที่เห็น QR ชัดเจน (ไม่ครอป ไม่เบลอ)', 'error'); return; }
+    const r = await callWorker('/', { amount: finalPrice(), payload, purpose: 'buy', buy: buyBody(b) });
+    if (r.status !== 'completed') { toast(r.message || 'ตรวจสลิปไม่ผ่าน', 'error'); return; }
     pp.reset();
-    showSuccess({ ...payload, id: ref.id, createdAt: new Date() }, false);
-    toast('ส่งคำสั่งซื้อแล้ว ทีมงานกำลังตรวจสอบ', 'success');
-  } catch (e) {
-    console.warn('order:', e);
-    toast(slipErrorText(e), 'error');
-  } finally { setBusy(false); }
+    if (r.buy?.order) {
+      $('game-password').value = '';
+      showSuccess(r.buy.order, true);
+      P.stock = num(P.stock) - qty;
+      toast('ตรวจสลิปผ่าน ชำระสำเร็จ', 'success');
+    } else {
+      toast(`ตรวจสลิปผ่าน เครดิต +${money(r.credit)} แต่สั่งซื้อไม่สำเร็จ: ${r.buyError || ''}`, 'error');
+      switchProductPaymentTab('wallet');
+    }
+  } catch (e) { console.warn('slip buy:', e); toast(e.message || 'ตรวจสลิปไม่ได้ในตอนนี้ กรุณาลองใหม่อีกครั้ง', 'error'); }
+  finally { setBusy(false); }
 }
 
 function showSuccess(order, paid) {

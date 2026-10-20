@@ -1,7 +1,7 @@
 import { db, auth } from "../firebase-config.js";
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, where, limit,
-  runTransaction, serverTimestamp, increment, deleteField
+  runTransaction, Timestamp, serverTimestamp, increment, deleteField
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { watchCategories, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
@@ -18,6 +18,24 @@ const triggerToast = (m, kind) => toast(m, kind);
 window.triggerToast = triggerToast;
 const tsMs = (v) => v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0);
 
+// Phone layout of the tables (see .admin-table in admin.html): copy each column title onto the cells of its rows.
+function labelTable(table) {
+  const heads = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+  table.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (td.tagName === 'TD' && td.colSpan < 2 && heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i]; }));
+}
+document.querySelectorAll('.admin-table').forEach(table => {
+  labelTable(table);
+  const body = table.querySelector('tbody');
+  if (body) new MutationObserver(() => labelTable(table)).observe(body, { childList: true });
+});
+
+/** Per-person permissions (custom claim `perms`); admins can do everything. Mirrors firestore.rules + the Worker. */
+const PERM_LABEL = { orders: 'ทำคิวงานบริการ (เริ่มงาน/ส่งมอบ/หมายเหตุ)', pay: 'ยืนยันชำระ ยกเลิก/คืนเงิน ดูสลิป เติมเงิน (ทุกออเดอร์)', products: 'สินค้า สต็อก หมวดหมู่', promos: 'โค้ดส่วนลด และโปรเติมเงิน', rentals: 'ไอดีเช่า', boxes: 'กล่องสุ่ม', vault: 'โปรแกรมไอดีไก่', users: 'ผู้ใช้ (ดู/ปรับเครดิต/ข้อมูลติดต่อ)' };
+let ADMIN = false, PERMS = new Set();
+const can = (p) => ADMIN || PERMS.has(p);
+const STAFF_ONLY_QUEUE = () => !ADMIN && !can('pay'); // can work service jobs but not handle money
+const TAB_OK = { dashboard: () => ADMIN, settings: () => ADMIN, products: () => can('products'), categories: () => can('products'), orders: () => can('orders') || can('pay'), topups: () => can('pay'), rentals: () => can('rentals'), boxes: () => can('boxes'), vault: () => can('vault'), users: () => can('users'), promos: () => can('promos') };
+const tabOk = (t) => (TAB_OK[t] || (() => false))();
 let PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
 let rentalFilter = 'todo';
 let me = null;
@@ -50,16 +68,19 @@ function gateState(name) { ['loading', 'noauth', 'setup', 'unlock'].forEach(k =>
 onAuthStateChanged(auth, async (user) => {
   me = user;
   if (!user) { gateState('noauth'); return; }
-  let isAdmin = false;
-  try { isAdmin = (await user.getIdTokenResult(true)).claims.admin === true; } catch (_) {}
-  if (!isAdmin) {
+  let claims = {};
+  try { claims = (await user.getIdTokenResult(true)).claims; } catch (_) {}
+  const isAdmin = claims.admin === true;
+  ADMIN = isAdmin; PERMS = new Set(Array.isArray(claims.perms) ? claims.perms : []);
+  if (!isAdmin && !PERMS.size) {
     $('noauth-title').textContent = '403 · ไม่มีสิทธิ์เข้าถึง';
     $('noauth-text').textContent = `บัญชี ${user.displayName || user.email} ไม่ใช่ผู้ดูแลระบบ`;
-    $('noauth-login').textContent = 'กลับหน้าร้าน'; $('noauth-login').href = '../index.html';
+    $('noauth-login').textContent = 'กลับหน้าร้าน'; $('noauth-login').href = '../home.html';
     gateState('noauth');
     return;
   }
-  $('admin-who').textContent = `แอดมิน: ${user.displayName || user.email}`;
+  $('admin-who').textContent = `${ADMIN ? 'แอดมิน' : 'ทีมงาน'}: ${user.displayName || user.email}`;
+  if (!ADMIN) { unlockDashboardUI(); return; } // delegated accounts skip the admin PIN (they cannot read it)
   if (sessionStorage.getItem('astraphex_admin_unlocked') === 'true') { unlockDashboardUI(); return; }
   try {
     const pin = await getDoc(doc(db, 'system_settings', 'admin_pin'));
@@ -124,23 +145,27 @@ function unlockDashboardUI() {
   if (started) return;
   started = true;
   // admins made with scripts/set-admin-claim.js have no role field yet; record it for the users list
-  if (me) setDoc(doc(db, 'users', me.uid), { role: 'admin' }, { merge: true }).catch(() => {});
+  if (ADMIN && me) setDoc(doc(db, 'users', me.uid), { role: 'admin' }, { merge: true }).catch(() => {});
   startListeners();
-  switchAdminTab(sessionStorage.getItem('astraphex_admin_tab') || 'orders');
+  const saved = sessionStorage.getItem('astraphex_admin_tab');
+  switchAdminTab(saved && tabOk(saved) ? saved : ['orders', 'products', 'topups', 'users', 'promos', 'rentals', 'boxes', 'vault'].find(tabOk) || 'orders');
 }
 
 function startListeners() {
+  if (can('boxes')) window.startBoxWatch?.(); // loot-box opens feed the dashboard too (js/back/boxes.js)
+  document.addEventListener('boxopens', () => renderDashboard());
   const warn = (what) => (e) => { console.warn(what, e); triggerToast(`โหลด${what}ไม่สำเร็จ`, 'error'); };
-  onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); }, warn('สินค้า'));
-  watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
-  onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); }, warn('ออเดอร์'));
-  onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
-  onSnapshot(collection(db, 'rentals'), (s) => { RENTALS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminRentals(); renderBadges(); }, warn('การเช่า'));
-  onSnapshot(collection(db, 'users'), (s) => { USERS = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminUsers(); renderDashboard(); }, warn('ผู้ใช้'));
-  onSnapshot(collection(db, 'topup_promos'), (s) => { TPROMOS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => num(a.minAmount) - num(b.minAmount)); renderTopupPromos(); });
+  if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); }, warn('สินค้า'));
+  if (can('products') || can('boxes') || can('promos')) watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
+  if (can('pay')) onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); }, warn('ออเดอร์'));
+  if (can('pay')) onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
+  if (can('rentals')) onSnapshot(collection(db, 'rentals'), (s) => { RENTALS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminRentals(); renderBadges(); }, warn('การเช่า'));
+  if (can('users') || can('vault')) onSnapshot(collection(db, 'users'), (s) => { USERS = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminUsers(); renderDashboard(); document.dispatchEvent(new Event('adminusers')); }, warn('ผู้ใช้'));
+  if (can('promos')) onSnapshot(collection(db, 'topup_promos'), (s) => { TPROMOS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => num(a.minAmount) - num(b.minAmount)); renderTopupPromos(); });
   onSnapshot(doc(db, 'stats', 'public'), (s) => { STATS = s.exists() ? s.data() : {}; renderStatHints(); });
   onSnapshot(doc(db, 'system', 'settings'), (s) => { const first = !Object.keys(SETTINGS).length; SETTINGS = s.exists() ? s.data() : {}; if (first) loadAdminSettings(); });
   onSnapshot(doc(db, 'system', 'promptpay_qr'), (s) => { const img = s.exists() ? s.data().image : ''; $('qr-preview').src = img || SETTINGS.promptpayQrUrl || ''; $('qr-preview').classList.toggle('hidden', !(img || SETTINGS.promptpayQrUrl)); $('qr-preview-empty').classList.toggle('hidden', !!(img || SETTINGS.promptpayQrUrl)); });
+  if (!can('pay') && can('orders')) onSnapshot(query(collection(db, 'orders'), where('productType', '==', 'service')), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); }, warn('ออเดอร์'));
 }
 
 function renderBadges() {
@@ -152,13 +177,16 @@ function renderBadges() {
 }
 
 function switchAdminTab(tab) {
-  ['dashboard', 'products', 'categories', 'orders', 'topups', 'users', 'promos', 'rentals', 'settings'].forEach(t => {
+  if (!tabOk(tab)) return;
+  ['dashboard', 'products', 'categories', 'orders', 'topups', 'users', 'promos', 'rentals', 'boxes', 'vault', 'settings'].forEach(t => {
     $(`admin-sec-${t}`)?.classList.toggle('hidden', t !== tab);
     const b = $(`admin-tab-btn-${t}`);
-    if (b) b.className = `px-4 py-1.5 rounded-button text-xs transition-all flex items-center shrink-0 ${t === tab ? 'bg-ink text-gallery' : 'text-slate hover:text-ink'}`;
+    if (b) b.className = `px-4 py-1.5 rounded-button text-xs transition-all flex items-center shrink-0 ${t === tab ? 'bg-ink text-gallery' : 'text-slate hover:text-ink'}${tabOk(t) ? '' : ' hidden'}`;
   });
   sessionStorage.setItem('astraphex_admin_tab', tab);
   if (tab === 'promos') window.renderAdminPromos?.();
+  if (tab === 'boxes') { window.startBoxWatch?.(); window.renderAdminBoxes?.(); }
+  if (tab === 'vault') { window.startVaultWatch?.(); window.renderAdminVault?.(); }
 }
 
 // ==========================================
@@ -228,7 +256,12 @@ function applyTypeUi() {
   $('rent-config-box')?.classList.toggle('hidden', srv);
   $('rent-fields')?.classList.toggle('hidden', !$('prod-rent-on')?.checked);
   $('lbl-prod-stock').textContent = srv ? 'จำนวนที่รับงานได้ (หน่วย):' : 'จำนวนสต็อก (ชิ้น):';
-  $('hint-prod-stock').textContent = srv ? 'จำนวนงานที่รับได้ ระบบลดให้อัตโนมัติเมื่อมีออเดอร์' : 'ไอดีเกม: กดปุ่ม "สต็อก" ในตารางเพื่อเพิ่มไอดีจริง ระบบนับให้เอง';
+  $('hint-prod-stock').textContent = srv ? 'จำนวนงานที่รับได้ ระบบลดให้อัตโนมัติเมื่อมีออเดอร์' : 'ไอดีเกม: กดปุ่ม "สต็อก" ในตารางเพื่อเพิ่มไอดีจริง ระบบนับให้เอง (แก้ตรงนี้ไม่ได้)';
+  // ID products: the count comes from the real stock_items, so typing a number here would only make the shop lie.
+  $('prod-stock').readOnly = !srv;
+  $('prod-stock').classList.toggle('opacity-60', !srv);
+  // Koen value / equipment list / description only make sense for ID products; a service must not be forced to fill them.
+  ['prod-koen', 'prod-specs', 'prod-desc'].forEach(id => { $(id).required = !srv; });
   if (srv) {
     const cat = categoryOf(CATS, $('prod-category').value);
     $('prod-service-unit').placeholder = cat?.unit || 'กอง';
@@ -324,7 +357,9 @@ async function handleProductFormSubmit(e) {
   const id = editId || 'prod_' + Date.now().toString(36);
   const payload = {
     id, name: $('prod-name').value.trim(), category: category || deleteField(), koen: $('prod-koen').value.trim(), koenLabel: opt('prod-koen-label'),
-    price: farmModes ? Math.min(fId, fSelf) : price, stock: Math.max(0, parseInt($('prod-stock').value, 10) || 0), image,
+    price: farmModes ? Math.min(fId, fSelf) : price, image,
+    // service: free number (capacity). ID product: never typed, counted from stock_items (new = 0, edit = untouched)
+    ...(isSrv ? { stock: Math.max(0, parseInt($('prod-stock').value, 10) || 0) } : editId ? {} : { stock: 0 }),
     gallery: galleryText ? galleryText.split('\n').map(s => formatUrl(s)).filter(Boolean) : (image ? [image] : []),
     tags: $('prod-tags').value.split(',').map(s => s.trim()).filter(Boolean), desc: $('prod-desc').value.trim(),
     specs: $('prod-specs').value.split('\n').map(s => s.trim()).filter(Boolean),
@@ -428,16 +463,18 @@ async function deleteSingleStockItem(pid, itemId) {
 // ==========================================
 // DASHBOARD (สรุปภาพรวม): computed in the browser from the lists already loaded
 // ==========================================
-const PAID = (o) => o.status === 'completed' || o.status === 'processing'; // a service order is paid once it is processing
+const PAID = (o) => (o.status === 'completed' || o.status === 'processing') && o.paymentMethod !== 'prize'; // a service order is paid once it is processing; loot-box prizes are free
 function renderDashboard() {
+  if (!ADMIN) return;
   const cards = $('dash-cards'); if (!cards) return;
   const day0 = new Date().setHours(0, 0, 0, 0), D = 864e5;
   // shortcut: rental income is counted on the day the rental started (extensions included), fine for a summary
-  const sales = [...ORDERS.filter(PAID).map(o => ({ t: tsMs(o.createdAt), v: num(o.amount), name: o.productName })), ...RENTALS.map(r => ({ t: tsMs(r.createdAt), v: num(r.price), name: r.productName }))];
+  const sales = [...ORDERS.filter(PAID).map(o => ({ t: tsMs(o.createdAt), v: num(o.amount), name: o.productName })), ...RENTALS.map(r => ({ t: tsMs(r.createdAt), v: num(r.price), name: r.productName })),
+    ...(window.getBoxOpens?.() || []).map(b => ({ t: tsMs(b.createdAt), v: num(b.price), name: `กล่องสุ่ม ${b.boxName || ''}` }))]; // box opens: the credit paid for them
   const sum = (rows, from) => rows.filter(x => x.t >= from).reduce((a, x) => a + x.v, 0);
   const topups = TOPUPS.filter(t => t.status === 'completed').map(t => ({ t: tsMs(t.completedAt) || tsMs(t.createdAt), v: num(t.amount) }));
   const card = (label, value, sub = '') => `<div class="apple-card p-4"><p class="text-[11px] text-slate">${label}</p><p class="text-2xl font-heading font-semibold mt-1">${value}</p><p class="text-[11px] text-slate mt-0.5">${sub}</p></div>`;
-  const ordersToday = ORDERS.filter(o => tsMs(o.createdAt) >= day0 && o.status !== 'cancelled').length;
+  const ordersToday = ORDERS.filter(o => tsMs(o.createdAt) >= day0 && PAID(o)).length; // same rule as the sales figure: paid orders only
   const newUsers = (from) => USERS.filter(u => tsMs(u.createdAt) >= from).length;
   const credit = USERS.reduce((a, u) => a + num(u.walletBalance), 0);
   cards.innerHTML = [
@@ -554,6 +591,7 @@ const ORDER_UI = {
   pending_payment: ['รอตรวจสอบ', 'bg-[#fff3e6] text-[#a04a00]'], processing: ['กำลังดำเนินการ', 'bg-[#e8f1fd] text-[#0058b9]'],
   completed: ['ส่งมอบสำเร็จ', 'bg-[#e8f8ee] text-[#0a7a3b]'], cancelled: ['ยกเลิก', 'bg-mist text-slate']
 };
+window.getAdminUsers = () => USERS;
 const userOf = (uid) => USERS.find(u => u.uid === uid) || {};
 const buyerName = (o) => userOf(o.userId).username || String(o.userEmail || '').split('@')[0] || 'user';
 
@@ -575,13 +613,13 @@ function renderAdminOrders() {
     const accs = Array.isArray(o.accountsDelivered) && o.accountsDelivered.length ? o.accountsDelivered : (o.accountDelivered?.username ? [o.accountDelivered] : []);
     const btn = (fn, text, primary) => `<button type="button" onclick='${fn}(${id})' class="${primary ? 'apple-pricing-pill' : 'apple-explore-pill'} px-3 py-1.5 text-[11px]">${text}</button>`;
     const actions = [
-      o.status === 'pending_payment' && btn('approveOrder', srv ? 'ยืนยันชำระ › เข้าคิว' : 'ยืนยันชำระ & ส่งไอดี', true),
-      o.status === 'processing' && o.queueStatus !== 'working' && btn('startWork', 'เริ่มทำงาน', false),
-      o.status === 'processing' && btn('finishServiceOrder', 'ส่งมอบสำเร็จ', true),
-      o.gamePassword && o.status === 'completed' && btn('clearGamePassword', 'ลบรหัสเกม', false),
-      btn('openNote', o.adminNote ? 'แก้หมายเหตุ' : 'หมายเหตุถึงลูกค้า', false),
-      o.hasSlip && btn('viewSlip', 'ดูสลิป', false),
-      ['pending_payment', 'processing'].includes(o.status) && btn('cancelOrder', 'ยกเลิก', false)
+      can('pay') && o.status === 'pending_payment' && btn('approveOrder', srv ? 'ยืนยันชำระ › เข้าคิว' : 'ยืนยันชำระ & ส่งไอดี', true),
+      o.status === 'processing' && (srv || !STAFF_ONLY_QUEUE()) && o.queueStatus !== 'working' && btn('startWork', 'เริ่มทำงาน', false),
+      o.status === 'processing' && (srv || !STAFF_ONLY_QUEUE()) && btn('finishServiceOrder', 'ส่งมอบสำเร็จ', true),
+      can('pay') && o.gamePassword && o.status === 'completed' && btn('clearGamePassword', 'ลบรหัสเกม', false),
+      (!STAFF_ONLY_QUEUE() || (srv && o.status === 'processing')) && btn('openNote', o.adminNote ? 'แก้หมายเหตุ' : 'หมายเหตุถึงลูกค้า', false),
+      can('pay') && o.hasSlip && btn('viewSlip', 'ดูสลิป', false),
+      can('pay') && ['pending_payment', 'processing'].includes(o.status) && btn('cancelOrder', 'ยกเลิก', false)
     ].filter(Boolean).join(' ');
     return `<article class="apple-card p-4 sm:p-5 text-xs space-y-3">
       <div class="flex flex-wrap items-start justify-between gap-3">
@@ -594,7 +632,7 @@ function renderAdminOrders() {
         </div>
         <div class="text-right">
           <p class="text-base font-display font-semibold">฿${money(o.amount)}</p>
-          <p class="text-slate">${o.paymentMethod === 'wallet' ? 'เครดิต (ชำระแล้ว)' : o.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}${o.promoCode ? ` · โค้ด ${adminEsc(o.promoCode)} -฿${money(o.discount)}` : ''}</p>
+          <p class="text-slate">${o.paymentMethod === 'wallet' ? 'เครดิต (ชำระแล้ว)' : o.paymentMethod === 'prize' ? '🎁 ของรางวัลกล่องสุ่ม' : o.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}${o.promoCode ? ` · โค้ด ${adminEsc(o.promoCode)} -฿${money(o.discount)}` : ''}</p>
           <span class="inline-block mt-1 px-2.5 py-0.5 rounded-full font-semibold ${cls}">${label}${o.status === 'processing' && o.queueStatus === 'working' ? ' · กำลังทำ' : ''}</span>
         </div>
       </div>
@@ -609,6 +647,7 @@ function refreshOrders() { renderAdminOrders(); triggerToast('อัปเดต
 
 /** Public feed + counters for a finished order (stats/public, recent_orders). Called inside a transaction. */
 function recordSale(txn, orderId, o) {
+  if (o.paymentMethod === 'prize') return; // free loot-box prize: not a sale
   txn.set(doc(db, 'stats', 'public'), { orders: increment(1), sales: increment(num(o.amount)) }, { merge: true });
   txn.set(doc(db, 'recent_orders', orderId), { productName: String(o.productName || '').slice(0, 120), amount: num(o.amount), buyerMask: maskName(buyerName(o)), kind: o.productType === 'service' ? 'service' : 'account', createdAt: serverTimestamp() });
 }
@@ -660,7 +699,7 @@ async function startWork(orderId) {
   try {
     const b = writeBatch(db);
     b.update(doc(db, 'orders', orderId), { queueStatus: 'working', workStartedAt: serverTimestamp() });
-    b.set(doc(db, 'queue', orderId), { status: 'working', updatedAt: serverTimestamp() }, { merge: true });
+    b.set(doc(db, 'queue', orderId), { status: 'working', startedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
     await b.commit();
     triggerToast('อัปเดตเป็นกำลังทำแล้ว', 'success');
   } catch (e) { triggerToast('อัปเดตไม่สำเร็จ', 'error'); }
@@ -681,7 +720,7 @@ async function finishServiceOrder(orderId) {
 }
 async function cancelOrder(orderId) {
   const o = ORDERS.find(x => x.id === orderId); if (!o) return;
-  const refund = o.status === 'processing'; // money was received (wallet or approved transfer)
+  const refund = o.status === 'processing' && num(o.amount) > 0; // money was received (wallet or approved transfer); a free prize has nothing to give back
   const reason = prompt(`เหตุผลที่ยกเลิก (ลูกค้าจะเห็น)${refund ? `\nระบบจะคืนเงิน ฿${money(o.amount)} เข้าเครดิตของลูกค้า` : ''}`, '');
   if (reason === null) return;
   try {
@@ -695,7 +734,7 @@ async function cancelOrder(orderId) {
       txn.update(ref, { status: 'cancelled', cancelledAt: serverTimestamp(), gamePassword: deleteField(), ...(reason.trim() ? { adminNote: reason.trim() } : {}) });
       txn.set(doc(db, 'queue', orderId), { status: 'cancelled', updatedAt: serverTimestamp() }, { merge: true });
       if (p?.exists()) txn.update(pRef, { stock: num(p.data().stock) + (num(cur.quantity) || 1) });
-      if (cur.status === 'processing') {
+      if (cur.status === 'processing' && num(cur.amount) > 0) {
         txn.set(doc(db, 'users', cur.userId), { walletBalance: increment(num(cur.amount)) }, { merge: true });
         txn.set(doc(collection(db, 'wallet_logs')), { uid: cur.userId, delta: num(cur.amount), note: `คืนเงินออเดอร์ ${cur.orderNumber || orderId}`, by: me?.uid || '', at: serverTimestamp() });
       }
@@ -783,8 +822,14 @@ async function approveTopup(id) {
 async function rejectTopup(id) {
   const reason = prompt('เหตุผลที่ไม่อนุมัติ (ผู้ใช้จะเห็น)', 'ไม่พบยอดเงินเข้าบัญชี');
   if (reason === null) return;
-  try { await updateDoc(doc(db, 'topup_transactions', id), { status: 'rejected', completedAt: serverTimestamp(), adminNote: reason.trim() }); triggerToast('ไม่อนุมัติรายการแล้ว', 'success'); }
-  catch (e) { triggerToast('ดำเนินการไม่สำเร็จ', 'error'); }
+  try {
+    await runTransaction(db, async (txn) => { // never overwrite a top-up that was already credited
+      const ref = doc(db, 'topup_transactions', id), s = await txn.get(ref);
+      if (!s.exists() || s.data().status !== 'pending') throw new Error('NOT_PENDING');
+      txn.update(ref, { status: 'rejected', completedAt: serverTimestamp(), adminNote: reason.trim() });
+    });
+    triggerToast('ไม่อนุมัติรายการแล้ว', 'success');
+  } catch (e) { triggerToast(e.message === 'NOT_PENDING' ? 'รายการนี้ถูกดำเนินการไปแล้ว' : 'ดำเนินการไม่สำเร็จ', 'error'); }
 }
 
 function renderTopupPromos() {
@@ -833,7 +878,7 @@ function renderAdminUsers() {
     <td class="py-3 px-4"><p class="font-semibold">${adminEsc(u.username || '(ไม่มีชื่อ)')}</p><p class="text-[10px] text-slate font-mono">${adminEsc(u.uid)}</p></td>
     <td class="py-3 px-4 text-slate">${adminEsc(u.contactEmail || (/@tactical\.store$/.test(u.email || '') ? '' : u.email) || '-')}${u.facebook ? `<br>FB: ${adminEsc(u.facebook)}` : ''}</td>
     <td class="py-3 px-4 font-mono font-semibold">฿${money(u.walletBalance)}</td>
-    <td class="py-3 px-4">${u.role === 'admin' ? '<span class="px-2 py-0.5 rounded-full bg-[#fff3e6] text-[#a04a00] font-semibold">Admin</span>' : 'User'}</td>
+    <td class="py-3 px-4">${u.role === 'admin' ? '<span class="text-launchOrange font-semibold">Admin</span>' : u.role === 'staff' ? `<span class="font-semibold" title="${adminEsc((u.perms || []).map(p => PERM_LABEL[p] || p).join(', '))}">ทีมงาน (${(u.perms || []).length})</span>` : 'User'}</td>
     <td class="py-3 px-4">${u.status === 'suspended' ? '<span class="text-launchOrange font-semibold">ระงับ</span>' : '<span class="text-emerald-600">ปกติ</span>'}</td>
     <td class="py-3 px-4 text-slate">${adminEsc(fmtDate(u.createdAt))}</td>
     <td class="py-3 px-4 text-right"><button onclick='openUserModal(${adminEsc(JSON.stringify(u.uid))})' class="apple-pricing-pill px-3 py-1 text-[11px]">จัดการ</button></td></tr>`).join('');
@@ -845,6 +890,8 @@ function userModalTab(t) {
   if (t === 'history') loadUserHistory();
   if (t === 'wallet') loadWalletLogs();
 }
+function syncPermBox() { $('um-perms-wrap').classList.toggle('hidden', $('um-role').value === 'admin'); }
+window.syncPermBox = syncPermBox;
 function openUserModal(uid) {
   if (!uid) return;
   umUid = uid;
@@ -856,13 +903,30 @@ function openUserModal(uid) {
   $('um-facebook').value = u.facebook || '';
   $('um-password').value = '';
   $('um-role').value = u.role === 'admin' ? 'admin' : 'user';
+  $('um-perms').innerHTML = Object.entries(PERM_LABEL).map(([k, t]) => `<label class="flex items-start gap-2 py-1"><input type="checkbox" value="${k}" ${(u.perms || []).includes(k) ? 'checked' : ''}> <span>${adminEsc(t)}</span></label>`).join('');
+  syncPermBox();
+  document.querySelectorAll('#um-pane-info input[id^="um-"], #um-pane-info select').forEach(el => { if (['um-username', 'um-password', 'um-role', 'um-status'].includes(el.id) || el.closest('#um-perms-wrap')) el.disabled = !ADMIN; });
   $('um-status').value = u.status === 'suspended' ? 'suspended' : 'active';
   $('um-login-email').textContent = u.email || '-';
   $('um-balance').textContent = `฿${money(u.walletBalance)}`;
+  showVault(u);
   $('um-worker-note').textContent = workerUrl() ? '' : 'ยังไม่ได้ตั้งค่า Worker: เปลี่ยนชื่อผู้ใช้สำหรับล็อกอิน / รหัสผ่าน / สิทธิ์ Admin / ระงับการล็อกอิน จะยังไม่มีผล (บันทึกได้เฉพาะข้อมูลในฐานข้อมูล)';
   $('um-amount').value = ''; $('um-wnote').value = '';
   userModalTab('info');
   openModal('user-modal');
+}
+const vaultMs = (u) => tsMs(u?.vaultUntil);
+function showVault(u) { const t = vaultMs(u); $('um-vault').textContent = t > Date.now() ? `ถึง ${new Date(t).toLocaleDateString('th-TH', { dateStyle: 'medium' })}` : 'ยังไม่เปิดสิทธิ์'; }
+/** Adds N days on top of what is left (never before today); 0 = close now. Only admins can write this field (rules). */
+async function grantVault(add) {
+  const days = Math.round(num($('um-vault-days').value));
+  if (add && !(days >= 1 && days <= 365)) return triggerToast('ใส่จำนวนวัน 1-365', 'error');
+  const until = add ? Math.max(Date.now(), vaultMs(userOf(umUid))) + days * 864e5 : 0;
+  try {
+    await setDoc(doc(db, 'users', umUid), { vaultUntil: add ? Timestamp.fromMillis(until) : null }, { merge: true });
+    showVault({ vaultUntil: { toMillis: () => until } });
+    triggerToast(add ? `เปิดสิทธิ์คลังไอดี +${days} วัน` : 'ปิดสิทธิ์คลังไอดีแล้ว', 'success');
+  } catch (e) { triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
 async function saveUserInfo(e) {
   e.preventDefault();
@@ -877,6 +941,10 @@ async function saveUserInfo(e) {
   if (username && username !== u.username) authChange.username = username;
   if (password) authChange.password = password;
   if ((role === 'admin') !== (u.role === 'admin')) authChange.admin = role === 'admin';
+  const perms = role === 'admin' ? [] : [...document.querySelectorAll('#um-perms input:checked')].map(i => i.value);
+  const oldPerms = Array.isArray(u.perms) ? u.perms : [];
+  if (perms.join() !== oldPerms.join()) authChange.perms = perms;
+  const newRole = role === 'admin' ? 'admin' : perms.length ? 'staff' : 'user';
   if ((status === 'suspended') !== (u.status === 'suspended')) authChange.disabled = status === 'suspended';
   const btn = $('um-save'); btn.disabled = true;
   try {
@@ -887,7 +955,7 @@ async function saveUserInfo(e) {
     }
     await updateDoc(doc(db, 'users', umUid), {
       username: username || u.username || '', contactEmail: $('um-contact-email').value.trim(), facebook: $('um-facebook').value.trim(),
-      role, status, ...(loginEmail ? { email: loginEmail } : {}), adminUpdatedAt: serverTimestamp()
+      ...(ADMIN ? { role: newRole, status, perms, ...(loginEmail ? { email: loginEmail } : {}) } : {}), adminUpdatedAt: serverTimestamp()
     });
     $('um-password').value = '';
     triggerToast(Object.keys(authChange).length && !workerUrl() ? 'บันทึกข้อมูลแล้ว (การล็อกอินยังไม่เปลี่ยน เพราะยังไม่ได้ตั้ง Worker)' : 'บันทึกข้อมูลผู้ใช้แล้ว', 'success');
@@ -945,6 +1013,8 @@ async function loadAdminSettings() {
   set('setting-announce-link', d.announcementLink);
   $('setting-popup-on').checked = d.popupEnabled === true;
   set('setting-popup-images', (d.popupImages || []).join('\n'));
+  set('setting-vault-packages', (d.vaultPackages || []).map(p => `${p.days}=${p.price}`).join('\n'));
+  set('setting-vault-trial', d.vaultTrialDays || 0);
   set('setting-contact-line', d.contactLine ?? d.lineId);
   set('setting-contact-facebook', d.contactFacebook);
   set('setting-contact-discord', d.contactDiscord ?? d.discordLink);
@@ -971,6 +1041,8 @@ async function handleSaveSettings(e) {
   const payload = {
     announcementEnabled: $('setting-announce-on').checked, announcementText: v('setting-announce-text'), announcementLink: v('setting-announce-link'),
     popupEnabled: $('setting-popup-on').checked, popupImages: v('setting-popup-images').split('\n').map(x => formatUrl(x.trim())).filter(Boolean).slice(0, 6),
+    vaultPackages: v('setting-vault-packages').split('\n').map(l => l.split('=').map(x => Math.round(num(x)))).filter(([d, p]) => d >= 1 && d <= 365 && p > 0).slice(0, 4).map(([days, price]) => ({ days, price })),
+    vaultTrialDays: Math.min(365, n('setting-vault-trial')),
     contactLine: v('setting-contact-line'), contactFacebook: formatUrl(v('setting-contact-facebook')), contactDiscord: formatUrl(v('setting-contact-discord')),
     baseStats: { users: n('setting-base-users'), sales: n('setting-base-sales'), orders: n('setting-base-orders') },
     promptpayName: v('setting-promptpay-name'), promptpayNumber: v('setting-promptpay-number'), promptpayQrUrl: formatUrl(v('setting-promptpay-qr-url')),
@@ -1014,7 +1086,7 @@ Object.assign(window, {
   applyServiceTemplate, editCategory, resetCategoryForm, toggleCategoryKind, handleCategorySubmit, deleteCategory,
   renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
   renderAdminTopups, approveTopup, rejectTopup, saveTopupPromo, editTopupPromo, resetTopupPromo, deleteTopupPromo,
-  renderAdminUsers, openUserModal, userModalTab, saveUserInfo, saveUserWallet,
+  renderAdminUsers, grantVault, openUserModal, userModalTab, saveUserInfo, saveUserWallet,
   handleSaveSettings, uploadQr, removeQr, testWebhook, closeModal,
   getProductsForPromo: () => PRODUCTS, getCategoriesForPromo: () => CATS
 });

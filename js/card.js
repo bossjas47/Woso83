@@ -19,8 +19,9 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
   const rent = !isService && isRentProduct(p);
   const out = stock <= 0;
   const low = !isService && stock > 0 && stock <= 3;
-  const url = productUrl(p.id);
+  const url = p.href || productUrl(p.id);
   const name = esc(p.name || 'ไม่มีชื่อสินค้า');
+  if (p.isBox) return boxCardHtml(p, url);
   const stockText = out ? (isService ? 'คิวเต็ม' : rent ? 'ไม่มีไอดีว่าง' : 'สินค้าหมด')
     : rent ? `ว่างให้เช่า ${stock} ไอดี` : isService ? `รับงานได้ ${stock} ${esc(unit)}` : low ? `เหลือ ${stock} ไอดี` : `พร้อมส่ง ${stock} ไอดี`;
   const dot = out ? 'bg-steel' : low ? 'bg-launchOrange' : 'bg-emerald-500';
@@ -44,6 +45,26 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
           ${out
             ? `<span class="mt-3 flex items-center justify-center w-full h-12 rounded-full bg-control text-steel text-[15px] font-semibold">${isService ? 'คิวเต็ม' : rent ? 'ไม่มีไอดีว่าง' : 'สินค้าหมด'}</span>`
             : `<a href="${productUrl(p.id, true)}" class="apple-pricing-pill mt-3 w-full h-12 text-[16px] font-semibold">${rent ? 'เช่าเลย' : 'สั่งซื้อ'}${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>`}
+        </div>
+      </div>
+    </article>`;
+}
+
+/** Loot box shown as a product (catalog merges boxes in under the "กล่องสุ่ม" category). */
+function boxCardHtml(p, url) {
+  const name = esc(p.name);
+  return `
+    <article class="apple-card !rounded-[24px] p-2.5 sm:p-3 flex flex-col h-full group relative">
+      <a href="${url}" class="relative block aspect-square rounded-[18px] overflow-hidden bg-mist" aria-label="${name}">
+        <img ${imgAttrs(p.image, 320, 320)} alt="" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]">
+        <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-gallery/90 backdrop-blur text-[11px] font-medium px-2 py-0.5 rounded-full text-ink">กล่องสุ่ม</span>
+      </a>
+      <div class="flex flex-col flex-grow px-1 pt-2.5 pb-0.5">
+        <p class="text-xs text-slate">${p.prizeCount} รางวัล · ลุ้นได้ทันที</p>
+        <h3 class="text-[15px] sm:text-base leading-snug font-semibold text-ink line-clamp-2 mt-1.5 min-h-[2.6em]"><a href="${url}">${name}</a></h3>
+        <div class="mt-auto pt-2.5">
+          <p class="text-xl leading-none font-heading font-semibold">฿${Number(p.price).toLocaleString('th-TH', { maximumFractionDigits: 2 })}<span class="text-xs text-slate font-normal"> / ครั้ง</span></p>
+          <a href="${url}" class="apple-pricing-pill mt-3 w-full h-12 text-[16px] font-semibold">เปิดกล่อง${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>
         </div>
       </div>
     </article>`;

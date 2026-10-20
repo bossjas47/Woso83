@@ -1,6 +1,7 @@
 import { db } from "../firebase-config.js";
+import { readProducts, writeProducts } from "./products-cache.js";
 import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { esc, icon, ICONS, onSettings, workerBase } from "./ui.js";
+import { ROOT, esc, icon, ICONS, onSettings, workerBase } from "./ui.js";
 import { productCardHtml, productSkeletonHtml } from "./card.js";
 import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE, NONE_LABEL } from "./categories.js";
 
@@ -11,11 +12,11 @@ import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProdu
  */
 export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
 
-const S = { cats: [], products: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', settings: {} };
+const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', settings: {} };
 let opts = { urlSync: false, onProducts: null };
 
 export const priceOf = (p) => { const v = Number(p?.price); if (v > 0) return v; const r = Number(p?.serviceRate); return r > 0 ? r : 0; };
-export const stockOf = (p) => { const s = Number(p?.stock); return s > 0 ? Math.floor(s) : 0; };
+export const stockOf = (p) => { if (p?.isBox) return 0; const s = Number(p?.stock); return s > 0 ? Math.floor(s) : 0; };
 
 function koenText(p) {
   const v = String(p?.koen ?? '').trim();
@@ -69,7 +70,7 @@ function fillCategorySelect() {
   const sel = document.getElementById('f-cat');
   if (!sel) return;
   const count = (id) => S.products.filter(p => (id === NONE ? catIdOf(p, S.cats) === NONE : p.category === id)).length;
-  const groups = ['account', 'service'].map(kind => {
+  const groups = ['account', 'service', 'box'].map(kind => {
     const items = S.cats.filter(c => c.kind === kind);
     return items.length ? `<optgroup label="${esc(KIND_LABEL[kind])}">${items.map(c => `<option value="${esc(c.id)}">${esc(c.name)} (${count(c.id)})</option>`).join('')}</optgroup>` : '';
   }).join('');
@@ -176,6 +177,14 @@ function clearSearchAndFilters() { S.cat = 'all'; S.q = ''; S.budget = 'all'; S.
 function closeFilterPanel() { document.getElementById('filter-panel')?.classList.add('hidden'); document.getElementById('filter-toggle')?.setAttribute('aria-expanded', 'false'); }
 Object.assign(window, { filterCategory, clearFilter, clearSearchAndFilters, closeFilterPanel });
 
+export const BOX_CAT = '_box';
+function merge() {
+  const boxes = S.boxes.map(b => ({ id: 'box_' + b.id, boxId: b.id, isBox: true, name: String(b.name || 'กล่องสุ่ม'), desc: b.desc || '', price: Number(b.price) || 0, image: b.image || ROOT + 'assets/box.svg',
+    category: BOX_CAT, prizeCount: (b.prizes || []).length, tags: [], featured: b.featured === true, href: `${ROOT}front/box.html?id=${encodeURIComponent(b.id)}` }));
+  S.products = [...S.real, ...boxes];
+  S.cats = boxes.length ? [...S.realCats, { id: BOX_CAT, name: 'กล่องสุ่ม', kind: 'box', image: ROOT + 'assets/box.svg' }] : S.realCats;
+}
+
 export function mountCatalog(options = {}) {
   opts = { ...opts, ...options };
   if (opts.urlSync) {
@@ -208,8 +217,15 @@ export function mountCatalog(options = {}) {
   }
   render();
 
-  watchCategories((list) => { S.cats = list; fillCategorySelect(); render(); opts.onProducts?.(S); });
+  watchCategories((list) => { S.realCats = list; merge(); fillCategorySelect(); render(); opts.onProducts?.(S); });
+  // Loot boxes show as products in a virtual "กล่องสุ่ม" category; the card opens front/box.html?id=…
+  onSnapshot(collection(db, 'boxes'), (snap) => {
+    S.boxes = snap.docs.map(d => ({ ...d.data(), id: d.id })).filter(b => b.active !== false);
+    merge(); if (S.loaded) { fillCategorySelect(); render(); opts.onProducts?.(S); }
+  }, (e) => console.warn('boxes:', e));
   onSettings((s) => { S.settings = s || {}; if (S.loaded) { render(); opts.onProducts?.(S); } });
+  const cached = readProducts(); // paint the last known list now; the snapshot below replaces it
+  if (Array.isArray(cached) && cached.length) { S.real = cached; merge(); S.loaded = true; fillCategorySelect(); render(); opts.onProducts?.(S); }
   const timer = setTimeout(() => { if (!S.loaded) { S.loaded = true; S.failed = true; render(); } }, 10000);
   onSnapshot(collection(db, 'products'), (snap) => {
     clearTimeout(timer);
@@ -219,6 +235,7 @@ export function mountCatalog(options = {}) {
       return { ...data, id: d.id, name: String(data.name || 'ไม่มีชื่อสินค้า'), image: data.image || FALLBACK_IMG,
         tags: Array.isArray(data.tags) ? data.tags.map(String) : [] };
     });
+    S.real = S.products; writeProducts(S.real); merge();
     fillCategorySelect();
     render();
     opts.onProducts?.(S);

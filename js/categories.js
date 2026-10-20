@@ -11,7 +11,7 @@ import { imgAttrs } from "./ui.js";
  */
 export const NONE = '_none';
 export const NONE_LABEL = 'สินค้าอื่น ๆ';
-export const KIND_LABEL = { account: 'ไอดีเกม', service: 'บริการในเกม' };
+export const KIND_LABEL = { account: 'ไอดีเกม', service: 'บริการในเกม', box: 'กล่องสุ่ม' };
 
 const sortCats = (list) => [...list].sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name), 'th'));
 const fromSnap = (snap) => sortCats(snap.docs.map(d => ({ id: d.id, kind: 'account', ...d.data() })));
@@ -56,7 +56,7 @@ export function categoryCardsHtml(cats, products) {
   return cards.map(c => {
     const img = c.image
       ? `<img ${imgAttrs(c.image, 400, 300)} alt="" class="w-full h-full object-cover">`
-      : `<span class="text-5xl font-heading font-semibold text-steel">${escCat([...String(c.name)][0] || '?')}</span>`;
+      : `<span class="text-5xl font-heading font-semibold text-steel">${escCat([...String(c.name).replace(/^[\u0E40-\u0E44]/, '')][0] || '?')}</span>`;
     return `<button type="button" data-cat="${escCat(c.id)}" onclick="filterCategory(${escCat(JSON.stringify(c.id))})" class="text-left apple-card p-3 hover:bg-mist transition active:scale-[0.98]">
       <span class="flex items-center justify-center overflow-hidden rounded-2xl bg-mist aspect-[16/7]">${img}</span>
       <span class="block px-2 pt-3 pb-1.5"><span class="block text-lg font-heading font-semibold">${escCat(c.name)}</span>

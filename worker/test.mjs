@@ -126,8 +126,8 @@ w = world(); await run(w, await req()); w.setSlip(slipBody({ transRef: 'R2' }));
 r = await run(w, await req(), env, NOW + 3000); assert.strictEqual(r.status, 'rejected'); console.log('ok  slip: throttle within 10s');
 
 for (const [seed, e] of [[{ 'system/settings': { slipAutoVerify: false } }, env], [{}, { ...env, RECEIVER_MATCH: '' }]]) {
-  w = world(seed); r = await run(w, await req(), e); assert.strictEqual(r.status, 'manual'); assert.strictEqual(w.log.easyslip.length, 0);
-} console.log('ok  slip: switched off / not configured -> manual');
+  w = world(seed); r = await run(w, await req(), e); assert.strictEqual(r.status, 'rejected'); assert.strictEqual(w.log.easyslip.length, 0);
+} console.log('ok  slip: switched off / not configured -> rejected without API call');
 
 w = world();
 for (const body of [{ amount: 5, payload: PAYLOAD }, { amount: 500.555, payload: PAYLOAD }, { amount: 500, payload: 'x' }]) assert.strictEqual((await run(w, await req(body))).http, 400);
@@ -359,5 +359,5 @@ assert.strictEqual(r.refunded, 0); assert.strictEqual(w.docs['users/u1'].walletB
 console.log('ok  cron: expired rental locked at end time (deposit still held); admin forfeit keeps the deposit');
 
 w = world(); const vr = await handle(await req({}, undefined, '/nope'), env, { fetchFn: w.fetchFn, now: NOW });
-assert.strictEqual(vr.headers.get('x-astraphex-worker'), '4'); console.log('ok  version header for old-deployment detection');
+assert.strictEqual(vr.headers.get('x-astraphex-worker'), '6'); console.log('ok  version header for old-deployment detection');
 console.log('worker: all checks passed');

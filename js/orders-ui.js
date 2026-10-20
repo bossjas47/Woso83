@@ -62,7 +62,7 @@ export function orderCardHtml(o) {
       <div class="min-w-0">
         <p class="text-xs font-mono text-appleBlue">#${esc(o.orderNumber || o.orderId || o.id)}</p>
         <h3 class="font-semibold text-ink leading-snug">${esc(o.productName || '-')}</h3>
-        <p class="text-xs text-slate mt-0.5">${esc(fmtDate(o.createdAt))} · ${esc(o.quantity || 1)} ${esc(o.unit || '')}${o.paymentMethod === 'wallet' ? ' · จ่ายด้วยเครดิต' : ''}</p>
+        <p class="text-xs text-slate mt-0.5">${esc(fmtDate(o.createdAt))} · ${esc(o.quantity || 1)} ${esc(o.unit || '')}${o.paymentMethod === 'wallet' ? ' · จ่ายด้วยเครดิต' : o.paymentMethod === 'prize' ? ' · ของรางวัลกล่องสุ่ม' : ''}</p>
       </div>
       <div class="text-right shrink-0">
         <p class="font-heading font-semibold">${baht(o.amount ?? o.finalPrice)}</p>

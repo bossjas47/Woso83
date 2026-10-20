@@ -11,15 +11,14 @@ import { ensureProfile } from "./profile.js";
  *  - "เพิ่มเติม" sheet: balance (คงเหลือ X฿), account, queue, contacts
  * Pages only need <header id="site-header"></header> and <footer id="site-footer"></footer>.
  */
-const page = location.pathname.split('/').pop() || 'index.html';
-const ACTIVE = { 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more', 'rentals.html': 'more', 'wallet.html': 'more', 'cart.html': 'more' }[page] || '';
+const page = (location.pathname.split('/').pop() || 'index').replace(/\.html$/, '') + '.html'; // same with or without .html (Vercel cleanUrls)
+const ACTIVE = { 'home.html': 'home', 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more', 'box.html': 'shop', 'rentals.html': 'more', 'wallet.html': 'more', 'cart.html': 'more', 'vault.html': 'more' }[page] || '';
 const L = {
-  home: ROOT + 'index.html', shop: ROOT + 'front/category.html', topup: ROOT + 'front/topup.html',
-  account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', orders: ROOT + 'front/account.html#orders',
-  cart: ROOT + 'front/cart.html', login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
+  home: ROOT + 'home.html', shop: ROOT + 'front/category.html', topup: ROOT + 'front/topup.html',
+  account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', box: ROOT + 'front/box.html', orders: ROOT + 'front/account.html#orders',
+  cart: ROOT + 'front/cart.html', vault: ROOT + 'front/vault.html', login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
 };
 const LOGO = ROOT + 'assets/logo-icon-96.png';
-const LOGO_FULL = ROOT + 'assets/logo-full-600.jpg';
 
 let user = null;
 let balance = null;
@@ -57,7 +56,7 @@ function renderHeader() {
       <div class="hidden md:flex items-center gap-7 text-[14px]">
         ${navItem('home', 'หน้าหลัก', L.home)}
         ${navItem('shop', 'สินค้า', L.shop)}
-        <a href="${L.topup}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-semibold text-[#04131c] bg-cyanGlow shadow-[0_0_16px_rgba(0,229,255,.55)] hover:shadow-[0_0_22px_rgba(0,229,255,.8)] transition">${icon(ICONS.wallet, 'w-4 h-4', 2)}เติมเงิน</a>
+        <a href="${L.topup}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-semibold text-[#04131c] bg-cyanGlow hover: transition">${icon(ICONS.wallet, 'w-4 h-4', 2)}เติมเงิน</a>
         <button type="button" onclick="openTools()" class="text-slate hover:text-ink transition-colors">เครื่องมือ</button>
         <button type="button" onclick="toggleMore(event)" class="${ACTIVE === 'more' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'} inline-flex items-center gap-1 transition-colors" aria-haspopup="dialog">เพิ่มเติม ${icon('M6 9l6 6 6-6', 'w-3.5 h-3.5', 2)}</button>
       </div>
@@ -92,7 +91,7 @@ function renderFooter() {
   f.innerHTML = `
     <div class="max-w-[1200px] mx-auto px-4 sm:px-6 py-12 grid gap-10 md:grid-cols-3 text-sm">
       <div>
-        <div class="rounded-2xl overflow-hidden bg-black w-[240px] max-w-full"><img src="${LOGO_FULL}" alt="${SHOP_NAME}" width="600" height="232" class="w-full h-auto"></div>
+        <div class="flex items-center gap-2.5"><img src="${LOGO}" alt="" width="40" height="40" class="w-10 h-10 object-contain"><span class="font-heading font-bold text-[19px] tracking-tight text-ink">ASTRAPHEX <span class="text-brandTeal">HUB</span></span></div>
         <p class="text-slate mt-4 leading-relaxed">ศูนย์รวมไอดีและบริการในเกม Arena Breakout ตรวจสอบได้ทุกออเดอร์</p>
       </div>
       <div>
@@ -147,10 +146,10 @@ function renderMoreSheet() {
   sh.innerHTML = `
     <div class="w-10 h-1.5 rounded-full bg-control mx-auto mb-4 md:hidden"></div>
     ${user ? `
-      <div class="rounded-3xl p-5 text-gallery mb-3" style="background:linear-gradient(135deg,#0b1f6b 0%,#0e3a8a 55%,#159a9c 100%)">
+      <div class="rounded-3xl p-5 text-gallery mb-3" style="background:#1d1d1f">
         <p class="text-[13px] opacity-80">ยอดเงินในบัญชี</p>
         <p id="more-balance" class="text-3xl font-heading font-bold mt-1">${balance === null ? 'กำลังโหลด…' : `คงเหลือ ${fmtBal(balance)}฿`}</p>
-        <a href="${L.topup}" class="mt-4 inline-flex items-center gap-1.5 bg-cyanGlow text-[#04131c] font-semibold text-sm rounded-full px-4 py-2 shadow-[0_0_16px_rgba(0,229,255,.6)]">${icon(ICONS.plus, 'w-4 h-4', 2.6)}เติมเงิน</a>
+        <a href="${L.topup}" class="mt-4 inline-flex items-center gap-1.5 bg-cyanGlow text-[#04131c] font-semibold text-sm rounded-full px-4 py-2">${icon(ICONS.plus, 'w-4 h-4', 2.6)}เติมเงิน</a>
       </div>` : `
       <div class="rounded-3xl bg-mist p-5 mb-3">
         <p class="font-semibold text-ink">ยังไม่ได้เข้าสู่ระบบ</p>
@@ -183,21 +182,7 @@ function closeMore() {
   document.getElementById('more-backdrop')?.classList.remove('open');
 }
 
-function renderToolsModal() {
-  if (document.getElementById('tools-modal')) return;
-  const m = document.createElement('div');
-  m.id = 'tools-modal'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'เครื่องมือ');
-  m.innerHTML = `<div class="modal-card text-center">
-      <button type="button" onclick="closeModal('tools-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-mist text-slate flex items-center justify-center">${icon(ICONS.x, 'w-4 h-4', 2)}</button>
-      <div class="w-16 h-16 mx-auto rounded-2xl bg-mist flex items-center justify-center text-pricingBlue">${icon(ICONS.tools, 'w-8 h-8', 2)}</div>
-      <p class="text-xs font-semibold text-launchOrange mt-5 tracking-wide">COMING SOON</p>
-      <h2 class="text-2xl font-heading font-semibold mt-1">โปรแกรมจัดการไอดีไก่</h2>
-      <p class="text-slate mt-2">อยู่ระหว่างการพัฒนา (Coming Soon)<br>เปิดให้ใช้งานเร็ว ๆ นี้</p>
-      <button type="button" onclick="closeModal('tools-modal')" class="apple-pricing-pill w-full py-3 text-[15px] mt-6">รับทราบ</button>
-    </div>`;
-  document.body.append(m);
-}
-function openTools() { closeMore(); renderToolsModal(); openModal('tools-modal'); }
+function openTools() { location.href = L.vault; }
 
 async function shellSignOut() {
   try { await signOut(auth); toast('ออกจากระบบแล้ว'); closeMore(); } catch (_) { toast('ออกจากระบบไม่สำเร็จ', 'error'); }
@@ -220,6 +205,7 @@ function watchUser(u) {
     balance = num(d.walletBalance);
     const el = document.getElementById('more-balance');
     if (el) el.textContent = `คงเหลือ ${fmtBal(balance)}฿`;
+    document.querySelectorAll('[onclick="openTools()"], [data-tools]').forEach(b => b.classList.toggle('has-dot', num(d.vaultAlerts) > 0));
     document.dispatchEvent(new CustomEvent('wallet', { detail: { balance, profile: d } }));
     if (d.status === 'suspended') {
       toast('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อแอดมิน', 'error');
@@ -228,7 +214,16 @@ function watchUser(u) {
   }, (e) => console.warn('wallet:', e.code || e));
 }
 
+function speculate() {
+  if (!HTMLScriptElement.supports?.('speculationrules')) return;
+  const dir = new URL(ROOT + 'front/', location.href).pathname;
+  const s = document.createElement('script'); s.type = 'speculationrules';
+  s.textContent = JSON.stringify({ prerender: [{ where: { href_matches: ['product', 'category', 'topup', 'queue', 'cart', 'box'].map(n => `${dir}${n}*`) }, eagerness: 'moderate' }] });
+  document.head.append(s);
+}
+
 function init() {
+  speculate();
   renderHeader();
   renderFooter();
   renderBottomNav();

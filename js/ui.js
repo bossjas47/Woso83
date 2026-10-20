@@ -36,7 +36,7 @@ export function fixImageUrl(u) {
 export const IMAGE_CDN = 'https://wsrv.nl/';
 export function sizedImage(u, width) {
   const s = fixImageUrl(u);
-  if (!IMAGE_CDN || !/^https?:\/\//.test(s) || s.startsWith(IMAGE_CDN) || /placehold\.co/.test(s)) return s;
+  if (!IMAGE_CDN || !/^https?:\/\//.test(s) || s.startsWith(IMAGE_CDN) || /placehold\.co/.test(s) || /\.svg($|\?)/i.test(s)) return s;
   return `${IMAGE_CDN}?url=${encodeURIComponent(s)}&w=${width}&output=webp&q=78&we`;
 }
 /** src + width/height + lazy loading + "resized copy failed -> original -> placeholder" for an <img>. */

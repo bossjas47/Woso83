@@ -8,6 +8,9 @@
 //   POST /rent/extend|credentials|return   extend, read the login (only while the rental runs), give back
 //   POST /admin/rent               close a returned / expired rental: refund or keep the deposit, put the ID back
 //   Cron Trigger (*/5 * * * *)     locks IDs whose rental time is up (needed for the Discord alert; credentials are time-checked anyway)
+//   POST /box/open                 loot box (กล่องสุ่ม): charge the credit price, draw the prize here with a secure random number,
+//                                  deliver it (credit / game ID / queued service) and log it in one transaction
+//   POST /box/claim                give the contact or game login for a won service prize; creates the queue order
 //   POST /admin/user               change a user's login name, password, admin claim, disabled  (admin claim only)
 //   POST /notify                   Discord message for a new order / top-up request ({kind:'test'} = admin only)
 // Variables (Worker > Settings > Variables and Secrets):
@@ -20,7 +23,7 @@
 const MIN = 20, MAX = 50000, THROTTLE_MS = 10000, MAX_SLIP_AGE_MS = 3 * 864e5;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const SHOP = 'ASTRAPHEX HUB';
-export const WORKER_VERSION = '4';
+export const WORKER_VERSION = '6';
 
 const enc = new TextEncoder();
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -55,7 +58,7 @@ async function verifyIdTokenInner(token, projectId, fetchFn, now) {
   const sec = now / 1000;
   if (!ok || claims.aud !== projectId || claims.iss !== `https://securetoken.google.com/${projectId}`
       || !(claims.exp > sec) || !(claims.iat <= sec + 60) || !claims.sub) throw fail('unauthenticated', 'กรุณาเข้าสู่ระบบใหม่');
-  return { uid: claims.sub, email: claims.email || '', name: claims.name || '', admin: claims.admin === true };
+  return { uid: claims.sub, email: claims.email || '', name: claims.name || '', admin: claims.admin === true, perms: Array.isArray(claims.perms) ? claims.perms.map(String) : [] };
 }
 
 async function accessToken(sa, fetchFn, now) {
@@ -208,18 +211,24 @@ async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   const payload = String(data.payload || '');
   if (!Number.isFinite(amount) || amount < MIN || amount > MAX || Math.round(amount * 100) !== amount * 100) return [{ error: 'ยอดเงินไม่ถูกต้อง' }, 400];
   if (payload.length < 20 || payload.length > 2000) return [{ error: 'ไม่พบ QR ที่อ่านได้บนสลิป' }, 400];
+  // Slips are checked by the API only (no manual approval): top-up, or pay for one product (purpose 'buy': credit exactly the price, no promo bonus, then buy).
+  const buy = data.purpose === 'buy' ? (data.buy || {}) : null;
+  if (buy) { const bad = validateBuy(buy); if (bad) return [{ error: bad }, 400]; }
   const settings = await fs.get('system/settings');
-  if (!(settings && settings.slipAutoVerify === true) || !env.EASYSLIP_KEY || !env.RECEIVER_MATCH) return [{ status: 'manual' }];
+  if (!(settings && settings.slipAutoVerify === true) || !env.EASYSLIP_KEY || !env.RECEIVER_MATCH) return [{ status: 'rejected', message: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาติดต่อแอดมิน' }];
 
+  if ((await fs.get(`users/${user.uid}`))?.status === 'suspended') return [{ status: 'rejected', message: 'บัญชีนี้ถูกระงับการใช้งาน' }];
   const attempt = await fs.get(`slip_attempts/${user.uid}`);
   if (attempt && now - attempt.at < THROTTLE_MS) return [{ status: 'rejected', message: 'ส่งสลิปถี่เกินไป รอสักครู่แล้วลองใหม่' }];
   await fs.commit([{ update: { name: fs.name(`slip_attempts/${user.uid}`), fields: fs.fields({ at: now }) } }]);
 
-  const check = await checkSlip({ fetchFn, key: env.EASYSLIP_KEY, receiver: env.RECEIVER_MATCH, payload, amount, now });
+  let check;
+  try { check = await checkSlip({ fetchFn, key: env.EASYSLIP_KEY, receiver: env.RECEIVER_MATCH, payload, amount, now }); }
+  catch (e) { console.warn('slip api:', e); return [{ status: 'rejected', message: 'ระบบตรวจสลิปขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่' }]; }
   if (!check.ok) return [{ status: 'rejected', message: check.message }];
 
   const promos = (await fs.query('', 'topup_promos')).map(d => ({ id: d.id, ...d.data }));
-  const { promo, bonus } = bestTopupPromo(promos, amount);
+  const { promo, bonus } = buy ? { promo: null, bonus: 0 } : bestTopupPromo(promos, amount);
   const id = randomId();
   try {
     // One atomic commit: the slip reference can be used once (exists:false), the wallet is credited, the record is written.
@@ -233,7 +242,11 @@ async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
     throw e;
   }
   later(discord(fs, fetchFn, { title: 'เติมเงินอัตโนมัติสำเร็จ', description: `ผู้ใช้ ${user.name || user.email} เติม ฿${money(amount)} (+โบนัส ${money(bonus)})` }));
-  return [{ status: 'completed', credit: amount + bonus }];
+  const out = { status: 'completed', credit: amount + bonus };
+  if (!buy) return [out];
+  // Spend the new credit on the order. If it fails (price, stock), the credit stays in the account.
+  const [b, st] = await routeBuy({ user, data: buy, fs, fetchFn, now, later });
+  return [st ? { ...out, buyError: b.error || 'สั่งซื้อไม่สำเร็จ' } : { ...out, buy: b }];
 }
 
 // ---------- POST /buy ----------
@@ -634,8 +647,9 @@ async function routeRentReturn({ user, data, fs, fetchFn, now, later }) {
 }
 
 /** Admin closes a returned / expired rental: deposit back or kept, and the ID goes back on the shelf (optionally with a new password). */
+const PERMS = ['orders', 'pay', 'products', 'promos', 'rentals', 'boxes', 'vault', 'users'];
 async function routeAdminRent({ user, data, fs, now }) {
-  if (!user.admin) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
+  if (!user.admin && !user.perms.includes('rentals')) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
   const id = rentalId(data);
   if (!id) return OWN_RENTAL;
   if (!['refund', 'forfeit'].includes(data.action)) return [{ error: 'คำสั่งไม่ถูกต้อง' }, 400];
@@ -683,7 +697,7 @@ async function routeAdminUser({ user, data, sa, fetchFn, now }) {
   if (!user.admin) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
   const uid = String(data.uid || '');
   if (!/^[\w-]{1,128}$/.test(uid)) return [{ error: 'uid ไม่ถูกต้อง' }, 400];
-  if (uid === user.uid && (data.admin === false || data.disabled === true)) return [{ error: 'ห้ามลดสิทธิ์หรือระงับบัญชีของตัวเอง' }, 400];
+  if (uid === user.uid && (data.admin === false || data.disabled === true || Array.isArray(data.perms))) return [{ error: 'ห้ามลดสิทธิ์หรือระงับบัญชีของตัวเอง' }, 400];
   const token = await accessToken(sa, fetchFn, now);
   const api = `https://identitytoolkit.googleapis.com/v1/projects/${sa.project_id}`;
   const call = async (path, body) => {
@@ -706,11 +720,12 @@ async function routeAdminUser({ user, data, sa, fetchFn, now }) {
     update.password = String(data.password);
   }
   if (typeof data.disabled === 'boolean') { update.disableUser = data.disabled; if (data.disabled) update.validSince = String(Math.floor(now / 1000)); }
-  if (typeof data.admin === 'boolean') {
+  if (typeof data.admin === 'boolean' || Array.isArray(data.perms)) {
     const look = await call('accounts:lookup', { localId: [uid] });
     let attrs = {};
     try { attrs = JSON.parse(look.users?.[0]?.customAttributes || '{}'); } catch (_) {}
-    if (data.admin) attrs.admin = true; else delete attrs.admin;
+    if (typeof data.admin === 'boolean') { if (data.admin) attrs.admin = true; else delete attrs.admin; }
+    if (Array.isArray(data.perms)) { const p = PERMS.filter(x => data.perms.includes(x)); if (p.length) attrs.perms = p; else delete attrs.perms; }
     update.customAttributes = JSON.stringify(attrs);
   }
   if (Object.keys(update).length === 1) return [{ ok: true }];
@@ -742,6 +757,258 @@ async function routeNotify({ user, data, fs, fetchFn, now }) {
   return [{ ok: true }];
 }
 
+// ---------- vault access: bought with credit (prices from system/settings.vaultPackages) or a one-time free trial (vaultTrialDays) ----------
+async function vaultOnce({ user, d, fs, now }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const [profile, st] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get('system/settings', tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    const days = d.trial ? Math.floor(num(st?.vaultTrialDays)) : Math.floor(num(d.days));
+    const pack = d.trial ? null : (Array.isArray(st?.vaultPackages) ? st.vaultPackages : []).find(p => Math.floor(num(p.days)) === days && num(p.price) > 0);
+    if (d.trial ? !(days > 0) : !pack) return [{ error: d.trial ? 'ตอนนี้ยังไม่มีโปรทดลองใช้ฟรี' : 'ไม่พบแพ็กเกจนี้' }, 404];
+    if (d.trial && profile?.vaultTrialUsed === true) return [{ error: 'คุณใช้สิทธิ์ทดลองฟรีไปแล้ว' }, 409];
+    const price = d.trial ? 0 : r2(num(pack.price));
+    if (!d.trial && d.expectedAmount != null && Math.abs(num(d.expectedAmount) - price) > 0.01) return [{ error: `ราคาเปลี่ยนเป็น ฿${money(price)} กรุณาตรวจสอบอีกครั้ง` }, 409];
+    const balance = r2(num(profile?.walletBalance));
+    if (balance < price) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(price)} (คงเหลือ ฿${money(balance)})` }, 400];
+    const until = Math.max(now, Date.parse(profile?.vaultUntil) || 0) + days * 864e5; // renewing stacks onto the days left
+    const fields = { vaultUntil: new Date(until), ...(d.trial ? { vaultTrialUsed: true } : { walletBalance: r2(balance - price) }) };
+    await fs.commit([
+      { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields(fields) }, updateMask: { fieldPaths: Object.keys(fields) }, currentDocument: { exists: true } },
+      ...(d.trial ? [] : [walletWrites(fs, user.uid, balance, balance - price, `ซื้อสิทธิ์คลังไอดี ${days} วัน`)[1]]),
+      { update: { name: fs.name(`vault_sales/${randomId()}`), fields: fs.fields({ uid: user.uid, email: user.email || '', days, price, trial: !!d.trial, by: 'customer', until: new Date(until) }) }, updateTransforms: [stamp('at')] }
+    ], tx);
+    committed = true;
+    return [{ vaultUntil: until, charged: price, balance: r2(balance - price) }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+const routeVaultBuy = ({ user, data, fs, now }) => retry(() => vaultOnce({ user, d: data, fs, now }));
+
+// ---------- vault: team link (no login; the secret token in the link is the key) ----------
+async function vaultLink(fs, data, now) {
+  const token = String(data.token || '');
+  const link = /^[A-Za-z0-9]{20,40}$/.test(token) ? await fs.get(`vault_links/${token}`) : null;
+  if (!link) return [null, [{ error: 'ลิงก์ไม่ถูกต้องหรือถูกยกเลิกแล้ว' }, 404]];
+  const owner = await fs.get(`users/${link.uid}`);
+  if (!(Date.parse(owner?.vaultUntil) > now)) return [null, [{ error: 'สิทธิ์ใช้งานของหัวหน้าทีมหมดอายุ' }, 403]];
+  return [link, null];
+}
+async function routeVaultTeam({ data, fs, now }) {
+  const [link, err] = await vaultLink(fs, data, now);
+  if (err) return err;
+  const ids = await fs.query(`vaults/${link.uid}`, 'ids', [['assignee', 'EQUAL', link.memberId]]);
+  return [{ name: String(link.name || ''), ids: ids.map(x => ({ id: x.id, text: String(x.data.text || ''), done: x.data.done === true, due: num(x.data.due), note: String(x.data.note || ''), issue: String(x.data.issue || '') })) }];
+}
+async function routeVaultDone({ data, fs, now }) {
+  const [link, err] = await vaultLink(fs, data, now);
+  if (err) return err;
+  const id = String(data.id || '');
+  const row = /^[\w-]{1,64}$/.test(id) ? await fs.get(`vaults/${link.uid}/ids/${id}`) : null;
+  if (!row || row.assignee !== link.memberId) return [{ error: 'ไม่พบไอดีนี้' }, 404];
+  const done = data.done === true;
+  await fs.commit([
+    { update: { name: fs.name(`vaults/${link.uid}/ids/${id}`), fields: fs.fields({ done }) }, updateMask: { fieldPaths: ['done'] }, currentDocument: { exists: true } },
+    { update: { name: fs.name(`vaults/${link.uid}/logs/${crypto.randomUUID()}`), fields: fs.fields({ action: done ? 'done' : 'undone', detail: `${link.name}: ${String(row.text).split(/[|:\s]/)[0].slice(0, 40)}`, at: new Date(now) }) } }
+  ]);
+  return [{ ok: true }];
+}
+
+async function routeVaultIssue({ data, fs, now }) {
+  const [link, err] = await vaultLink(fs, data, now);
+  if (err) return err;
+  const id = String(data.id || ''), issue = str(data.issue, 200); // empty text clears the report
+  const row = /^[\w-]{1,64}$/.test(id) ? await fs.get(`vaults/${link.uid}/ids/${id}`) : null;
+  if (!row || row.assignee !== link.memberId) return [{ error: 'ไม่พบไอดีนี้' }, 404];
+  await fs.commit([
+    { update: { name: fs.name(`vaults/${link.uid}/ids/${id}`), fields: fs.fields({ issue }) }, updateMask: { fieldPaths: ['issue'] }, currentDocument: { exists: true } },
+    ...(issue ? [{ update: { name: fs.name(`users/${link.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('vaultAlerts', 1)], currentDocument: { exists: true } }, { update: { name: fs.name(`vaults/${link.uid}/logs/${crypto.randomUUID()}`), fields: fs.fields({ action: 'issue', detail: `${link.name}: ${issue}`, items: [String(row.text).split(/[|:\s]/)[0].slice(0, 40)], count: 1, at: new Date(now) }) } }] : [])
+  ]);
+  return [{ ok: true }];
+}
+
+// ---------- Loot boxes (กล่องสุ่ม) ----------
+// boxes/{id} (written by the admin): { name, price, active, prizes: [{ id, label, kind, weight, rarity, ... }] }
+//   kind 'credit'  amount          -> added to the wallet at once
+//   kind 'account' productId       -> one available game ID of that product is sold to the player (order paid by 'prize', ฿0)
+//   kind 'service' productId, qty  -> capacity is reserved now; the player then sends contact / login with /box/claim
+// The prize is drawn HERE (crypto random), never in the browser. A prize that cannot be handed over right now (no ID left,
+// no service capacity) is skipped by re-drawing, which gives exactly the odds among the prizes that are in stock.
+const BOX_KINDS = ['credit', 'account', 'service'];
+const RARITIES = ['common', 'rare', 'epic', 'legendary'];
+const isServiceProd = (p) => p.productType === 'service' || String(p.category || '').startsWith('service');
+export function normalizePrizes(list) {
+  return (Array.isArray(list) ? list : []).map((p, i) => {
+    if (!isRecord(p) || !BOX_KINDS.includes(p.kind) || !(num(p.weight) > 0)) return null;
+    const out = { id: str(p.id, 40) || `p${i}`, kind: p.kind, weight: num(p.weight), rarity: RARITIES.includes(p.rarity) ? p.rarity : 'common', label: str(p.label, 80) };
+    if (p.kind === 'credit') {
+      out.amount = r2(num(p.amount));
+      if (!(out.amount > 0)) return null;
+      if (!out.label) out.label = `เครดิต ฿${money(out.amount)}`;
+      return out;
+    }
+    if (!/^[\w-]{1,128}$/.test(String(p.productId || ''))) return null;
+    out.productId = String(p.productId);
+    if (p.kind === 'service') { out.qty = Math.max(1, Math.floor(num(p.qty)) || 1); out.claimMode = p.claimMode === 'self' ? 'self' : 'with_id'; }
+    return out;
+  }).filter(Boolean);
+}
+const secureRandom = () => { const a = new Uint32Array(2); crypto.getRandomValues(a); return (a[0] * 2 ** 21 + (a[1] >>> 11)) / 2 ** 53; }; // [0, 1)
+export function pickPrize(prizes, rnd = secureRandom) {
+  const total = prizes.reduce((a, p) => a + p.weight, 0);
+  if (!(total > 0)) return null;
+  let x = rnd() * total;
+  for (const p of prizes) { if (x < p.weight) return p; x -= p.weight; }
+  return prizes[prizes.length - 1];
+}
+const boxId = (d) => (typeof d.boxId === 'string' && /^[\w-]{1,128}$/.test(d.boxId) ? d.boxId : '');
+
+export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const [profile, box] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`boxes/${d.boxId}`, tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    if (!box || box.active === false) return [{ error: 'ไม่พบกล่องนี้ หรือปิดให้เล่นชั่วคราว' }, 404];
+    const price = r2(num(box.price));
+    if (!(price > 0)) return [{ error: 'กล่องนี้ยังไม่ได้ตั้งราคา' }, 400];
+    if (d.expectedPrice != null && Math.abs(num(d.expectedPrice) - price) > 0.01) return [{ error: `ราคากล่องเปลี่ยนเป็น ฿${money(price)} กรุณาตรวจสอบอีกครั้ง` }, 409];
+    const balance = r2(num(profile?.walletBalance));
+    if (balance < price) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(price)} (คงเหลือ ฿${money(balance)})` }, 400];
+    const prizes = normalizePrizes(box.prizes);
+    if (!prizes.length) return [{ error: 'กล่องนี้ยังไม่ได้ตั้งของรางวัล' }, 400];
+
+    // draw; skip what cannot be delivered right now
+    const products = new Map();
+    const productOf = async (pid) => { if (!products.has(pid)) products.set(pid, await fs.get(`products/${pid}`, tx)); return products.get(pid); };
+    let pool = prizes, prize = null, product = null, item = null;
+    while (pool.length && !prize) {
+      const c = pickPrize(pool, rnd);
+      let ok = true;
+      if (c.kind !== 'credit') {
+        const pr = await productOf(c.productId);
+        if (!pr) ok = false;
+        else if (c.kind === 'account') {
+          ok = !isServiceProd(pr);
+          if (ok) { item = (await fs.query(`products/${c.productId}`, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 1, tx }))[0] || null; ok = !!item; }
+        } else ok = isServiceProd(pr) && num(pr.stock) >= c.qty;
+        if (ok) product = pr;
+      }
+      if (ok) prize = c; else pool = pool.filter(x => x !== c);
+    }
+    if (!prize) return [{ error: 'ของรางวัลในกล่องนี้หมดชั่วคราว กรุณาลองใหม่ภายหลัง' }, 409];
+
+    const openId = randomId();
+    const username = profile?.username || user.name || user.email.split('@')[0];
+    const afterPay = r2(balance - price);
+    const finalBalance = prize.kind === 'credit' ? r2(afterPay + prize.amount) : afterPay;
+    const boxName = str(box.name, 120);
+    const label = prize.label || (prize.kind === 'credit' ? '' : str(product?.name, 80));
+    const writes = [
+      { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ walletBalance: finalBalance }) }, updateMask: { fieldPaths: ['walletBalance'] }, currentDocument: { exists: true } },
+      { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, before: balance, after: afterPay, delta: -price, note: `เปิดกล่องสุ่ม ${boxName}`, by: 'system' }) }, updateTransforms: [stamp('at')] }
+    ];
+    const open = { uid: user.uid, userEmail: user.email, boxId: d.boxId, boxName, price, prizeId: prize.id, prizeLabel: label, kind: prize.kind, rarity: prize.rarity, status: 'delivered', balanceAfter: finalBalance };
+    const out = { id: prize.id, label, kind: prize.kind, rarity: prize.rarity, needsClaim: false };
+
+    if (prize.kind === 'credit') {
+      open.amount = prize.amount; out.amount = prize.amount;
+      writes.push({ update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, before: afterPay, after: finalBalance, delta: prize.amount, note: `ได้รับเครดิตจากกล่องสุ่ม ${boxName}`, by: 'system' }) }, updateTransforms: [stamp('at')] });
+    } else if (prize.kind === 'account') {
+      const oid = randomId(), orderNumber = `ORD-${oid.slice(0, 8).toUpperCase()}`;
+      const acc = { username: String(item.data.username || ''), password: String(item.data.password || ''), stockItemId: item.id };
+      const order = {
+        orderNumber, orderId: orderNumber, productId: prize.productId, productName: str(product.name, 200), productType: 'account', quantity: 1, bonusQty: 0, receiveQty: 1, unit: 'ไอดี',
+        unitPrice: 0, subtotal: 0, discount: 0, promoCode: null, amount: 0, finalPrice: 0, paymentMethod: 'prize', paymentProof: `ของรางวัลจากกล่องสุ่ม ${boxName}`,
+        userEmail: user.email, userId: user.uid, status: 'completed', accountsDelivered: [acc], accountDelivered: acc, prizeBox: d.boxId, prizeOpenId: openId
+      };
+      open.productId = prize.productId; open.productName = order.productName; open.orderId = oid; out.productName = order.productName; out.orderId = oid;
+      writes.push(
+        { update: { name: fs.name(`products/${prize.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -1), stamp('updatedAt')], currentDocument: { exists: true } },
+        { update: { name: fs.name(item.path), fields: fs.fields({ status: 'sold', orderId: oid }) }, updateMask: { fieldPaths: ['status', 'orderId'] }, updateTransforms: [stamp('soldAt')], currentDocument: { exists: true } },
+        { update: { name: fs.name(`orders/${oid}`), fields: fs.fields(order) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')], currentDocument: { exists: false } }
+      );
+    } else {
+      open.status = 'pending_claim'; open.productId = prize.productId; open.productName = str(product.name, 200); open.qty = prize.qty; open.claimMode = prize.claimMode;
+      out.needsClaim = true; out.productName = open.productName; out.qty = prize.qty; out.claimMode = prize.claimMode; out.openId = openId;
+      writes.push({ update: { name: fs.name(`products/${prize.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -prize.qty), stamp('updatedAt')], currentDocument: { exists: true } }); // capacity is held for this win
+    }
+    writes.push({ update: { name: fs.name(`box_opens/${openId}`), fields: fs.fields(open) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } });
+    if (prize.rarity !== 'common') writes.push({ update: { name: fs.name(`recent_wins/${openId}`), fields: fs.fields({ boxName, prizeLabel: label, rarity: prize.rarity, buyerMask: maskName(username) }) }, updateTransforms: [stamp('createdAt')] });
+    await fs.commit(writes, tx);
+    committed = true;
+    return [{ ok: true, openId, balance: finalBalance, price, prize: out, boxName, username }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+
+async function routeBoxOpen({ user, data, fs, fetchFn, now, later }) {
+  const id = boxId(data);
+  if (!id) return [{ error: 'ไม่พบกล่องนี้' }, 400];
+  const out = await retry(() => boxOpenOnce({ user, d: { ...data, boxId: id }, fs, now }));
+  const [body, status] = out;
+  if (!status && body.prize && (body.prize.kind !== 'credit' || body.prize.rarity === 'legendary')) {
+    const p = body.prize;
+    later(discord(fs, fetchFn, { title: p.needsClaim ? '🎁 ลูกค้าสุ่มได้งานบริการ (รอกรอกข้อมูลรับรางวัล)' : p.kind === 'account' ? '🎁 ลูกค้าสุ่มได้ไอดีเกม' : '🎁 ลูกค้าสุ่มได้รางวัลใหญ่', fields: [
+      { name: 'กล่อง', value: body.boxName, inline: true }, { name: 'รางวัล', value: `${p.label}${p.qty ? ` × ${p.qty}` : ''}`, inline: true }, { name: 'ผู้เล่น', value: user.name || user.email }] }));
+  }
+  if (!status) { const { boxName, username, ...rest } = body; return [rest]; }
+  return out;
+}
+
+export async function boxClaimOnce({ user, d, fs, now }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const win = await fs.get(`box_opens/${d.openId}`, tx);
+    if (!win || win.uid !== user.uid) return [{ error: 'ไม่พบรางวัลนี้' }, 404];
+    if (win.kind !== 'service') return [{ error: 'รางวัลนี้ไม่ต้องกรอกข้อมูล' }, 400];
+    if (win.status !== 'pending_claim') return [{ error: 'รางวัลนี้รับไปแล้ว' }, 409];
+    const [profile, product] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`products/${win.productId}`, tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    if (!product) return [{ error: 'สินค้างานบริการนี้ถูกลบไปแล้ว กรุณาติดต่อแอดมิน' }, 404];
+    const cat = product.category ? await fs.get(`categories/${product.category}`, tx) : null;
+    const self = win.claimMode === 'self';
+    const b = { buyerFacebook: str(d.buyerFacebook), gameEmail: str(d.gameEmail), gamePassword: String(d.gamePassword || '').slice(0, 200), buyerContact: str(d.buyerContact), playTime: str(d.playTime) };
+    if (b.buyerFacebook.length < 2) return [{ error: 'กรุณากรอกชื่อหรือลิงก์ Facebook' }, 400];
+    if (self && (!b.buyerContact || !b.playTime)) return [{ error: 'กรุณากรอกชื่อในเกมและเวลาที่พร้อม' }, 400];
+    if (!self && (!b.gameEmail.includes('@') || !b.gamePassword)) return [{ error: 'กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม' }, 400];
+    const modes = Array.isArray(product.farmModes) ? product.farmModes : [];
+    const mode = modes.find(m => m.key === (self ? 'self' : 'with_id')) || null;
+    const oid = randomId(), orderNumber = `ORD-${oid.slice(0, 8).toUpperCase()}`;
+    const unit = product.serviceUnit || cat?.unit || 'กอง';
+    const username = profile?.username || user.name || user.email.split('@')[0];
+    const qty = Math.max(1, Math.floor(num(win.qty)) || 1);
+    const order = {
+      orderNumber, orderId: orderNumber, productId: win.productId, productName: mode ? `${product.name} (${mode.label})` : String(product.name || ''), productType: 'service',
+      quantity: qty, bonusQty: 0, receiveQty: qty, unit, unitPrice: 0, subtotal: 0, discount: 0, promoCode: null, amount: 0, finalPrice: 0,
+      paymentMethod: 'prize', paymentProof: `ของรางวัลจากกล่องสุ่ม ${win.boxName}`, userEmail: user.email, userId: user.uid, buyerFacebook: b.buyerFacebook,
+      ...(self ? { buyerContact: b.buyerContact, playTime: b.playTime } : { gameEmail: b.gameEmail, gamePassword: b.gamePassword, buyerContact: b.gameEmail }),
+      ...(mode ? { farmMode: mode.key } : {}),
+      status: 'processing', queueStatus: 'waiting', prizeBox: win.boxId, prizeOpenId: d.openId
+    };
+    await fs.commit([
+      { update: { name: fs.name(`orders/${oid}`), fields: fs.fields(order) }, updateTransforms: [stamp('createdAt'), stamp('paidAt')], currentDocument: { exists: false } },
+      { update: { name: fs.name(`queue/${oid}`), fields: fs.fields({ orderNumber, productId: win.productId, productName: String(product.name || ''), unit, quantity: qty, nameMask: maskName(username).slice(0, 8), uid: user.uid, status: 'waiting' }) }, updateTransforms: [stamp('createdAt')] },
+      { update: { name: fs.name(`box_opens/${d.openId}`), fields: fs.fields({ status: 'claimed', orderId: oid }) }, updateMask: { fieldPaths: ['status', 'orderId'] }, updateTransforms: [stamp('claimedAt')], currentDocument: { exists: true } }
+    ], tx);
+    committed = true;
+    const { gamePassword, ...publicOrder } = order;
+    return [{ ok: true, orderId: oid, order: { ...publicOrder, id: oid } }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+
+async function routeBoxClaim({ user, data, fs, fetchFn, now, later }) {
+  if (typeof data.openId !== 'string' || !/^[\w-]{1,64}$/.test(data.openId)) return [{ error: 'ไม่พบรางวัลนี้' }, 400];
+  const out = await retry(() => boxClaimOnce({ user, d: data, fs, now }));
+  const [body, status] = out;
+  if (!status && body.order) {
+    const o = body.order;
+    later(discord(fs, fetchFn, { title: '🛠️ ออเดอร์บริการใหม่ (ของรางวัลกล่องสุ่ม)', fields: [
+      { name: 'ออเดอร์', value: o.orderNumber, inline: true }, { name: 'สินค้า', value: `${o.productName} × ${o.quantity}` }, { name: 'ผู้เล่น', value: user.name || user.email }] }));
+  }
+  return out;
+}
+
 // ---------- router ----------
 export async function handle(request, env, { fetchFn = fetch, now = Date.now(), ctx = null } = {}) {
   const cors = { 'access-control-allow-origin': env.ALLOWED_ORIGIN || '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-expose-headers': 'x-astraphex-worker', 'x-astraphex-worker': WORKER_VERSION, vary: 'origin' };
@@ -749,14 +1016,15 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply({ error: 'method not allowed' }, 405);
   const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
-  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify };
+  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/team': routeVaultTeam, '/vault/team/done': routeVaultDone, '/vault/team/issue': routeVaultIssue };
+  const open = path.startsWith('/vault/team'); // the link token is the credential, not a login
   const route = routes[path];
   if (!route) return reply({ error: 'not found' }, 404);
   const pending = [];
   const later = (p) => { const q = Promise.resolve(p).catch((e) => console.warn('later:', e)); if (ctx?.waitUntil) ctx.waitUntil(q); else pending.push(q); };
   try {
     const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
-    const user = await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer /, ''), sa.project_id, fetchFn, now);
+    const user = open ? null : await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer /, ''), sa.project_id, fetchFn, now);
     const data = await request.json().catch(() => ({}));
     const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
     const [body, status = 200] = await route({ user, data: data || {}, fs, env, sa, fetchFn, now, later });

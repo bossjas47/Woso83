@@ -6,6 +6,12 @@ service cloud.firestore {
     // Admin = Firebase custom claim {admin: true}. Set it with scripts/set-admin-claim.js or the Worker (/admin/user).
     // Never gate on an e-mail address: anyone can register any username.
     function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    // Per-person permissions: custom claim perms = list of 'orders','pay','products','promos','rentals','boxes','vault','users'.
+    // Admins (admin:true) can do everything; settings, roles and login changes stay admin-only.
+    function hasPerm(p) { return signedIn() && 'perms' in request.auth.token && p in request.auth.token.perms; }
+    function can(p) { return isAdmin() || hasPerm(p); }
+    function isStaff() { return hasPerm('orders'); }
+    function staffKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function docAt(p) { return path('/databases/' + database + '/documents/' + p); }
     // A suspended account (users/{uid}.status) cannot file orders or top-ups.
     function notSuspended() {
@@ -17,18 +23,20 @@ service cloud.firestore {
     // ---------- Catalogue ----------
     match /products/{productId} {
       allow read: if true;
-      allow write: if isAdmin();
-      // Game-ID credentials: admin (and the Worker, which bypasses rules) only.
-      match /stock_items/{itemId} { allow read, write: if isAdmin(); }
+      allow write: if can('products');
+      allow update: if hasPerm('pay') && staffKeys(['stock', 'updatedAt']); // approving / cancelling an order moves stock
+      // Game-ID credentials: admin / products / pay (an approved order hands one out); the Worker bypasses rules.
+      match /stock_items/{itemId} { allow read, write: if can('products') || hasPerm('pay'); }
     }
-    match /categories/{catId} { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{catId} { allow read: if true; allow write: if can('products'); }
     // Codes can be looked up by exact name but not listed.
-    match /promo_codes/{code} { allow get: if true; allow list, write: if isAdmin(); }
+    match /promo_codes/{code} { allow get: if true; allow list, write: if can('promos'); }
     match /inventory_vault/{vaultId} { allow read, write: if false; }
 
     // ---------- Orders (customers file pending_payment only; wallet purchases are written by the Worker) ----------
     match /orders/{orderId} {
-      allow create: if signedIn() && notSuspended()
+      // Slips are verified by the Worker only (API check): browsers can no longer file pending orders / top-ups.
+      allow create: if false && signedIn() && notSuspended()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending_payment'
         && request.resource.data.paymentMethod in ['promptpay', 'truemoney']
@@ -61,8 +69,12 @@ service cloud.firestore {
              'buyerEmail', 'buyerFacebook', 'buyerContact', 'gameEmail', 'gamePassword', 'farmMode', 'playTime',
              'status', 'userEmail', 'userId', 'createdAt'
            ]);
-      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || can('pay') || (isStaff() && resource.data.productType == 'service'));
+      allow update, delete: if can('pay');
+      // staff: start / finish a paid service job, write a note to the customer, wipe the game password
+      allow update: if isStaff() && resource.data.productType == 'service' && resource.data.status == 'processing'
+        && request.resource.data.status in ['processing', 'completed']
+        && staffKeys(['status', 'queueStatus', 'workStartedAt', 'completedAt', 'gamePassword', 'gamePasswordClearedAt', 'adminNote']);
     }
 
     // Public service queue: display-only copy of a service order (masked name, no contact/credentials).
@@ -79,14 +91,22 @@ service cloud.firestore {
         && request.resource.data.productName.size() <= 200
         && request.resource.data.unit.size() <= 20
         && request.resource.data.keys().hasOnly(['orderNumber', 'productId', 'productName', 'unit', 'quantity', 'nameMask', 'uid', 'status', 'createdAt']);
-      allow update, delete: if isAdmin();
+      allow update, delete: if can('pay');
+      allow update: if isStaff() && request.resource.data.status in ['working', 'done'] && staffKeys(['status', 'startedAt', 'updatedAt']);
     }
 
     // Public feed of finished orders (home page) and the public counters: written by admin / Worker.
-    match /recent_orders/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /recent_orders/{id} {
+      allow read: if true; allow write: if can('pay');
+      allow create: if isStaff() && request.resource.data.keys().hasOnly(['productName', 'amount', 'buyerMask', 'kind', 'createdAt']);
+    }
     match /stats/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if can('pay');
+      // staff finishing a job adds one order and its amount
+      allow update: if isStaff() && docId == 'public' && staffKeys(['orders', 'sales'])
+        && request.resource.data.orders == resource.data.get('orders', 0) + 1
+        && request.resource.data.sales >= resource.data.get('sales', 0) && request.resource.data.sales <= resource.data.get('sales', 0) + 1000000;
       // Signing up adds exactly one to the user counter, in the same batch that creates the caller's profile.
       allow create: if signedIn() && docId == 'public'
         && request.resource.data.keys().hasOnly(['users']) && request.resource.data.users == 1
@@ -106,7 +126,7 @@ service cloud.firestore {
     // ---------- Users & wallet ----------
     // A user may create / edit their own profile fields; balance, role and status are admin / Worker only.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPerm('users') || hasPerm('vault'));
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['username', 'email', 'facebook', 'contactEmail', 'createdAt', 'lastLoginAt'])
         && request.resource.data.createdAt == request.time
@@ -116,14 +136,21 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'email', 'facebook', 'contactEmail', 'lastLoginAt'])
         && shortStr(request.resource.data, 'username', 40) && shortStr(request.resource.data, 'facebook', 200)
         && shortStr(request.resource.data, 'contactEmail', 200) && shortStr(request.resource.data, 'email', 200);
+      // the owner of a vault clears the team-problem counter (only to 0; the Worker raises it)
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vaultAlerts']) && request.resource.data.vaultAlerts == 0;
       allow write: if isAdmin();
+      // delegated: wallet / contact fields (users, pay), vault days (vault); role, login and perms never
+      allow update: if (hasPerm('users') && staffKeys(['walletBalance', 'username', 'contactEmail', 'facebook', 'status', 'adminUpdatedAt']))
+        || (hasPerm('pay') && staffKeys(['walletBalance']))
+        || (hasPerm('vault') && staffKeys(['vaultUntil']));
     }
     match /wallet_logs/{id} {
-      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow write: if isAdmin();
+      allow read: if can('users') || (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if can('users') || hasPerm('pay');
     }
 
-    match /topup_promos/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /topup_promos/{id} { allow read: if true; allow write: if can('promos'); }
 
     function promoBonus(p, amount) {
       return p.get('active', true) == true && amount >= p.minAmount
@@ -132,8 +159,8 @@ service cloud.firestore {
     }
     // A browser can only ask for credit; the bonus must match the named promotion (or be 0 without one).
     match /topup_transactions/{txnId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if signedIn() && notSuspended()
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || can('pay'));
+      allow create: if false && signedIn() && notSuspended()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
@@ -153,13 +180,13 @@ service cloud.firestore {
              'txnId', 'uid', 'email', 'amount', 'bonusCredit', 'finalCredit', 'promoId',
              'paymentMethod', 'proofRef', 'slipHash', 'hasSlip', 'status', 'createdAt'
            ]);
-      allow update, delete: if isAdmin();
+      allow update, delete: if can('pay');
     }
 
     // ---------- Slips ----------
     // The slip picture of an order / top-up (shrunk JPEG data URL), same id as the order / top-up.
     match /slip_images/{id} {
-      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow read: if can('pay') || (signedIn() && resource.data.uid == request.auth.uid);
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['kind', 'uid', 'image', 'createdAt'])
@@ -174,7 +201,7 @@ service cloud.firestore {
     // SHA-256 of each slip file ever sent. Create-only, so the same file cannot be sent twice.
     match /slip_hashes/{hash} {
       allow get: if signedIn();
-      allow list: if isAdmin();
+      allow list: if can('pay');
       allow create: if signedIn()
         && hash.matches('[0-9a-f]{64}')
         && request.resource.data.uid == request.auth.uid
@@ -198,10 +225,42 @@ service cloud.firestore {
     }
     // Game-ID rentals: written only by the Worker; the renter reads the record (end time, status), never the login.
     match /rentals/{id} {
-      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin();
+      allow read: if can('rentals') || (signedIn() && resource.data.uid == request.auth.uid);
+      allow delete: if can('rentals');
     }
     match /angpao_vouchers/{id} { allow read: if isAdmin(); allow write: if false; }
+
+    // Loot boxes (กล่องสุ่ม): the admin defines the boxes and prizes, everyone can read them (odds are shown to players).
+    // Every open (price, draw, prize, wallet change) is written only by the Worker; a player reads their own opens, the admin reads all.
+    match /boxes/{id} { allow read: if true; allow write: if can('boxes'); }
+    match /box_opens/{id} {
+      allow read: if can('boxes') || (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if false;
+    }
+    // Public "who just won" strip: only rare and better wins, masked names; written by the Worker.
+    match /recent_wins/{id} { allow read: if true; allow write: if can('boxes'); }
+
+    // ID vault (sold access): the owner works freely while users/{uid}.vaultUntil is in the future; only an admin sets that date.
+    function vaultOpen(uid) {
+      return signedIn() && request.auth.uid == uid
+        && get(docAt('users/' + uid)).data.get('vaultUntil', null) != null
+        && get(docAt('users/' + uid)).data.vaultUntil > request.time;
+    }
+    match /vaults/{uid}/{col}/{id} {
+      allow read: if can('vault'); // usage stats in the back office
+      allow read, delete: if vaultOpen(uid);
+      allow create, update: if vaultOpen(uid) && request.resource.data.keys().size() <= 10
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300));
+    }
+    // Team link = secret token; the Worker reads it (no client read), the owner creates / deletes it.
+    match /vault_links/{token} {
+      allow create: if vaultOpen(request.resource.data.uid) && token.matches('[A-Za-z0-9]{20,40}')
+        && request.resource.data.keys().hasOnly(['uid', 'memberId', 'name', 'createdAt']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Vault access purchases / trials / admin grants (written by the Worker or an admin), read in the back office.
+    match /vault_sales/{id} { allow read, write: if can('vault'); }
 
     match /{document=**} { allow read, write: if false; }
   }

@@ -121,7 +121,7 @@ $('form-password').addEventListener('submit', async (e) => {
 async function accountSignOut() {
   if (!confirm('ออกจากระบบใช่หรือไม่?')) return;
   await signOut(auth).catch(() => {});
-  location.href = '../index.html';
+  location.href = '../home.html';
 }
 
 window.addEventListener('hashchange', () => { if (location.hash === '#orders') switchAccountTab('ids'); });

@@ -1,5 +1,5 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
 import { esc, num, baht, money, toast, callWorker, imgAttrs, workerBase } from "./ui.js";
@@ -90,13 +90,19 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('wallet', (e) => { balance = e.detail.balance; if (!paying) render(); });
 
+/** Only the products that are in the cart, read once each (prices and stock stay current for this visit). */
+const asked = new Set();
+const loadMissing = () => Promise.all(items.filter(it => !asked.has(it.productId)).map(async (it) => {
+  asked.add(it.productId);
+  try { const s = await getDoc(doc(db, 'products', it.productId)); if (s.exists()) PRODUCTS[it.productId] = { ...s.data(), id: s.id }; } catch (e) { console.warn('product:', e); }
+}));
+
 let unsub = null;
 (async () => {
   CATS = await loadCategories();
-  try { (await getDocs(collection(db, 'products'))).docs.forEach(d => { PRODUCTS[d.id] = { ...d.data(), id: d.id }; }); } catch (e) { console.warn('products:', e); }
   onAuthStateChanged(auth, (u) => {
     user = u; ready = true; unsub?.(); items = [];
-    if (u) unsub = onSnapshot(doc(db, 'carts', u.uid), (s) => { if (!paying) { items = s.data()?.items || []; render(); } }, (e) => console.warn('cart:', e));
+    if (u) unsub = onSnapshot(doc(db, 'carts', u.uid), (s) => { if (paying) return; items = s.data()?.items || []; loadMissing().then(render); }, (e) => console.warn('cart:', e));
     render();
   });
 })();

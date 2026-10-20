@@ -6,12 +6,12 @@
   <title>หลังบ้าน — ASTRAPHEX HUB</title>
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
-  
+
   <!-- Apple System Font Stack & Google Fonts Prompt / Outfit Fallback -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <link rel="stylesheet" href="../css/tw.css">
 
   <link rel="stylesheet" href="../css/style.css">
@@ -155,6 +155,18 @@
     .admin-table tr:hover td {
       background-color: rgba(245, 245, 247, 0.7);
     }
+    /* Phone: each table row becomes a card, so the action buttons are not hidden off to the right.
+       js/admin.js copies the column titles into data-label on every cell. */
+    @media (max-width: 767px) {
+      .admin-table, .admin-table tbody, .admin-table tr, .admin-table td { display: block; width: 100%; }
+      .admin-table thead { display: none; }
+      .admin-table tr { padding: 10px 0; border-bottom: 8px solid #f5f5f7; }
+      .admin-table td { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: right; padding: 5px 16px !important; border-bottom: 0; }
+      .admin-table td::before { content: attr(data-label); flex-shrink: 0; text-align: left; font-size: 11px; color: #6e6e73; }
+      .admin-table td:last-child { justify-content: flex-end; flex-wrap: wrap; }
+      .admin-table td:last-child::before, .admin-table td:first-child:has(img)::before { display: none; }
+      .admin-table tr:hover td { background: none; }
+    }
   </style>
   <link rel="stylesheet" href="../css/transition.css">
   <script src="../js/transition.js" defer></script>
@@ -170,7 +182,7 @@
   <!-- HIGH-SECURITY PIN GATE MODAL -->
   <div id="admin-auth-gate" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-xl">
     <div class="apple-card max-w-md w-full p-8 text-center relative overflow-hidden bg-gallery">
-      
+
       <div class="w-14 h-14 bg-mist border border-hairline rounded-full flex items-center justify-center mx-auto mb-4 text-ink">
         <svg class="w-6 h-6 text-appleBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -208,13 +220,13 @@
         <form id="form-pin-setup" onsubmit="handlePinSetupSubmit(event)" class="space-y-4">
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-slate text-left">กำหนดรหัส PIN 6 หลัก:</label>
-            <input 
-              id="setup-pin-val" 
-              type="password" 
-              inputmode="numeric" 
-              maxlength="6" 
-              pattern="[0-9]{6}" 
-              placeholder="••••••" 
+            <input
+              id="setup-pin-val"
+              type="password"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              placeholder="••••••"
               class="w-full text-center text-2xl tracking-[0.5em] font-mono font-semibold apple-input py-3"
               required
               autocomplete="new-password"
@@ -223,13 +235,13 @@
 
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-slate text-left">ยืนยันรหัส PIN อีกครั้ง:</label>
-            <input 
-              id="setup-pin-confirm" 
-              type="password" 
-              inputmode="numeric" 
-              maxlength="6" 
-              pattern="[0-9]{6}" 
-              placeholder="••••••" 
+            <input
+              id="setup-pin-confirm"
+              type="password"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              placeholder="••••••"
               class="w-full text-center text-2xl tracking-[0.5em] font-mono font-semibold apple-input py-3"
               required
               autocomplete="new-password"
@@ -263,7 +275,7 @@
               <input type="password" inputmode="numeric" maxlength="1" class="pin-digit-input" data-index="4">
               <input type="password" inputmode="numeric" maxlength="1" class="pin-digit-input" data-index="5">
             </div>
-            
+
             <div id="pin-error-msg" class="hidden text-xs text-red-500 font-medium pt-1">
               รหัส PIN ไม่ถูกต้อง
             </div>
@@ -279,7 +291,7 @@
       </div>
 
       <div class="mt-6 pt-5 border-t border-hairline flex items-center justify-between text-xs text-slate">
-        <a href="../index.html" class="hover:text-ink transition-colors flex items-center gap-1">
+        <a href="../home.html" class="hover:text-ink transition-colors flex items-center gap-1">
           <span>← กลับสู่หน้าร้านค้า</span>
         </a>
         <span class="font-mono text-[10px] text-steel">ASTRAPHEX HUB</span>
@@ -290,13 +302,13 @@
 
   <!-- MAIN ADMIN DASHBOARD -->
   <div id="admin-main-content" class="hidden">
-    
+
     <!-- 44px Navigation Bar -->
     <header class="sticky top-0 z-40 bg-gallery/90 backdrop-blur-xl border-b border-hairline">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 h-11 flex justify-between items-center text-xs">
-        
+
         <div class="flex items-center gap-3">
-          <a href="../index.html" class="flex items-center gap-2">
+          <a href="../home.html" class="flex items-center gap-2">
             <img src="../assets/logo-icon-96.png" alt="" width="28" height="28" class="w-7 h-7 object-contain">
             <span class="font-display font-bold text-sm tracking-tight text-ink">ASTRAPHEX HUB</span>
             <span class="text-[11px] text-launchOrange font-semibold uppercase">Admin</span>
@@ -309,7 +321,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <a href="../index.html" class="apple-explore-pill px-3 py-1 text-xs text-slate hover:text-ink flex items-center gap-1.5">
+          <a href="../home.html" class="apple-explore-pill px-3 py-1 text-xs text-slate hover:text-ink flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -335,6 +347,8 @@
         <button id="admin-tab-btn-categories" onclick="switchAdminTab('categories')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">หมวดหมู่</button>
         <button id="admin-tab-btn-orders" onclick="switchAdminTab('orders')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ออเดอร์ <span id="badge-orders" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
         <button id="admin-tab-btn-rentals" onclick="switchAdminTab('rentals')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">เช่าไอดี <span id="badge-rentals" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
+        <button id="admin-tab-btn-boxes" onclick="switchAdminTab('boxes')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">กล่องสุ่ม</button>
+        <button id="admin-tab-btn-vault" onclick="switchAdminTab('vault')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">โปรแกรมไอดีไก่</button>
         <button id="admin-tab-btn-topups" onclick="switchAdminTab('topups')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">เติมเงิน &amp; โปรโมชั่น <span id="badge-topups" class="hidden ml-1 bg-launchOrange text-gallery rounded-full px-1.5 text-[10px]"></span></button>
         <button id="admin-tab-btn-users" onclick="switchAdminTab('users')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">ผู้ใช้</button>
         <button id="admin-tab-btn-promos" onclick="switchAdminTab('promos')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">โค้ดส่วนลด</button>
@@ -357,7 +371,7 @@
       </section>
 
       <section id="admin-sec-products" class="block space-y-6">
-        
+
         <!-- Metrics Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="apple-card p-6">
@@ -386,10 +400,10 @@
         <!-- Filter & Search Bar -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 apple-card p-4 sm:px-6">
           <div class="relative w-full sm:w-80">
-            <input 
-              id="admin-product-search" 
-              type="text" 
-              placeholder="ค้นหาชื่อสินค้า หมวดหมู่ หรือแท็ก..." 
+            <input
+              id="admin-product-search"
+              type="text"
+              placeholder="ค้นหาชื่อสินค้า หมวดหมู่ หรือแท็ก..."
               oninput="filterAdminProducts(this.value)"
               class="w-full apple-input-rounded pl-9 pr-4 py-2 text-xs placeholder-steel"
             />
@@ -423,7 +437,7 @@
               </tbody>
             </table>
           </div>
-          
+
           <div id="admin-products-empty" class="hidden py-16 text-center text-slate text-xs">
             ยังไม่มีสินค้า กด "เพิ่มสินค้าใหม่" เพื่อเริ่มต้น
           </div>
@@ -610,6 +624,72 @@
         <p id="admin-rentals-empty" class="hidden text-center text-slate text-xs py-8">ยังไม่มีรายการ</p>
       </section>
 
+      <!-- SECTION: LOOT BOXES -->
+      <section id="admin-sec-boxes" class="hidden space-y-4">
+        <div class="apple-card p-4 sm:p-5 text-xs text-slate space-y-1">
+          <p class="font-semibold text-ink">กล่องสุ่ม</p>
+          <p>ลูกค้าจ่ายเครดิตเปิดกล่อง ระบบสุ่มของรางวัลที่ Worker (ฝั่งเซิร์ฟเวอร์) ตามน้ำหนักที่ตั้ง แล้วส่งของทันที · ไอดีเกมหรือคิวงานที่หมดจะถูกข้ามอัตโนมัติ</p>
+          <p>ของรางวัลมี 3 แบบ: เครดิตเข้ากระเป๋า · ไอดีเกมจากสต็อกสินค้า · งานบริการ (ลูกค้ากรอกข้อมูลรับงานเอง แล้วเข้าคิวในแท็บออเดอร์) · ต้องอัปโหลด Worker เวอร์ชัน 5 และ publish กฎ Firestore ใหม่ก่อนใช้</p>
+        </div>
+        <div id="box-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+        <div class="apple-card p-6 md:p-8 space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-5">
+            <div>
+              <h3 class="text-2xl font-display font-semibold">กล่องทั้งหมด</h3>
+              <p class="text-slate text-xs mt-1">ตั้งราคา ของรางวัล และน้ำหนักการสุ่ม · มูลค่าเฉลี่ยคิดจากราคาขายปกติของของรางวัล</p>
+            </div>
+            <button type="button" onclick="openBoxModal()" class="apple-pricing-pill px-5 py-2.5 text-xs font-semibold">+ สร้างกล่องสุ่ม</button>
+          </div>
+          <div class="overflow-x-auto -mx-6 sm:mx-0">
+            <table class="w-full text-left text-xs admin-table">
+              <thead><tr><th class="py-3 px-4">กล่อง</th><th class="py-3 px-4">ราคา</th><th class="py-3 px-4">ของรางวัล</th><th class="py-3 px-4">มูลค่าเฉลี่ยของรางวัล</th><th class="py-3 px-4">เปิดแล้ว</th><th class="py-3 px-4">สถานะ</th><th class="py-3 px-4 text-right">จัดการ</th></tr></thead>
+              <tbody id="admin-boxes-body"></tbody>
+            </table>
+          </div>
+          <div id="admin-boxes-empty" class="hidden py-12 text-center text-slate text-xs">ยังไม่มีกล่องสุ่ม กด "+ สร้างกล่องสุ่ม" เพื่อเริ่ม</div>
+        </div>
+        <div class="apple-card p-6 md:p-8 space-y-4">
+          <h3 class="text-xl font-display font-semibold">การเปิดกล่องล่าสุด</h3>
+          <div class="overflow-x-auto -mx-6 sm:mx-0">
+            <table class="w-full text-left text-xs admin-table">
+              <thead><tr><th class="py-3 px-4">เวลา</th><th class="py-3 px-4">ผู้เล่น</th><th class="py-3 px-4">กล่อง</th><th class="py-3 px-4">ได้รับ</th><th class="py-3 px-4">ราคา</th><th class="py-3 px-4">สถานะ</th></tr></thead>
+              <tbody id="admin-box-opens-body"></tbody>
+            </table>
+          </div>
+          <div id="admin-box-opens-empty" class="hidden py-8 text-center text-slate text-xs">ยังไม่มีการเปิดกล่อง</div>
+        </div>
+      </section>
+
+      <section id="admin-sec-vault" class="hidden space-y-4">
+        <div id="vault-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+        <div class="grid lg:grid-cols-2 gap-4">
+          <form onsubmit="vaultGrantForm(event)" class="apple-card p-6 space-y-3 text-xs">
+            <h3 class="font-display font-semibold text-base">ให้สิทธิ์ผู้ใช้</h3>
+            <div><label class="block text-[11px] text-slate mb-1" for="vault-grant-user">ชื่อผู้ใช้หรืออีเมล</label><input id="vault-grant-user" list="vault-user-list" autocomplete="off" required class="w-full apple-input px-3.5 py-2"><datalist id="vault-user-list"></datalist></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="vault-grant-days">จำนวนวัน (ต่อจากวันที่เหลือ)</label><input id="vault-grant-days" type="number" min="1" max="365" value="30" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+            <button type="submit" class="apple-pricing-pill px-5 py-2 text-xs">ให้สิทธิ์</button>
+          </form>
+          <div class="apple-card p-6 space-y-3 text-xs">
+            <h3 class="font-display font-semibold text-base">แพ็กเกจและทดลองฟรี</h3>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-vault-packages">แพ็กเกจคลังไอดี — บรรทัดละ 1 แพ็ก รูปแบบ วัน=ราคา (สูงสุด 4)</label><textarea id="setting-vault-packages" rows="3" placeholder="30=199&#10;90=499" class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"></textarea></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-vault-trial">โปรทดลองคลังไอดีฟรี (วัน, 0 = ปิด) — ทุกบัญชีใช้ได้ครั้งเดียว</label><input id="setting-vault-trial" type="number" min="0" max="365" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
+            <button type="button" onclick="document.getElementById('settings-form').requestSubmit()" class="apple-pricing-pill px-5 py-2 text-xs">บันทึกแพ็กเกจ</button>
+          </div>
+        </div>
+        <div class="apple-card p-6 space-y-4">
+          <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">ผู้ใช้ที่มีสิทธิ์</h3><button type="button" onclick="vaultReloadUsage()" class="apple-explore-pill px-3 py-1 text-[11px]">โหลดสถิติใหม่</button></div>
+          <div class="overflow-x-auto"><table class="admin-table w-full text-xs text-left">
+            <thead><tr class="text-slate border-b border-hairline"><th class="py-2.5 px-4 font-medium">ผู้ใช้</th><th class="py-2.5 px-4 font-medium">สถานะ</th><th class="py-2.5 px-4 font-medium">ไอดีในคลัง</th><th class="py-2.5 px-4 font-medium">ลูกทีม</th><th class="py-2.5 px-4 font-medium text-right">จัดการ</th></tr></thead>
+            <tbody id="vault-users"></tbody></table></div>
+        </div>
+        <div class="apple-card p-6 space-y-4">
+          <h3 class="font-display font-semibold text-base">ประวัติการซื้อแพ็กเกจและการปรับสิทธิ์</h3>
+          <div class="overflow-x-auto"><table class="admin-table w-full text-xs text-left">
+            <thead><tr class="text-slate border-b border-hairline"><th class="py-2.5 px-4 font-medium">เวลา</th><th class="py-2.5 px-4 font-medium">ผู้ใช้</th><th class="py-2.5 px-4 font-medium">รายการ</th><th class="py-2.5 px-4 font-medium text-right">ยอด</th></tr></thead>
+            <tbody id="vault-sales"></tbody></table></div>
+        </div>
+      </section>
+
       <section id="admin-sec-settings" class="hidden">
         <form id="settings-form" onsubmit="handleSaveSettings(event)" class="max-w-3xl mx-auto space-y-6">
           <div class="apple-card p-6 space-y-4">
@@ -663,7 +743,7 @@
             <h3 class="font-display font-semibold text-base">ระบบอัตโนมัติ (Cloudflare Worker)</h3>
             <p class="text-xs text-slate -mt-2">ใช้สำหรับ: ชำระด้วยเครดิตแล้วส่งไอดีอัตโนมัติ, แก้ชื่อผู้ใช้/รหัสผ่าน/สิทธิ์ในหน้าผู้ใช้, แจ้งเตือน Discord และตรวจสลิปอัตโนมัติ วิธีติดตั้งอยู่ใน README</p>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-slip-worker-url">URL ของ Worker</label><input id="setting-slip-worker-url" type="text" placeholder="https://astraphex-worker.xxx.workers.dev" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
-            <label class="flex items-center gap-2 text-sm"><input id="setting-slip-auto" type="checkbox"> เปิดตรวจสลิปเติมเงินอัตโนมัติ (EasySlip)</label>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-slip-auto" type="checkbox"> เปิดระบบตรวจสลิปด้วย API (เติมเงินและซื้อสินค้าด้วยสลิป — ปิด = ลูกค้าส่งสลิปไม่ได้ ไม่มีแอดมินอนุมัติเอง)</label>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-discord-webhook">Discord Webhook URL (แจ้งเตือนแอดมิน · เก็บเป็นความลับ)</label>
               <div class="flex gap-2"><input id="setting-discord-webhook" type="text" placeholder="https://discord.com/api/webhooks/..." class="flex-1 min-w-0 apple-input px-3.5 py-2 text-xs font-mono"><button type="button" onclick="testWebhook()" class="apple-explore-pill px-4 py-2 text-xs shrink-0">ทดสอบ</button></div>
               <p class="text-[11px] text-slate mt-1">แจ้งเมื่อมีออเดอร์ใหม่ สลิปเติมเงินใหม่ และการซื้อด้วยเครดิต</p></div>
@@ -685,7 +765,7 @@
   <!-- MODAL: BULK STOCK REPLENISHMENT -->
   <div id="stock-management-modal" class="fixed inset-0 z-50 hidden items-start justify-center p-4 sm:p-6 bg-ink/20 backdrop-blur-xl overflow-y-auto">
     <div class="apple-card max-w-2xl w-full p-6 sm:p-8 relative my-6 sm:my-10 bg-gallery">
-      
+
       <button onclick="closeStockModal()" class="absolute top-5 right-5 text-steel hover:text-ink p-1.5 rounded-full hover:bg-mist transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
@@ -712,11 +792,11 @@
             </span>
           </div>
 
-          <textarea 
-            id="bulk-stock-textarea" 
-            rows="6" 
+          <textarea
+            id="bulk-stock-textarea"
+            rows="6"
             oninput="handleStockTextareaInput(this.value)"
-            placeholder="วางข้อความที่นี่ 1 บรรทัด = 1 สต็อก เช่น:&#10;email yeyovif@ogzmail.com password A11223344&#10;Agent01:SecretPass99&#10;john_doe@gmail.com pass98765" 
+            placeholder="วางข้อความที่นี่ 1 บรรทัด = 1 สต็อก เช่น:&#10;email yeyovif@ogzmail.com password A11223344&#10;Agent01:SecretPass99&#10;john_doe@gmail.com pass98765"
             class="w-full apple-input p-3.5 text-xs font-mono leading-relaxed placeholder-steel"
           ></textarea>
 
@@ -726,9 +806,9 @@
           </div>
         </div>
 
-        <button 
-          id="btn-confirm-add-stock" 
-          onclick="submitBulkStockImport()" 
+        <button
+          id="btn-confirm-add-stock"
+          onclick="submitBulkStockImport()"
           class="w-full apple-pricing-pill py-3 text-xs flex items-center justify-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           <span id="btn-add-stock-label">บันทึกและนำเข้าสต็อก (0 ชิ้น)</span>
@@ -761,7 +841,7 @@
   <!-- MODAL: ADD / EDIT PRODUCT -->
   <div id="product-form-modal" class="fixed inset-0 z-50 hidden items-start justify-center p-4 sm:p-6 bg-ink/20 backdrop-blur-xl overflow-y-auto">
     <div class="apple-card max-w-2xl w-full p-6 sm:p-8 relative my-6 sm:my-10 bg-gallery">
-      
+
       <button onclick="closeProductModal()" class="absolute top-5 right-5 text-steel hover:text-ink p-1.5 rounded-full hover:bg-mist transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
@@ -780,18 +860,18 @@
         <div class="space-y-1.5">
           <label class="block text-xs font-medium text-slate">ประเภทสินค้า (Product Type):</label>
           <div class="bg-mist p-1 rounded-2xl border border-hairline flex items-center gap-1">
-            <button 
-              type="button" 
-              id="btn-type-account" 
-              onclick="setProductType('account')" 
+            <button
+              type="button"
+              id="btn-type-account"
+              onclick="setProductType('account')"
               class="flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all bg-gallery text-ink shadow-sm border border-hairline/50 flex items-center justify-center gap-1.5">
               <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12a4 4 0 014 4v3a3 3 0 01-5 2l-2-2H9l-2 2a3 3 0 01-5-2v-3a4 4 0 014-4zM8 12v3M6.5 13.5h3M16 12h.01M18 14h.01"/></svg></span>
               <span>ไอดีเกม (ส่งมอบรหัส)</span>
             </button>
-            <button 
-              type="button" 
-              id="btn-type-service" 
-              onclick="setProductType('service')" 
+            <button
+              type="button"
+              id="btn-type-service"
+              onclick="setProductType('service')"
               class="flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5">
               <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
               <span>งานบริการ (โยน M61 / โยนเงินM)</span>
@@ -803,10 +883,10 @@
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="sm:col-span-2">
             <label class="block text-xs font-medium text-slate mb-1">ชื่อสินค้า (Product Name):</label>
-            <input 
-              id="prod-name" 
-              type="text" 
-              placeholder="เช่น M4A1 Full Mod + T6 Ammo x300" 
+            <input
+              id="prod-name"
+              type="text"
+              placeholder="เช่น M4A1 Full Mod + T6 Ammo x300"
               class="w-full apple-input px-3.5 py-2 text-xs"
               required
             />
@@ -829,20 +909,20 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-1.5">
               <div class="sm:col-span-5">
-                <input 
-                  id="prod-koen-label" 
-                  type="text" 
-                  placeholder="มูลค่า Koen" 
-                  value="มูลค่า Koen" 
+                <input
+                  id="prod-koen-label"
+                  type="text"
+                  placeholder="มูลค่า Koen"
+                  value="มูลค่า Koen"
                   class="w-full apple-input px-3 py-2 text-xs"
                   title="เปลี่ยนชื่อคุณสมบัตินี้ได้ เช่น กองกระสุน, ทุนสำรอง, เซ็ตไอเทม"
                 />
               </div>
               <div class="sm:col-span-7">
-                <input 
-                  id="prod-koen" 
-                  type="text" 
-                  placeholder="เช่น 15,000,000 หรือ 55 กอง" 
+                <input
+                  id="prod-koen"
+                  type="text"
+                  placeholder="เช่น 15,000,000 หรือ 55 กอง"
                   class="w-full apple-input px-3 py-2 text-xs font-mono font-semibold"
                   required
                 />
@@ -859,12 +939,12 @@
 
           <div>
             <label class="block text-xs font-medium text-slate mb-1">ราคาจำหน่าย (บาท):</label>
-            <input 
-              id="prod-price" 
-              type="number" 
-              step="0.01" 
-              min="0" 
-              placeholder="350.00" 
+            <input
+              id="prod-price"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="350.00"
               class="w-full apple-input px-3.5 py-2 text-xs font-mono"
 
             />
@@ -872,11 +952,11 @@
 
           <div>
             <label id="lbl-prod-stock" class="block text-xs font-medium text-slate mb-1">จำนวนสต็อกเริ่มต้น (ชิ้น):</label>
-            <input 
-              id="prod-stock" 
-              type="number" 
-              min="0" 
-              placeholder="0" 
+            <input
+              id="prod-stock"
+              type="number"
+              min="0"
+              placeholder="0"
               class="w-full apple-input px-3.5 py-2 text-xs font-mono"
               value="0"
               required
@@ -911,10 +991,10 @@
           <div class="grid sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">หน่วยนับบริการ (Unit):</label>
-              <input 
-                id="prod-service-unit" 
-                type="text" 
-                placeholder="ใช้ค่าของหมวด" 
+              <input
+                id="prod-service-unit"
+                type="text"
+                placeholder="ใช้ค่าของหมวด"
                 class="w-full apple-input px-3 py-1.5 text-xs font-medium"
                 oninput="updateServiceSummary()"
               />
@@ -929,12 +1009,12 @@
 
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">ขั้นต่ำต่อ 1 รายการ (Min Order):</label>
-              <input 
-                id="prod-service-min" 
-                type="number" 
-                min="1" 
-                step="1" 
-                placeholder="ใช้ค่าของหมวด" 
+              <input
+                id="prod-service-min"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="ใช้ค่าของหมวด"
                 class="w-full apple-input px-3 py-1.5 text-xs font-mono font-semibold"
                 oninput="updateServiceSummary()"
               />
@@ -943,13 +1023,13 @@
 
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">ราคาต่อ 1 หน่วย (฿ / Unit):</label>
-              <input 
-                id="prod-service-rate" 
-                type="number" 
-                step="0.01" 
-                min="0" 
-                placeholder="เช่น 22.00" 
-                value="22.00" 
+              <input
+                id="prod-service-rate"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="เช่น 22.00"
+                value="22.00"
                 class="w-full apple-input px-3 py-1.5 text-xs font-mono font-semibold text-pricingBlue"
                 oninput="syncServiceRateToPrice(this.value)"
               />
@@ -988,10 +1068,10 @@
           </div>
 
           <div class="flex gap-2">
-            <input 
-              id="prod-image" 
-              type="text" 
-              placeholder="https://images.unsplash.com/..." 
+            <input
+              id="prod-image"
+              type="text"
+              placeholder="https://images.unsplash.com/..."
               oninput="updateImagePreview(this.value)"
               class="flex-1 apple-input px-3.5 py-2 text-xs"
               required
@@ -1016,10 +1096,10 @@
             <label class="block text-xs font-medium text-ink mb-1">
               <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v12H4zM12 17a4 4 0 100-8 4 4 0 000 8z"/></svg> ภาพแกลเลอรี่เพิ่มเติม (Gallery URLs — ใส่บรรทัดละ 1 รูป):
             </label>
-            <textarea 
-              id="prod-gallery" 
-              rows="2" 
-              placeholder="https://example.com/item1.jpg&#10;https://example.com/item2.jpg" 
+            <textarea
+              id="prod-gallery"
+              rows="2"
+              placeholder="https://example.com/item1.jpg&#10;https://example.com/item2.jpg"
               class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"
             ></textarea>
           </div>
@@ -1027,20 +1107,20 @@
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">แท็กสินค้า (คั่นด้วยจุลภาค เช่น Best Seller, พร้อมบวก):</label>
-          <input 
-            id="prod-tags" 
-            type="text" 
-            placeholder="Best Seller, พร้อมบวก, คุ้มสุด" 
+          <input
+            id="prod-tags"
+            type="text"
+            placeholder="Best Seller, พร้อมบวก, คุ้มสุด"
             class="w-full apple-input px-3.5 py-2 text-xs"
           />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">คำอธิบายสินค้า (Description):</label>
-          <textarea 
-            id="prod-desc" 
-            rows="2" 
-            placeholder="อธิบายจุดเด่นของไอดีนี้..." 
+          <textarea
+            id="prod-desc"
+            rows="2"
+            placeholder="อธิบายจุดเด่นของไอดีนี้..."
             class="w-full apple-input p-2.5 text-xs leading-relaxed"
             required
           ></textarea>
@@ -1048,10 +1128,10 @@
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">อุปกรณ์ที่จะได้รับ (บรรทัดละ 1 ข้อ):</label>
-          <textarea 
-            id="prod-specs" 
-            rows="3" 
-            placeholder="เกราะ T5 ครบชุด&#10;กระสุน T6 x300&#10;Koen เงินสด 5.5M" 
+          <textarea
+            id="prod-specs"
+            rows="3"
+            placeholder="เกราะ T5 ครบชุด&#10;กระสุน T6 x300&#10;Koen เงินสด 5.5M"
             class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"
             required
           ></textarea>
@@ -1146,6 +1226,35 @@
     </div>
   </div>
 
+  <!-- MODAL: LOOT BOX -->
+  <div id="box-form-modal" class="modal" role="dialog" aria-modal="true" aria-label="กล่องสุ่ม">
+    <div class="modal-card !max-w-2xl">
+      <button type="button" onclick="closeBoxModal()" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <h3 id="box-modal-heading" class="text-xl font-display font-semibold mb-5">สร้างกล่องสุ่ม</h3>
+      <form id="box-form" onsubmit="handleSaveBox(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="box-edit-id">
+        <div><label class="block text-slate mb-1" for="box-name">ชื่อกล่อง</label><input id="box-name" type="text" maxlength="60" required placeholder="เช่น กล่องสุ่มไอดี T5" class="w-full apple-input px-3.5 py-2"></div>
+        <div><label class="block text-slate mb-1" for="box-desc">คำอธิบายสั้น ๆ (แสดงใต้ชื่อกล่อง)</label><input id="box-desc" type="text" maxlength="120" class="w-full apple-input px-3.5 py-2"></div>
+        <div><label class="block text-slate mb-1" for="box-image">รูปกล่อง (ลิงก์รูป เว้นว่างได้)</label><input id="box-image" type="text" placeholder="https://..." class="w-full apple-input px-3.5 py-2"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-slate mb-1" for="box-price">ราคาต่อ 1 ครั้ง (เครดิต ฿)</label><input id="box-price" type="number" min="1" step="0.01" required class="w-full apple-input px-3.5 py-2 font-mono"></div>
+          <div><label class="block text-slate mb-1" for="box-order">ลำดับแสดง (เลขน้อยขึ้นก่อน)</label><input id="box-order" type="number" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+        </div>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          <label class="flex items-center gap-2"><input id="box-active" type="checkbox" checked> เปิดให้ลูกค้าเล่น</label>
+          <label class="flex items-center gap-2"><input id="box-show-odds" type="checkbox" checked> แสดงโอกาสสุ่ม (%) ให้ลูกค้าเห็น</label>
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between"><p class="font-semibold text-ink text-sm">ของรางวัล</p><button type="button" onclick="addPrizeRow()" class="apple-explore-pill px-3 py-1">+ เพิ่มของรางวัล</button></div>
+          <p class="text-slate">น้ำหนักคือสัดส่วนความถี่ เช่น 50 / 30 / 5 (ไม่ต้องรวมเป็น 100) · ช่อง % ด้านขวาคำนวณให้</p>
+          <div id="prize-rows" class="space-y-2"></div>
+          <div id="box-ev" class="rounded-xl bg-mist px-3 py-2 text-slate"></div>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-hairline"><button type="button" onclick="closeBoxModal()" class="apple-explore-pill px-5 py-2">ยกเลิก</button><button type="submit" class="apple-pricing-pill px-6 py-2">บันทึกกล่อง</button></div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: USER -->
   <div id="user-modal" class="modal" role="dialog" aria-modal="true" aria-label="จัดการผู้ใช้">
     <div class="modal-card !max-w-2xl">
@@ -1163,8 +1272,16 @@
           <div><label class="block text-slate mb-1" for="um-contact-email">อีเมลติดต่อ</label><input id="um-contact-email" type="email" maxlength="200" class="w-full apple-input px-3.5 py-2"></div>
           <div><label class="block text-slate mb-1" for="um-facebook">ชื่อหรือลิงก์ Facebook</label><input id="um-facebook" type="text" maxlength="200" class="w-full apple-input px-3.5 py-2"></div>
           <div><label class="block text-slate mb-1" for="um-password">ตั้งรหัสผ่านใหม่ (เว้นว่าง = ไม่เปลี่ยน)</label><input id="um-password" type="text" minlength="6" maxlength="100" autocomplete="off" class="w-full apple-input px-3.5 py-2 font-mono"></div>
-          <div><label class="block text-slate mb-1" for="um-role">สิทธิ์การใช้งาน</label><select id="um-role" class="w-full apple-input px-3 py-2"><option value="user">User</option><option value="admin">Admin</option></select></div>
+          <div><label class="block text-slate mb-1" for="um-role">สิทธิ์การใช้งาน</label><select id="um-role" class="w-full apple-input px-3 py-2" onchange="syncPermBox()"><option value="user">User / ทีมงาน (ตามสิทธิ์ที่ติ๊กด้านล่าง)</option><option value="admin">Admin (ทำได้ทุกอย่าง)</option></select></div>
+          <div id="um-perms-wrap" class="col-span-full"><p class="text-slate mb-1">สิทธิ์ทีมงาน — ติ๊กเฉพาะสิ่งที่ให้ทำได้ (ไม่ติ๊ก = ผู้ใช้ทั่วไป)</p><div id="um-perms" class="rounded-2xl bg-mist px-4 py-2 text-xs"></div><p class="text-[11px] text-slate mt-1">ตั้งค่าร้าน เปลี่ยนรหัสผ่าน/ชื่อล็อกอิน/ระงับบัญชี และตั้งสิทธิ์ ทำได้เฉพาะ Admin · ผู้ถูกเปลี่ยนสิทธิ์ต้องออกแล้วเข้าระบบใหม่</p></div>
           <div><label class="block text-slate mb-1" for="um-status">สถานะบัญชี</label><select id="um-status" class="w-full apple-input px-3 py-2"><option value="active">ปกติ</option><option value="suspended">ระงับการใช้งาน</option></select></div>
+        </div>
+        <div class="rounded-2xl bg-mist p-3 flex flex-wrap items-center gap-2">
+          <span class="font-semibold">คลังไอดี</span><span id="um-vault" class="text-slate"></span>
+          <span class="flex-1"></span>
+          <input id="um-vault-days" type="number" min="1" max="365" value="30" class="w-20 apple-input px-3 py-1.5 font-mono" aria-label="จำนวนวัน">
+          <button type="button" onclick="grantVault(1)" class="apple-pricing-pill px-4 py-1.5">+ วัน</button>
+          <button type="button" onclick="grantVault(0)" class="rounded-full border border-steel px-4 py-1.5">ปิดสิทธิ์</button>
         </div>
         <p id="um-worker-note" class="text-[11px] text-launchOrange"></p>
         <p class="text-[11px] text-slate">อีเมลเข้าสู่ระบบในระบบ: <span id="um-login-email" class="font-mono"></span></p>
@@ -1214,5 +1331,7 @@
 
   <script type="module" src="../js/admin.js"></script>
   <script type="module" src="../js/back/code.js"></script>
+  <script type="module" src="../js/back/boxes.js"></script>
+  <script type="module" src="../js/back/vault.js"></script>
 </body>
 </html>

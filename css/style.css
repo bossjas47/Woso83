@@ -67,8 +67,8 @@ img { max-width: 100%; }
 .badge-featured { background: #e8f1fd; color: #0058b9; }
 
 /* Skeleton loading */
-.skeleton { background: linear-gradient(90deg, #f0f0f2 25%, #e6e6e8 37%, #f0f0f2 63%); background-size: 400% 100%; animation: skeleton 1.3s ease infinite; border-radius: 12px; }
-@keyframes skeleton { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+.skeleton { background: #f0f0f2; animation: skeleton 1.3s ease infinite; border-radius: 12px; }
+@keyframes skeleton { 50% { opacity: .55; } }
 
 /* Announcement marquee */
 .marquee-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
@@ -120,13 +120,13 @@ body.has-bottom-nav { padding-bottom: calc(84px + env(safe-area-inset-bottom)); 
 }
 .sheet.open { transform: none; visibility: visible; transition: transform .28s cubic-bezier(.28,.11,.32,1); }
 @media (min-width: 768px) {
-  .sheet { left: auto; right: 24px; bottom: auto; top: 60px; width: 360px; border-radius: 24px; border: 1px solid #e6e6e8; box-shadow: 0 20px 50px rgba(0,0,0,.15); transform: translateY(-8px); opacity: 0; pointer-events: none; transition: transform .2s, opacity .2s, visibility 0s .2s; }
+  .sheet { left: auto; right: 24px; bottom: auto; top: 60px; width: 360px; border-radius: 24px; border: 1px solid #e6e6e8; box-shadow: none; transform: translateY(-8px); opacity: 0; pointer-events: none; transition: transform .2s, opacity .2s, visibility 0s .2s; }
   .sheet.open { transform: none; opacity: 1; pointer-events: auto; transition: transform .2s, opacity .2s; }
 }
 
 /* Toast */
 .toast-host { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; pointer-events: none; width: max-content; max-width: calc(100vw - 32px); }
-.toast { display: flex; align-items: center; gap: 10px; background: rgba(29,29,31,.94); color: #fff; padding: 11px 18px; border-radius: 9999px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s; }
+.toast { display: flex; align-items: center; gap: 10px; background: rgba(29,29,31,.94); color: #fff; padding: 11px 18px; border-radius: 9999px; font-size: 14px; box-shadow: none; opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s; }
 .toast.show { opacity: 1; transform: none; }
 .toast-dot { width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0; background: #2997ff; }
 .toast.success .toast-dot { background: #30d158; }
@@ -145,3 +145,22 @@ body.has-bottom-nav { padding-bottom: calc(84px + env(safe-area-inset-bottom)); 
 .step.done { color: #1d1d1f; font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } * { scroll-behavior: auto !important; } }
+
+/* red dot: the vault owner has team problem reports waiting */
+.has-dot { position: relative; }
+.has-dot::after { content: ''; position: absolute; top: 6px; right: calc(50% - 20px); width: 9px; height: 9px; border-radius: 50%; background: #ff3b30; }
+[data-tools].has-dot::after { top: 14px; right: 18px; }
+
+/* Apple-style pass: css/tw.css is precompiled (cannot rebuild), so off-spec utilities are remapped here instead of edited in ~100 places. */
+.font-bold { font-weight: 600 !important; }
+.rounded-lg, .rounded-xl, .rounded-2xl { border-radius: 28px !important; }
+.shadow-sm { box-shadow: 0 0 0 1px #86868b !important; }
+.text-brandTeal { color: inherit !important; }
+.bg-cyanGlow { background: #0071e3 !important; color: #fff !important; box-shadow: none !important; }
+.text-red-500 { color: #b64400 !important; }
+.text-emerald-600, .text-emerald-700 { color: #1d1d1f !important; }
+.bg-emerald-400, .bg-emerald-500 { background: #1d1d1f !important; }
+.bg-red-50 { background: #f5f5f7 !important; }
+.border-red-200 { border-color: #86868b !important; }
+.bg-\[\#fff3e6\], .bg-\[\#e8f8ee\], .bg-\[\#e8f1fd\] { background: transparent !important; padding-left: 0 !important; padding-right: 0 !important; } /* status labels: bare text, no pill */
+.bg-\[\#f2f8ff\], .bg-appleBlue\/10, .bg-pricingBlue\/5, .bg-pricingBlue\/20 { background: #f5f5f7 !important; }

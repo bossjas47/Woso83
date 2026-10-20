@@ -1,8 +1,8 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { esc, num, baht, money, toast, fmtDate, onSettings, getSettings, workerBase, callWorker, notifyAdmin, readSlipQr } from "./ui.js";
-import { mountPromptPay, promptpayReady, prepareSlip, slipErrorText } from "./pay.js";
+import { esc, num, baht, money, toast, fmtDate, onSettings, getSettings, workerBase, callWorker, readSlipQr } from "./ui.js";
+import { mountPromptPay, promptpayReady } from "./pay.js";
 
 /**
  * Top-up page. Credit is never written from the browser (firestore.rules). Two ways in:
@@ -67,9 +67,9 @@ function switchTopupPaymentTab(m) {
 const autoMode = () => getSettings().slipAutoVerify === true && !!workerBase();
 function updateNote() {
   $('topup-mode-note').textContent = method === 'promptpay'
-    ? (autoMode() ? 'ระบบตรวจสลิปอัตโนมัติ ผ่านแล้วได้เครดิตทันที' : 'แอดมินตรวจสลิปแล้วเติมเครดิตให้ โดยปกติไม่เกิน 15 นาที')
+    ? (autoMode() ? 'ระบบตรวจสลิปอัตโนมัติ ผ่านแล้วได้เครดิตทันที' : 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ (เติมด้วยซองอั่งเปาแทนได้)')
     : 'รับซองอัตโนมัติ เครดิตเข้าทันที';
-  if (!submitting) $('btn-topup').textContent = method === 'promptpay' ? (autoMode() ? 'ส่งสลิปและรับเครดิต' : 'ส่งสลิปโอนเงิน') : 'รับซองและเติมเครดิต';
+  if (!submitting) $('btn-topup').textContent = method === 'promptpay' ? 'ส่งสลิปและรับเครดิต' : 'รับซองและเติมเครดิต';
 }
 
 function setBusy(on, label) {
@@ -83,40 +83,13 @@ async function executeTopup() {
   if (!user) { toast('กรุณาเข้าสู่ระบบก่อนเติมเงิน', 'error'); return; }
   if (method === 'angpao') return redeemAngpao();
   if (!(amount >= MIN && amount <= MAX)) { toast(`กรุณาใส่จำนวนเงิน ${MIN} – ${money(MAX, 0)} บาท`, 'error'); $('amount-input').focus(); return; }
-  const { promo, bonus } = bestPromo(promos, amount);
-  let slip = null, proof = '';
   if (!promptpayReady()) { toast('ร้านยังไม่ได้ตั้งค่า QR พร้อมเพย์', 'error'); return; }
+  if (!autoMode()) { toast('ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาติดต่อแอดมิน', 'error'); return; }
   const file = pp.getFile();
-  setBusy(true, 'กำลังเตรียมสลิป…');
-  try { slip = await prepareSlip(file); } catch (e) { setBusy(false); toast(e.message, 'error'); return; }
-  if (autoMode()) {
-    setBusy(true, 'กำลังตรวจสลิป…');
-    const r = await tryAuto(file);
-    if (r === 'done' || r === 'rejected') { setBusy(false); return; }
-  }
-  proof = 'สลิปแนบในระบบ';
-  setBusy(true, 'กำลังส่ง…');
-  try {
-    const ref = doc(collection(db, 'topup_transactions'));
-    const batch = writeBatch(db);
-    batch.set(ref, {
-      txnId: 'TOPUP-' + ref.id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email || '',
-      amount, bonusCredit: bonus, finalCredit: amount + bonus, ...(promo ? { promoId: promo.id } : {}),
-      paymentMethod: method, proofRef: proof, ...(slip ? { slipHash: slip.hash, hasSlip: true } : {}),
-      status: 'pending', createdAt: serverTimestamp()
-    });
-    if (slip) {
-      batch.set(doc(db, 'slip_images', ref.id), { kind: 'topup', uid: user.uid, image: slip.image, createdAt: serverTimestamp() });
-      batch.set(doc(db, 'slip_hashes', slip.hash), { kind: 'topup', refId: ref.id, uid: user.uid, createdAt: serverTimestamp() });
-    }
-    await batch.commit();
-    notifyAdmin('topup', ref.id);
-    pp.reset();
-    toast('ส่งหลักฐานแล้ว แอดมินจะตรวจสอบและเติมเครดิตให้', 'success');
-  } catch (e) {
-    console.warn('topup:', e);
-    toast(slipErrorText(e), 'error');
-  } finally { setBusy(false); }
+  if (!file) { toast('กรุณาแนบรูปสลิปโอนเงิน', 'error'); return; }
+  setBusy(true, 'กำลังตรวจสลิป…');
+  await verifySlip(file);
+  setBusy(false);
 }
 
 /** TrueMoney gift voucher: the Worker redeems it into the shop wallet and credits the amount received + promo bonus. */
@@ -134,17 +107,15 @@ async function redeemAngpao() {
   } finally { setBusy(false); }
 }
 
-/** Auto check through the Worker. 'done' | 'rejected' | 'manual' (fall back to a pending request). */
-async function tryAuto(file) {
+/** Slips are checked by the API only: credited at once, or an error to try again (no manual queue). */
+async function verifySlip(file) {
   try {
     const payload = await readSlipQr(file);
-    if (!payload) { toast('อ่าน QR บนสลิปไม่ได้ ส่งให้แอดมินตรวจแทน'); return 'manual'; }
+    if (!payload) { toast('อ่าน QR บนสลิปไม่ได้ กรุณาใช้รูปสลิปที่เห็น QR ชัดเจน (ไม่ครอป ไม่เบลอ)', 'error'); return; }
     const r = await callWorker('/', { amount, payload });
-    if (r.status === 'completed') { pp.reset(); toast(`เติมเครดิตสำเร็จ +${money(r.credit)}`, 'success'); return 'done'; }
-    if (r.status === 'rejected') { toast(r.message || 'ตรวจสลิปไม่ผ่าน', 'error'); return 'rejected'; }
-  } catch (e) { console.warn('auto slip:', e); }
-  toast('ตรวจอัตโนมัติไม่ได้ในตอนนี้ ส่งให้แอดมินตรวจแทน');
-  return 'manual';
+    if (r.status === 'completed') { pp.reset(); toast(`เติมเครดิตสำเร็จ +${money(r.credit)}`, 'success'); return; }
+    toast(r.message || 'ตรวจสลิปไม่ผ่าน', 'error');
+  } catch (e) { console.warn('slip:', e); toast(e.message || 'ตรวจสลิปไม่ได้ในตอนนี้ กรุณาลองใหม่อีกครั้ง', 'error'); }
 }
 
 const ST = { pending: ['รอตรวจสอบ', 'bg-[#fff3e6] text-[#a04a00]'], completed: ['เติมแล้ว', 'bg-[#e8f8ee] text-[#0a7a3b]'], rejected: ['ไม่อนุมัติ', 'bg-mist text-slate'] };

@@ -9,7 +9,7 @@
 ### 1.1 Role Separation & Admin Designation (การคัดแยกสิทธิ์และตั้งแอดมิน)
 - **แอดมินหลักของระบบ (Master Admin):** กำหนดให้ผู้ใช้ `atest` เป็นผู้ดูแลระบบ (ADMIN) โดยอัตโนมัติ (ครอบคลุมทั้ง displayName, username ในเครื่อง และอีเมล `atest@...`)
 - **การซ่อนระบบหลังบ้านจากผู้ใช้ธรรมดา (Hidden Backoffice for Regular Users):**
-  - ในหน้าร้านค้า (`index.html`) และหน้าบัญชี (`front/account.html`): ผู้ใช้ธรรมดาจะไม่เห็นปุ่มหรือแถบเมนูหลังบ้านเลย (`hidden` 100%)
+  - ในหน้าร้านค้า (`home.html`) และหน้าบัญชี (`front/account.html`): ผู้ใช้ธรรมดาจะไม่เห็นปุ่มหรือแถบเมนูหลังบ้านเลย (`hidden` 100%)
   - เมนูหลังบ้านถูกย้ายเข้าไปอยู่ใน **"หมวดหมู่บัญชี" (`front/account.html`)** และจะปรากฏเฉพาะเมื่อผู้ใช้ที่เข้าสู่ระบบคือ `atest` เท่านั้น
 - **การป้องกันการเข้าถึง URL หลังบ้านโดยตรง (Direct Access Blocker):**
   - หากผู้ใช้ทั่วไปพยายามเปิดหน้า `front/admin.html` โดยตรง ระบบจะตรวจสอบสิทธิ์และบล็อกทันที แสดงหน้าต่างแจ้งเตือน `403 ACCESS FORBIDDEN: เฉพาะผู้ใช้ atest เท่านั้น` และรีไดเรกต์กลับอัตโนมัติ
@@ -35,7 +35,7 @@
 ## 2. Design System & UI Consistency (การออกแบบ)
 
 ### 2.1 Tactical Aesthetics & Icon Matching
-- **Icons Consistency:** ไอคอนทั้งหมดในหน้าบัญชี (`front/account.html`) และหน้าร้านค้า (`index.html`) เป็น SVG สไตล์ Tactical เดียวกัน (Stroke Width 2, Amber Accents, Dark Surface)
+- **Icons Consistency:** ไอคอนทั้งหมดในหน้าบัญชี (`front/account.html`) และหน้าร้านค้า (`home.html`) เป็น SVG สไตล์ Tactical เดียวกัน (Stroke Width 2, Amber Accents, Dark Surface)
 - **Background & HUD Theme:** Deep Black (`#050505`), Glass-card gradients, ขอบ White Frost (`rgba(255, 255, 255, 0.08)`), Tactical Grid BG
 - **Typography:** `Outfit` (Heading font, uppercase HUD style) และ `Prompt` (Body font ภาษาไทยและอังกฤษ)
 
