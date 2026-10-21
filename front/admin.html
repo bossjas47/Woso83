@@ -676,10 +676,22 @@
             <button type="button" onclick="document.getElementById('settings-form').requestSubmit()" class="apple-pricing-pill px-5 py-2 text-xs">บันทึกแพ็กเกจ</button>
           </div>
         </div>
+        <div class="apple-card p-6 space-y-4 text-xs">
+          <h3 class="font-display font-semibold text-base">โค้ดรับวันใช้งาน</h3>
+          <form onsubmit="vaultCodeCreate(event)" class="flex flex-wrap gap-2 items-end">
+            <div style="flex:2 1 200px"><label class="block text-[11px] text-slate mb-1" for="vc-code">โค้ด (เว้นว่าง = สุ่มให้)</label><input id="vc-code" maxlength="32" autocomplete="off" placeholder="เช่น FREE7" class="w-full apple-input px-3.5 py-2 font-mono uppercase"></div>
+            <div style="flex:1 1 120px"><label class="block text-[11px] text-slate mb-1" for="vc-days">จำนวนวัน</label><input id="vc-days" type="number" min="1" max="365" value="7" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+            <div style="flex:1 1 120px"><label class="block text-[11px] text-slate mb-1" for="vc-max">ใช้ได้กี่คน (0 = ไม่จำกัด)</label><input id="vc-max" type="number" min="0" value="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+            <div style="flex:1 1 120px"><label class="block text-[11px] text-slate mb-1" for="vc-exp">หมดอายุ (เว้นว่างได้)</label><input id="vc-exp" type="date" class="w-full apple-input px-3.5 py-2"></div>
+            <button type="submit" class="apple-pricing-pill px-5 py-2 text-xs">สร้างโค้ด</button>
+          </form>
+          <p class="text-[11px] text-slate">ลูกค้ากรอกโค้ดได้ที่หน้าโปรแกรมจัดการไอดี (ก่อนมีสิทธิ์ หรือปุ่ม "ต่ออายุ") บัญชีละ 1 ครั้งต่อโค้ด วันจะต่อท้ายวันที่เหลือ · ปุ่มทดลองใช้ตั้งได้ในช่อง "โปรทดลองคลังไอดีฟรี" ด้านบน</p>
+          <div class="overflow-x-auto"><table class="admin-table w-full text-xs text-left"><thead><tr class="text-slate"><th class="py-2 px-4">โค้ด</th><th class="py-2 px-4">วัน</th><th class="py-2 px-4">ใช้แล้ว</th><th class="py-2 px-4">หมดอายุ</th><th class="py-2 px-4"></th></tr></thead><tbody id="vault-codes"></tbody></table></div>
+        </div>
         <div class="apple-card p-6 space-y-4">
           <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">ผู้ใช้ที่มีสิทธิ์</h3><button type="button" onclick="vaultReloadUsage()" class="apple-explore-pill px-3 py-1 text-[11px]">โหลดสถิติใหม่</button></div>
           <div class="overflow-x-auto"><table class="admin-table w-full text-xs text-left">
-            <thead><tr class="text-slate border-b border-hairline"><th class="py-2.5 px-4 font-medium">ผู้ใช้</th><th class="py-2.5 px-4 font-medium">สถานะ</th><th class="py-2.5 px-4 font-medium">ไอดีในคลัง</th><th class="py-2.5 px-4 font-medium">ลูกทีม</th><th class="py-2.5 px-4 font-medium text-right">จัดการ</th></tr></thead>
+            <thead><tr class="text-slate border-b border-hairline"><th class="py-2.5 px-4 font-medium">ผู้ใช้</th><th class="py-2.5 px-4 font-medium">สถานะ</th><th class="py-2.5 px-4 font-medium">ไอดีในคลัง</th><th class="py-2.5 px-4 font-medium">แท็บทีม</th><th class="py-2.5 px-4 font-medium text-right">จัดการ</th></tr></thead>
             <tbody id="vault-users"></tbody></table></div>
         </div>
         <div class="apple-card p-6 space-y-4">
@@ -747,6 +759,13 @@
             <div><label class="block text-[11px] text-slate mb-1" for="setting-discord-webhook">Discord Webhook URL (แจ้งเตือนแอดมิน · เก็บเป็นความลับ)</label>
               <div class="flex gap-2"><input id="setting-discord-webhook" type="text" placeholder="https://discord.com/api/webhooks/..." class="flex-1 min-w-0 apple-input px-3.5 py-2 text-xs font-mono"><button type="button" onclick="testWebhook()" class="apple-explore-pill px-4 py-2 text-xs shrink-0">ทดสอบ</button></div>
               <p class="text-[11px] text-slate mt-1">แจ้งเมื่อมีออเดอร์ใหม่ สลิปเติมเงินใหม่ และการซื้อด้วยเครดิต</p></div>
+          </div>
+
+          <div class="apple-card p-6 space-y-4">
+            <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">ยศสมาชิก</h3><button type="button" onclick="saveRanks()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึกยศ</button></div>
+            <p class="text-[11px] text-slate">ลูกค้าได้ Bronze เมื่อซื้อครั้งแรก ยศถัดไปดูจากยอดเติมเงินสะสม (ไม่นับโบนัส) · ยอดเติมสะสม 0 = ยังไม่เปิดยศนั้น · ส่วนลดใช้กับการซื้อสินค้า โบนัสใช้ตอนเติมเงิน (บวกเพิ่มจากโปรเติมเงิน)</p>
+            <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate text-left"><th class="py-1 pr-2 font-medium">ยศ</th><th class="py-1 px-1 font-medium">ยอดเติมสะสม (฿)</th><th class="py-1 px-1 font-medium">ส่วนลดซื้อ %</th><th class="py-1 px-1 font-medium">โบนัสเติม %</th></tr></thead><tbody id="rank-rows"></tbody></table></div>
+            <div class="flex items-center justify-between gap-3 pt-2 border-t border-hairline"><span class="text-[11px] text-slate">นับยอดเติมสะสมและการซื้อของลูกค้าเก่าจากประวัติ (กดครั้งเดียวตอนเริ่มใช้ระบบยศ)</span><button type="button" onclick="recountRanks(this)" class="apple-explore-pill px-4 py-2 text-xs shrink-0">คำนวณจากประวัติ</button></div>
           </div>
 
           <div class="apple-card p-6 space-y-4">

@@ -72,7 +72,7 @@
 - **รหัสเข้าเกม:** ไม่อยู่ในเอกสารที่หน้าเว็บอ่านได้ Worker `/rent/credentials` ตอบเฉพาะตอนที่ยังไม่หมดเวลา
 - **หมดเวลา/คืนแล้ว:** ไอดีถูกล็อก (`cooldown`) → เปลี่ยนรหัสในเกม → หลังบ้าน แท็บ "เช่าไอดี" กด "คืนมัดจำ" หรือ "ยึดมัดจำ" (ใส่รหัสใหม่ได้) ไอดีกลับมาให้เช่าต่อ
 - **ต้องทำครั้งเดียว:** Worker › Settings › Triggers › Cron Triggers › เพิ่ม `*/5 * * * *` (ล็อกไอดีและแจ้ง Discord ตอนหมดเวลา; ถ้าไม่ตั้ง รหัสก็ยังดูไม่ได้หลังหมดเวลา แต่ไอดีจะไม่ถูกล็อกและไม่มีแจ้งเตือนจนกว่าลูกค้าจะกดดูรหัส)
-- Deploy `worker/slip-worker.js` ตัวใหม่ (เวอร์ชัน 6) และ publish `firestore.rules` ตัวใหม่ก่อนใช้
+- Deploy `worker/slip-worker.js` ตัวใหม่ (เวอร์ชัน 7) และ publish `firestore.rules` ตัวใหม่ก่อนใช้
 
 ## ตะกร้า
 
@@ -109,3 +109,25 @@
 - ซื้อสินค้าด้วยสลิป: Worker เติมเครดิตเท่ายอดสินค้า (ไม่มีโบนัสโปร) แล้วซื้อให้ทันที ถ้าซื้อไม่สำเร็จ (สต็อกหมด/ราคาเปลี่ยน) เครดิตยังอยู่ในบัญชี
 - ต้องตั้ง `EASYSLIP_KEY`, `RECEIVER_MATCH` ที่ Worker และติ๊ก "เปิดระบบตรวจสลิปด้วย API" ในหลังบ้าน › ตั้งค่า ถ้าไม่ตั้ง ลูกค้าจะส่งสลิปไม่ได้ (ยังเติมด้วยซองอั่งเปา/จ่ายด้วยเครดิตได้)
 - รายการเก่าที่ค้างรอตรวจอยู่ ยังอนุมัติ/ไม่อนุมัติได้ในหลังบ้านตามปกติ
+
+## คลังไอดี (แบบตาราง) + ทีม
+- หน้า `front/vault.html` (หัวหน้า): รายการแท็บด้านซ้าย (มือถืออยู่ด้านบน) "+ คลังใหม่" / "+ ทีมใหม่" ช่อง "ติ๊ก N แรก/สุ่ม" แล้วแถบด้านล่างกด ขาย / คัดลอก / ลบ หรือแตะชื่อแท็บเพื่อย้าย ชิปสถานะด้านบนใช้กรอง แต่ละแท็บเป็นตาราง: ไอดี | กระสุน (กอง) | สถานะ | หมายเหตุ แก้ในช่องได้ทันที กดหัวคอลัมน์ "กระสุน" เรียงมากไปน้อย
+- "+ สต๊อก": บรรทัดละไอดี ท้ายบรรทัด `|ตัวเลข` = จำนวนกระสุน (เช่น `mail|pass|20`) บล็อกไอดีซ้ำกับทุกแท็บและที่ขายไปใน 180 วัน
+- "ย้าย" (ที่ติ๊ก / ตามจำนวน / สุ่มคละ) และ "ขาย" (ที่ติ๊ก / ตามจำนวน) ขายแล้วขึ้นให้คัดลอก (รูปแบบ `ไอดี|กระสุน`) + ประวัติการขายพร้อมรวมกระสุน
+- สถานะ 6 สี ตั้งชื่อเองได้ ("ชื่อสถานะ")
+- **ทีม:** ในแท็บทีม กด "+ เชิญด้วยชื่อผู้ใช้" (ลูกทีมต้องสมัครสมาชิกเว็บก่อน) หรือ "คัดลอกลิงก์เชิญ" ส่งให้ ลูกทีมล็อกอินแล้วกดลิงก์ (หรือวางรหัสเชิญ) ครั้งเดียว
+- หน้า `front/team.html` (**ทีมของฉัน**): บัญชีเดียวอยู่ได้หลายทีม และเป็นหัวหน้าคลังของตัวเองได้พร้อมกัน ลูกทีมไม่ต้องซื้อสิทธิ์ (ใช้สิทธิ์ของหัวหน้า) แก้ได้แค่ กระสุน/สถานะ/หมายเหตุ เพิ่ม ลบ ย้าย ขายไม่ได้ หน้าลูกทีมรีเฟรชเองทุก 15 วินาที หัวหน้าเห็นทันที
+- ต้อง deploy Worker **เวอร์ชัน 8** (`/vault/invite`, `/vault/join`, `/vault/team`, `/vault/team/mark`) และ publish `firestore.rules` ใหม่ (`vault_members`)
+
+### Vault: bulk edit, password, prices
+Tick rows then "แก้ไข": ammo, status, note, password (same for all / one each, multi-line paste fills the list) and price per ammo / bundle price. Stored on `vaults/{uid}/ids/{id}` as `pass`, `priceAmmo`, `priceAll` (rules allow up to 14 keys). Prices show only in exports (sell, copy, history) as `mail|pw|20 (฿5/กอง · เหมา ฿100)`; team members get the password (to log in) but never the prices. Re-publish `firestore.rules` and the Worker.
+
+### Member ranks (Worker v8)
+Bronze → Silver → Gold → Diamond → Duchess → Duke → Emperor. Bronze after the first purchase (`users.hasBought`, set by `/buy`); higher ranks by money topped up (`users.topupTotal`, slip + angpao, bonus not counted). Back office > ตั้งค่า > ยศสมาชิก: threshold, purchase discount %, top-up bonus % per rank (`system/settings.ranks`). The Worker applies the discount in `/buy` and `/cart` (client shows the same price, `js/rank.js`) and the bonus on top of top-up promos. Press "คำนวณจากประวัติ" once to fill old customers.
+
+### Vault day codes
+Back office > คลังไอดี > โค้ดรับวันใช้งาน (`vault_codes/{CODE}`: days, max uses, expiry). Customers redeem on the vault page (`/vault/redeem`, once per account per code). Free trial = "โปรทดลองคลังไอดีฟรี".
+
+### Web Push to the leader
+Vault ⋯ > แจ้งเตือนเข้ามือถือ: subscribes this device (`/sw.js`, `manifest.webmanifest`, `push_subs`), settings in `vaults/{uid}/meta/notify`. The Worker sends when a member's edits reach every N IDs of a status, and on "มีปัญหา". The VAPID key pair is created by the Worker on first use (`system_private/vapid`); no setup. iPhone: add the site to the home screen first (iOS 16.4+).
+Service queue: customers turn on notifications on คิวงาน / ออเดอร์ของฉัน (งานบริการ) / after buying a service (`js/push.js`). When the back office presses เริ่มทำงาน or ส่งมอบสำเร็จ, admin.js calls `/push/queue`: the customer gets "ถึงคิวของคุณแล้ว" / "งานเสร็จแล้ว", and the oldest waiting order of the same service gets "อีก 1 คิวถึงคุณ" (each message once, `notify_log`).

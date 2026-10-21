@@ -6,6 +6,7 @@ import {
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { watchCategories, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
 import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
+import { rankTable, rankOf, rankBadge, rankIcon } from "./rank.js";
 
 /**
  * ASTRAPHEX HUB — back office. The real gate is the Firebase custom claim admin:true (firestore.rules);
@@ -649,7 +650,7 @@ function refreshOrders() { renderAdminOrders(); triggerToast('อัปเดต
 function recordSale(txn, orderId, o) {
   if (o.paymentMethod === 'prize') return; // free loot-box prize: not a sale
   txn.set(doc(db, 'stats', 'public'), { orders: increment(1), sales: increment(num(o.amount)) }, { merge: true });
-  txn.set(doc(db, 'recent_orders', orderId), { productName: String(o.productName || '').slice(0, 120), amount: num(o.amount), buyerMask: maskName(buyerName(o)), kind: o.productType === 'service' ? 'service' : 'account', createdAt: serverTimestamp() });
+  txn.set(doc(db, 'recent_orders', orderId), { productName: String(o.productName || '').slice(0, 120), productId: o.productId || '', amount: num(o.amount), buyerMask: maskName(buyerName(o)), kind: o.productType === 'service' ? 'service' : 'account', createdAt: serverTimestamp() });
 }
 
 async function approveOrder(orderId) {
@@ -702,6 +703,7 @@ async function startWork(orderId) {
     b.set(doc(db, 'queue', orderId), { status: 'working', startedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
     await b.commit();
     triggerToast('อัปเดตเป็นกำลังทำแล้ว', 'success');
+    callWorker('/push/queue', { orderId, event: 'start' }).catch(e => console.warn('push:', e)); // customer: "ถึงคิวแล้ว", next in line: "อีก 1 คิว"
   } catch (e) { triggerToast('อัปเดตไม่สำเร็จ', 'error'); }
 }
 async function finishServiceOrder(orderId) {
@@ -716,6 +718,7 @@ async function finishServiceOrder(orderId) {
       recordSale(txn, orderId, s.data());
     });
     triggerToast('ปิดงานแล้ว ลบรหัสเกมแล้ว', 'success');
+    callWorker('/push/queue', { orderId, event: 'done' }).catch(e => console.warn('push:', e));
   } catch (e) { triggerToast(e.message === 'NOT_PROCESSING' ? 'สถานะออเดอร์เปลี่ยนไปแล้ว' : 'ปิดงานไม่สำเร็จ', 'error'); }
 }
 async function cancelOrder(orderId) {
@@ -875,7 +878,7 @@ function renderAdminUsers() {
   const rows = USERS.filter(u => !q || [u.username, u.email, u.contactEmail, u.facebook, u.uid].some(v => String(v || '').toLowerCase().includes(q)));
   $('admin-users-empty').classList.toggle('hidden', rows.length > 0);
   tbody.innerHTML = rows.slice(0, 300).map(u => `<tr class="border-b border-hairline">
-    <td class="py-3 px-4"><p class="font-semibold">${adminEsc(u.username || '(ไม่มีชื่อ)')}</p><p class="text-[10px] text-slate font-mono">${adminEsc(u.uid)}</p></td>
+    <td class="py-3 px-4"><p class="font-semibold flex items-center gap-2">${adminEsc(u.username || '(ไม่มีชื่อ)')} ${rankBadge(rankOf(u, SETTINGS))}</p><p class="text-[10px] text-slate font-mono">${adminEsc(u.uid)}</p></td>
     <td class="py-3 px-4 text-slate">${adminEsc(u.contactEmail || (/@tactical\.store$/.test(u.email || '') ? '' : u.email) || '-')}${u.facebook ? `<br>FB: ${adminEsc(u.facebook)}` : ''}</td>
     <td class="py-3 px-4 font-mono font-semibold">฿${money(u.walletBalance)}</td>
     <td class="py-3 px-4">${u.role === 'admin' ? '<span class="text-launchOrange font-semibold">Admin</span>' : u.role === 'staff' ? `<span class="font-semibold" title="${adminEsc((u.perms || []).map(p => PERM_LABEL[p] || p).join(', '))}">ทีมงาน (${(u.perms || []).length})</span>` : 'User'}</td>
@@ -1025,6 +1028,10 @@ async function loadAdminSettings() {
   $('setting-slip-auto').checked = d.slipAutoVerify === true;
   set('setting-discord-webhook', secrets.discordWebhook);
   set('setting-koen-label', d.koenLabel);
+  $('rank-rows').innerHTML = rankTable(d).map((r, i) => `<tr><td class="py-1.5 pr-2 whitespace-nowrap"><span class="inline-flex items-center gap-1.5 font-semibold">${rankIcon(i, 'w-5 h-5')}${r.name}</span></td>
+    <td class="px-1"><input id="rk-min-${i}" type="number" min="0" value="${i ? r.min : 0}" ${i ? '' : 'disabled title="ซื้อครั้งแรก"'} class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td>
+    <td class="px-1"><input id="rk-dis-${i}" type="number" min="0" max="100" step="0.1" value="${r.discount}" class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td>
+    <td class="px-1"><input id="rk-bon-${i}" type="number" min="0" max="100" step="0.1" value="${r.bonus}" class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td></tr>`).join('');
   renderStatHints();
 }
 function renderStatHints() {
@@ -1056,6 +1063,36 @@ async function handleSaveSettings(e) {
     triggerToast('บันทึกการตั้งค่าแล้ว', 'success');
   } catch (err) { console.warn(err); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
+/** Ranks are saved on their own (merge), so this button never touches the other settings. */
+async function saveRanks() {
+  const v = (id) => Math.max(0, num($(id)?.value));
+  const ranks = [0, 1, 2, 3, 4, 5, 6].map(i => ({ min: i ? Math.round(v(`rk-min-${i}`)) : 0, discount: Math.min(100, v(`rk-dis-${i}`)), bonus: Math.min(100, v(`rk-bon-${i}`)) }));
+  const mins = ranks.slice(1).map(r => r.min).filter(Boolean);
+  if (mins.some((m, i) => i && m <= mins[i - 1])) return triggerToast('ยอดเติมสะสมของยศที่สูงกว่าต้องมากกว่ายศก่อนหน้า', 'error');
+  try { await setDoc(doc(db, 'system', 'settings'), { ranks, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกยศแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
+}
+/** One-off: topupTotal = completed top-ups (money in), hasBought = any order that was not cancelled. */
+async function recountRanks(btn) {
+  if (!confirm('คำนวณยอดเติมสะสมและสถานะการซื้อของลูกค้าทุกคนจากประวัติ?')) return;
+  btn.disabled = true;
+  try {
+    const [tops, ords] = await Promise.all([getDocs(query(collection(db, 'topup_transactions'), where('status', '==', 'completed'))), getDocs(collection(db, 'orders'))]);
+    const sum = {}, bought = new Set();
+    tops.forEach(d => { const t = d.data(); if (t.uid) sum[t.uid] = (sum[t.uid] || 0) + num(t.amount); });
+    ords.forEach(d => { const o = d.data(); if (o.userId && o.status !== 'cancelled') bought.add(o.userId); });
+    const list = USERS.filter(u => num(u.topupTotal) !== Math.round((sum[u.uid] || 0) * 100) / 100 || !!u.hasBought !== bought.has(u.uid));
+    for (let i = 0; i < list.length; i += 400) {
+      const b = writeBatch(db);
+      list.slice(i, i + 400).forEach(u => b.update(doc(db, 'users', u.uid), { topupTotal: Math.round((sum[u.uid] || 0) * 100) / 100, hasBought: bought.has(u.uid) }));
+      await b.commit();
+    }
+    triggerToast(`อัปเดต ${list.length} บัญชีแล้ว`, 'success');
+  } catch (e) { console.warn(e); triggerToast('คำนวณไม่สำเร็จ', 'error'); }
+  btn.disabled = false;
+}
+window.saveRanks = saveRanks; window.recountRanks = recountRanks;
+
 async function uploadQr() {
   const file = $('qr-file').files?.[0];
   if (!file) return triggerToast('กรุณาเลือกรูป QR', 'error');

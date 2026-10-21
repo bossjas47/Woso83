@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where, Timestamp } from "https://www.gst
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct } from "./categories.js";
 import { toast, onSettings, contactsOf } from "./ui.js";
+import { mountPushCard } from "./push.js";
 
 /** Public work queue: per service product, who is waiting / working / done in the last 30 days. */
 const DAY30 = 30 * 864e5;
@@ -136,5 +137,5 @@ onSettings((s) => { contactUrl = contactsOf(s)[0]?.url || ''; render(); });
   onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); });
   onSnapshot(query(collection(db, 'queue'), where('createdAt', '>=', Timestamp.fromMillis(Date.now() - DAY30))), (s) => { QUEUE = s.docs.map(d => ({ id: d.id, ...d.data() })); notifyChanges(); render(); },
     (e) => { document.getElementById('queue-groups').innerHTML = '<p class="text-slate text-sm">โหลดคิวไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; console.warn(e); });
-  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; seen = null; authReady = true; notifyChanges(); render(); });
+  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; seen = null; authReady = true; notifyChanges(); render(); mountPushCard(document.getElementById('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ'); });
 })();

@@ -1,4 +1,4 @@
-import { esc, baht, fmtDate, icon, ICONS, copyText } from "./ui.js";
+import { esc, baht, fmtDate, icon, ICONS, copyText, imgAttrs } from "./ui.js";
 
 /**
  * Order rendering shared by the account page and the product-page success card.
@@ -54,25 +54,35 @@ export function serviceStepsHtml(order) {
   </div>`;
 }
 
+/** Product pictures by product id, filled by the page that lists orders (account / home). */
+export const PRODUCT_IMAGES = new Map();
+export const orderThumb = (o, size = 72) => { const src = o.image || PRODUCT_IMAGES.get(o.productId), css = `width:${size}px;height:${size}px;border-radius:${Math.round(size / 4)}px`; // inline: tw.css has no arbitrary sizes
+  return src ? `<img ${imgAttrs(src, size, size)} alt="" style="${css}" class="object-cover bg-mist shrink-0">` : `<span style="${css}" class="bg-mist text-pricingBlue flex items-center justify-center shrink-0">${icon(o.productType === 'service' || o.kind === 'service' ? ICONS.bolt : ICONS.id, 'w-6 h-6', 1.8)}</span>`; };
+
 export function orderCardHtml(o) {
   const st = STATUS[o.status] || { label: o.status || '-', cls: 'bg-mist text-slate' };
   const isSrv = o.productType === 'service';
+  const qty = `${esc(o.quantity || 1)} ${esc(o.unit || '')}${num(o.bonusQty) ? ` + แถม ${esc(o.bonusQty)}` : ''}`;
   return `<article class="apple-card p-4 sm:p-5 space-y-4">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <p class="text-xs font-mono text-appleBlue">#${esc(o.orderNumber || o.orderId || o.id)}</p>
-        <h3 class="font-semibold text-ink leading-snug">${esc(o.productName || '-')}</h3>
-        <p class="text-xs text-slate mt-0.5">${esc(fmtDate(o.createdAt))} · ${esc(o.quantity || 1)} ${esc(o.unit || '')}${o.paymentMethod === 'wallet' ? ' · จ่ายด้วยเครดิต' : o.paymentMethod === 'prize' ? ' · ของรางวัลกล่องสุ่ม' : ''}</p>
-      </div>
-      <div class="text-right shrink-0">
-        <p class="font-heading font-semibold">${baht(o.amount ?? o.finalPrice)}</p>
-        <span class="inline-block mt-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${st.cls}">${esc(st.label)}</span>
+    <div class="flex gap-4">
+      ${orderThumb(o, 72)}
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-3">
+          <h3 class="font-semibold text-ink text-[17px] leading-snug line-clamp-2">${esc(o.productName || '-')}</h3>
+          <p class="font-heading font-semibold text-[17px] whitespace-nowrap">${baht(o.amount ?? o.finalPrice)}</p>
+        </div>
+        <p class="text-[13px] text-slate mt-0.5">${qty}${o.paymentMethod === 'wallet' ? ' · จ่ายด้วยเครดิต' : o.paymentMethod === 'prize' ? ' · ของรางวัลกล่องสุ่ม' : ''}${num(o.rankDiscount) ? ` · ส่วนลดยศ ${baht(o.rankDiscount)}` : ''}</p>
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          <span class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${st.cls}">${esc(st.label)}</span>
+          <span class="text-[11px] text-slate"><span class="font-mono">#${esc(o.orderNumber || o.orderId || o.id)}</span> · ${esc(fmtDate(o.createdAt))}</span>
+        </div>
       </div>
     </div>
     ${isSrv ? serviceStepsHtml(o) : credentialBoxHtml(o)}
     ${!isSrv && o.adminNote ? `<p class="text-sm text-slate"><span class="font-medium text-ink">หมายเหตุ:</span> ${esc(o.adminNote)}</p>` : ''}
   </article>`;
 }
+const num = (v) => Number(v) || 0;
 
 window.copyCred = (key, field) => {
   const a = vault.get(key);

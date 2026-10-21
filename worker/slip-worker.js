@@ -23,7 +23,7 @@
 const MIN = 20, MAX = 50000, THROTTLE_MS = 10000, MAX_SLIP_AGE_MS = 3 * 864e5;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const SHOP = 'ASTRAPHEX HUB';
-export const WORKER_VERSION = '6';
+export const WORKER_VERSION = '8';
 
 const enc = new TextEncoder();
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -176,6 +176,16 @@ export function usernameToEmail(username) {
   const ascii = Array.from(clean).map(c => { const code = c.charCodeAt(0); return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 95 ? c : `u${code.toString(16)}`; }).join('');
   return `${ascii || 'agent'}@tactical.store`;
 }
+// Member ranks (same rules as js/rank.js): Bronze after the first purchase, then by total topped up; perks from settings.ranks.
+export function rankOf(profile, settings) {
+  if (!profile?.hasBought) return null;
+  const rows = Array.isArray(settings?.ranks) ? settings.ranks : [], t = num(profile.topupTotal);
+  let at = 0;
+  for (let i = 1; i < 7; i++) if (num(rows[i]?.min) > 0 && t >= num(rows[i].min)) at = i;
+  const pct = (v) => Math.min(100, Math.max(0, num(v)));
+  return { index: at, name: RANK_NAMES[at], discount: pct(rows[at]?.discount), bonus: pct(rows[at]?.bonus) };
+}
+const RANK_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Duchess', 'Duke', 'Emperor'];
 const randomId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 20);
 
 // ---------- Discord ----------
@@ -206,7 +216,7 @@ async function checkSlip({ fetchFn, key, receiver, payload, amount, now }) {
   return { ok: true, transRef: String(s.transRef) };
 }
 
-async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
+export async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   const amount = Number(data.amount);
   const payload = String(data.payload || '');
   if (!Number.isFinite(amount) || amount < MIN || amount > MAX || Math.round(amount * 100) !== amount * 100) return [{ error: 'ยอดเงินไม่ถูกต้อง' }, 400];
@@ -217,7 +227,8 @@ async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   const settings = await fs.get('system/settings');
   if (!(settings && settings.slipAutoVerify === true) || !env.EASYSLIP_KEY || !env.RECEIVER_MATCH) return [{ status: 'rejected', message: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาติดต่อแอดมิน' }];
 
-  if ((await fs.get(`users/${user.uid}`))?.status === 'suspended') return [{ status: 'rejected', message: 'บัญชีนี้ถูกระงับการใช้งาน' }];
+  const profile = await fs.get(`users/${user.uid}`);
+  if (profile?.status === 'suspended') return [{ status: 'rejected', message: 'บัญชีนี้ถูกระงับการใช้งาน' }];
   const attempt = await fs.get(`slip_attempts/${user.uid}`);
   if (attempt && now - attempt.at < THROTTLE_MS) return [{ status: 'rejected', message: 'ส่งสลิปถี่เกินไป รอสักครู่แล้วลองใหม่' }];
   await fs.commit([{ update: { name: fs.name(`slip_attempts/${user.uid}`), fields: fs.fields({ at: now }) } }]);
@@ -228,14 +239,16 @@ async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   if (!check.ok) return [{ status: 'rejected', message: check.message }];
 
   const promos = (await fs.query('', 'topup_promos')).map(d => ({ id: d.id, ...d.data }));
-  const { promo, bonus } = buy ? { promo: null, bonus: 0 } : bestTopupPromo(promos, amount);
+  const best = buy ? { promo: null, bonus: 0 } : bestTopupPromo(promos, amount), promo = best.promo;
+  const rank = rankOf(profile, settings), rankBonus = buy || !rank ? 0 : Math.floor(amount * rank.bonus / 100);
+  const bonus = best.bonus + rankBonus;
   const id = randomId();
   try {
     // One atomic commit: the slip reference can be used once (exists:false), the wallet is credited, the record is written.
     await fs.commit([
       { update: { name: fs.name(`slip_refs/${check.transRef}`), fields: fs.fields({ uid: user.uid, amount }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } },
-      { update: { name: fs.name(`users/${user.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [{ fieldPath: 'walletBalance', increment: { doubleValue: amount + bonus } }, stamp('lastTopupAt')] },
-      { update: { name: fs.name(`topup_transactions/${id}`), fields: fs.fields({ txnId: 'TOPUP-' + id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: bonus, finalCredit: amount + bonus, ...(promo ? { promoId: promo.id } : {}), paymentMethod: 'promptpay', proofRef: check.transRef, status: 'completed', verifiedVia: 'easyslip' }) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')] }
+      { update: { name: fs.name(`users/${user.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [{ fieldPath: 'walletBalance', increment: { doubleValue: amount + bonus } }, { fieldPath: 'topupTotal', increment: { doubleValue: amount } }, stamp('lastTopupAt')] },
+      { update: { name: fs.name(`topup_transactions/${id}`), fields: fs.fields({ txnId: 'TOPUP-' + id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: bonus, finalCredit: amount + bonus, ...(promo ? { promoId: promo.id } : {}), ...(rankBonus ? { rankBonus, rank: rank.name } : {}), paymentMethod: 'promptpay', proofRef: check.transRef, status: 'completed', verifiedVia: 'easyslip' }) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')] }
     ]);
   } catch (e) {
     if (e.code === 'already-exists') return [{ status: 'rejected', message: e.message }];
@@ -297,7 +310,8 @@ async function buyOnce({ user, d, fs, now }) {
       }
       discount = r2(r.discount);
     }
-    const amount = r2(subtotal - discount);
+    const rank = rankOf(profile, await fs.get('system/settings')), rankDiscount = rank ? Math.round((subtotal - discount) * rank.discount) / 100 : 0;
+    const amount = r2(subtotal - discount - rankDiscount);
     if (d.expectedAmount != null && Math.abs(num(d.expectedAmount) - amount) > 0.01) return [{ error: `ราคาเปลี่ยนเป็น ฿${money(amount)} กรุณาตรวจสอบอีกครั้ง` }, 409];
     const balance = r2(num(profile?.walletBalance));
     if (balance < amount) return [{ error: `เครดิตไม่พอ (คงเหลือ ฿${money(balance)})` }, 400];
@@ -320,7 +334,7 @@ async function buyOnce({ user, d, fs, now }) {
       orderNumber, orderId: orderNumber, productId: d.productId,
       productName: mode && modes.length ? `${product.name} (${mode.label})` : String(product.name || ''),
       productType: isService ? 'service' : 'account', quantity: qty, bonusQty, receiveQty: qty + bonusQty, unit,
-      unitPrice: rate, subtotal, discount, promoCode: code, amount, finalPrice: amount,
+      unitPrice: rate, subtotal, discount, promoCode: code, ...(rankDiscount ? { rankDiscount, rank: rank.name } : {}), amount, finalPrice: amount,
       paymentMethod: 'wallet', paymentProof: 'เครดิตในบัญชี', userEmail: user.email, userId: user.uid,
       ...(isService ? { buyerFacebook: str(d.buyerFacebook) } : str(d.buyerEmail) ? { buyerEmail: str(d.buyerEmail) } : {}),
       ...(self ? { buyerContact: str(d.buyerContact), playTime: str(d.playTime) } : {}),
@@ -329,7 +343,7 @@ async function buyOnce({ user, d, fs, now }) {
       ...(isService ? { status: 'processing', queueStatus: 'waiting' } : { status: 'completed', accountsDelivered: accounts, accountDelivered: accounts[0] })
     };
     const writes = [
-      { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ walletBalance: r2(balance - amount) }) }, updateMask: { fieldPaths: ['walletBalance'] }, currentDocument: { exists: true } },
+      { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ walletBalance: r2(balance - amount), hasBought: true }) }, updateMask: { fieldPaths: ['walletBalance', 'hasBought'] }, currentDocument: { exists: true } },
       { update: { name: fs.name(`products/${d.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -qty), stamp('updatedAt')], currentDocument: { exists: true } },
       ...items.map(it => ({ update: { name: fs.name(it.path), fields: fs.fields({ status: 'sold', orderId: oid }) }, updateMask: { fieldPaths: ['status', 'orderId'] }, updateTransforms: [stamp('soldAt')], currentDocument: { exists: true } })),
       { update: { name: fs.name(`orders/${oid}`), fields: fs.fields(order) }, updateTransforms: [stamp('createdAt'), stamp(isService ? 'paidAt' : 'completedAt')], currentDocument: { exists: false } },
@@ -338,7 +352,7 @@ async function buyOnce({ user, d, fs, now }) {
     if (isService) writes.push({ update: { name: fs.name(`queue/${oid}`), fields: fs.fields({ orderNumber, productId: d.productId, productName: String(product.name || ''), unit, quantity: qty, nameMask: maskName(username).slice(0, 8), uid: user.uid, status: 'waiting' }) }, updateTransforms: [stamp('createdAt')] });
     else {
       writes.push({ update: { name: fs.name('stats/public') }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('orders', 1), inc('sales', amount)] });
-      writes.push({ update: { name: fs.name(`recent_orders/${oid}`), fields: fs.fields({ productName: order.productName.slice(0, 120), amount, buyerMask: maskName(username), kind: 'account' }) }, updateTransforms: [stamp('createdAt')] });
+      writes.push({ update: { name: fs.name(`recent_orders/${oid}`), fields: fs.fields({ productName: order.productName.slice(0, 120), productId: d.productId, amount, buyerMask: maskName(username), kind: 'account' }) }, updateTransforms: [stamp('createdAt')] });
     }
     if (code) writes.push({ update: { name: fs.name(`promo_codes/${code}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('usedCount', 1)] });
     await fs.commit(writes, tx);
@@ -350,7 +364,7 @@ async function buyOnce({ user, d, fs, now }) {
   }
 }
 
-async function routeBuy({ user, data, fs, fetchFn, now, later }) {
+export async function routeBuy({ user, data, fs, fetchFn, now, later }) {
   const bad = validateBuy(data);
   if (bad) return [{ error: bad }, 400];
   let out;
@@ -454,13 +468,15 @@ async function routeAngpao({ user, data, fs, env, fetchFn, now, later }) {
   const ref = `${str(v.voucher_id, 80) || code}_${num(ticket.update_date) || now}`.replace(/[^\w-]/g, '');
 
   const promos = (await fs.query('', 'topup_promos')).map(d => ({ id: d.id, ...d.data }));
-  const { promo, bonus } = bestTopupPromo(promos, amount);
+  const best = bestTopupPromo(promos, amount), promo = best.promo;
+  const rank = rankOf(profile, await fs.get('system/settings')), rankBonus = rank ? Math.floor(amount * rank.bonus / 100) : 0;
+  const bonus = best.bonus + rankBonus;
   const id = randomId();
   const credit = r2(amount + bonus);
   const writes = [
     { update: { name: fs.name(`angpao_vouchers/${ref}`), fields: fs.fields({ uid: user.uid, amount, voucherId: str(v.voucher_id, 80), code, txnId: id }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } },
-    { update: { name: fs.name(`users/${user.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [{ fieldPath: 'walletBalance', increment: { doubleValue: credit } }, stamp('lastTopupAt')] },
-    { update: { name: fs.name(`topup_transactions/${id}`), fields: fs.fields({ txnId: 'TOPUP-' + id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: bonus, finalCredit: credit, ...(promo ? { promoId: promo.id } : {}), paymentMethod: 'angpao', proofRef: str(v.voucher_id, 80) || code, status: 'completed', verifiedVia: 'angpao' }) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')] },
+    { update: { name: fs.name(`users/${user.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [{ fieldPath: 'walletBalance', increment: { doubleValue: credit } }, { fieldPath: 'topupTotal', increment: { doubleValue: amount } }, stamp('lastTopupAt')] },
+    { update: { name: fs.name(`topup_transactions/${id}`), fields: fs.fields({ txnId: 'TOPUP-' + id.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: bonus, finalCredit: credit, ...(promo ? { promoId: promo.id } : {}), ...(rankBonus ? { rankBonus, rank: rank.name } : {}), paymentMethod: 'angpao', proofRef: str(v.voucher_id, 80) || code, status: 'completed', verifiedVia: 'angpao' }) }, updateTransforms: [stamp('createdAt'), stamp('completedAt')] },
     { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, delta: credit, note: `ซองอั่งเปา ฿${money(amount)}${bonus ? ` + โบนัส ${money(bonus)}` : ''}`, by: 'system' }) }, updateTransforms: [stamp('at')] }
   ];
   let saved = false;
@@ -785,6 +801,37 @@ async function vaultOnce({ user, d, fs, now }) {
 }
 const routeVaultBuy = ({ user, data, fs, now }) => retry(() => vaultOnce({ user, d: data, fs, now }));
 
+// vault_codes/{CODE} (back office): { days, maxUses (0 = no limit), used, active, expiresAt? }. One use per account.
+async function codeOnce({ user, code, fs, now }) {
+  const tx = await fs.begin();
+  let committed = false;
+  try {
+    const [profile, c, mine] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`vault_codes/${code}`, tx), fs.get(`vault_codes/${code}/uses/${user.uid}`, tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    const days = Math.floor(num(c?.days));
+    if (!c || c.active === false || !(days > 0) || (c.expiresAt && Date.parse(c.expiresAt) < now)) return [{ error: 'ไม่พบโค้ดนี้ หรือโค้ดหมดอายุแล้ว' }, 404];
+    if (num(c.maxUses) > 0 && num(c.used) >= num(c.maxUses)) return [{ error: 'โค้ดนี้ถูกใช้ครบแล้ว' }, 409];
+    if (mine) return [{ error: 'บัญชีนี้ใช้โค้ดนี้ไปแล้ว' }, 409];
+    const until = Math.max(now, Date.parse(profile?.vaultUntil) || 0) + days * 864e5;
+    await fs.commit([
+      { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ vaultUntil: new Date(until) }) }, updateMask: { fieldPaths: ['vaultUntil'] }, currentDocument: { exists: true } },
+      { update: { name: fs.name(`vault_codes/${code}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('used', 1)], currentDocument: { exists: true } },
+      { update: { name: fs.name(`vault_codes/${code}/uses/${user.uid}`), fields: fs.fields({ email: user.email || '' }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } },
+      { update: { name: fs.name(`vault_sales/${randomId()}`), fields: fs.fields({ uid: user.uid, email: user.email || '', days, price: 0, trial: false, by: 'code', code, until: new Date(until) }) }, updateTransforms: [stamp('at')] }
+    ], tx);
+    committed = true;
+    return [{ vaultUntil: until, days }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+export async function routeVaultRedeem({ user, data, fs, now }) {
+  const code = String(data.code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{4,32}$/.test(code)) return [{ error: 'รูปแบบโค้ดไม่ถูกต้อง' }, 400];
+  const key = `vcode_${user.uid}`, at = await fs.get(`slip_attempts/${key}`);
+  if (at && now - num(at.at) < 3000) return [{ error: 'ทำรายการถี่เกินไป รอสักครู่' }, 429]; // slows down code guessing
+  await fs.commit([{ update: { name: fs.name(`slip_attempts/${key}`), fields: fs.fields({ at: now }) } }]);
+  return retry(() => codeOnce({ user, code, fs, now }));
+}
+
 // ---------- vault: team link (no login; the secret token in the link is the key) ----------
 async function vaultLink(fs, data, now) {
   const token = String(data.token || '');
@@ -794,38 +841,163 @@ async function vaultLink(fs, data, now) {
   if (!(Date.parse(owner?.vaultUntil) > now)) return [null, [{ error: 'สิทธิ์ใช้งานของหัวหน้าทีมหมดอายุ' }, 403]];
   return [link, null];
 }
-async function routeVaultTeam({ data, fs, now }) {
-  const [link, err] = await vaultLink(fs, data, now);
-  if (err) return err;
-  const ids = await fs.query(`vaults/${link.uid}`, 'ids', [['assignee', 'EQUAL', link.memberId]]);
-  return [{ name: String(link.name || ''), ids: ids.map(x => ({ id: x.id, text: String(x.data.text || ''), done: x.data.done === true, due: num(x.data.due), note: String(x.data.note || ''), issue: String(x.data.issue || '') })) }];
+// Team tabs are shared with signed-in members: vault_members/{member}_{owner}_{tabId} (written only here).
+// Invite by username (/vault/invite, the owner) or by an invite token (/vault/join, the member). A member reads the
+// tab's rows and may change ammo / status colour / note (/vault/team, /vault/team/mark); never add, delete, move or sell.
+const memberId = (member, owner, tabId) => `${member}_${owner}_${tabId}`;
+const idOk = (v) => typeof v === 'string' && /^[\w-]{1,128}$/.test(v);
+const nameOf = (u, fallback = '') => str(u?.username || u?.email?.split('@')[0] || fallback, 40);
+async function ownerOpen(fs, owner, now) {
+  const o = await fs.get(`users/${owner}`);
+  return Date.parse(o?.vaultUntil) > now ? [o, null] : [null, [{ error: 'สิทธิ์ใช้งานของหัวหน้าทีมหมดอายุ' }, 403]];
 }
-async function routeVaultDone({ data, fs, now }) {
-  const [link, err] = await vaultLink(fs, data, now);
-  if (err) return err;
+async function addMember({ fs, owner, ownerUser, tabId, tab, member, memberUser }) {
+  const id = memberId(member, owner, tabId);
+  await fs.commit([{ update: { name: fs.name(`vault_members/${id}`), fields: fs.fields({ member, owner, tabId, tabName: str(tab.name, 30), ownerName: nameOf(ownerUser, 'หัวหน้า'), memberName: nameOf(memberUser, 'ลูกทีม') }) }, updateTransforms: [stamp('at')] }]);
+  return id;
+}
+export async function routeVaultInvite({ user, data, fs, now }) {
+  if (!idOk(data.tabId)) return [{ error: 'ไม่พบแท็บ' }, 400];
+  const [ownerUser, err] = await ownerOpen(fs, user.uid, now); if (err) return err;
+  const tab = await fs.get(`vaults/${user.uid}/tabs/${data.tabId}`);
+  if (!tab || tab.zone !== 'team') return [{ error: 'เชิญได้เฉพาะแท็บทีม' }, 400];
+  const want = str(data.username, 40).toLowerCase();
+  if (!want) return [{ error: 'ใส่ชื่อผู้ใช้' }, 400];
+  const found = (await fs.query('', 'users', [['username', 'EQUAL', str(data.username, 40)]], { limit: 2 }))[0]
+    || (await fs.query('', 'users', [['email', 'EQUAL', usernameToEmail(want)]], { limit: 2 }))[0];
+  if (!found) return [{ error: 'ไม่พบผู้ใช้ชื่อนี้ (ให้ลูกทีมสมัครสมาชิกเว็บก่อน)' }, 404];
+  if (found.id === user.uid) return [{ error: 'เชิญตัวเองไม่ได้' }, 400];
+  const id = await addMember({ fs, owner: user.uid, ownerUser, tabId: data.tabId, tab, member: found.id, memberUser: found.data });
+  return [{ ok: true, id, memberName: nameOf(found.data) }];
+}
+export async function routeVaultJoin({ user, data, fs, now }) {
+  const [link, err] = await vaultLink(fs, data, now); if (err) return err;
+  if (link.uid === user.uid) return [{ error: 'นี่คือลิงก์เชิญของคุณเอง ส่งให้ลูกทีม' }, 400];
+  const tab = await fs.get(`vaults/${link.uid}/tabs/${link.tabId}`);
+  if (!tab || tab.token !== String(data.token)) return [{ error: 'ลิงก์ไม่ถูกต้องหรือถูกยกเลิกแล้ว' }, 404];
+  const [ownerUser, memberUser] = await Promise.all([fs.get(`users/${link.uid}`), fs.get(`users/${user.uid}`)]);
+  const id = await addMember({ fs, owner: link.uid, ownerUser, tabId: link.tabId, tab, member: user.uid, memberUser: memberUser || { email: user.email } });
+  return [{ ok: true, id, tabName: str(tab.name, 30) }];
+}
+async function memberTab(user, data, fs, now) {
+  if (!idOk(data.owner) || !idOk(data.tabId)) return [null, [{ error: 'ไม่พบทีม' }, 400]];
+  const m = await fs.get(`vault_members/${memberId(user.uid, data.owner, data.tabId)}`);
+  if (!m) return [null, [{ error: 'คุณไม่ได้อยู่ในทีมนี้แล้ว' }, 403]];
+  const [, err] = await ownerOpen(fs, data.owner, now); if (err) return [null, err];
+  const tab = await fs.get(`vaults/${data.owner}/tabs/${data.tabId}`);
+  if (!tab) return [null, [{ error: 'หัวหน้าลบแท็บนี้แล้ว' }, 404]];
+  return [tab, null];
+}
+/** vaults/{owner}/meta/notify = { on, every, color, problem }: push "done N" milestones and problems to the leader's phone. */
+export async function notifyLeader({ fs, fetchFn, now, owner, tabId, tab, color, who }) {
+  const [cfg, meta] = await Promise.all([fs.get(`vaults/${owner}/meta/notify`), fs.get(`vaults/${owner}/meta/colors`)]);
+  if (!cfg?.on) return;
+  const label = (i) => str(meta?.labels?.[i], 20) || ['', 'มีปัญหา', 'กำลังทำ', 'รอตรวจ', 'เสร็จแล้ว', 'พร้อมขาย', 'จองแล้ว'][i];
+  const team = `ทีม ${str(tab?.name, 30)}`, url = '/front/vault.html';
+  if (color === 1 && cfg.problem !== false) return pushTo(fs, fetchFn, owner, { title: team, body: `${who} ตั้งสถานะ "${label(1)}" 1 ไอดี`, url, tag: `p-${tabId}` }, now);
+  const target = Math.floor(num(cfg.color) || 4), every = Math.max(1, Math.floor(num(cfg.every) || 20));
+  if (color !== target) return;
+  const n = (await fs.query(`vaults/${owner}`, 'ids', [['tab', 'EQUAL', tabId], ['color', 'EQUAL', target]])).length;
+  if (n > 0 && n % every === 0) return pushTo(fs, fetchFn, owner, { title: team, body: `${label(target)}ครบ ${n} ไอดีแล้ว (ล่าสุดโดย ${who})`, url, tag: `d-${tabId}` }, now);
+}
+export async function routeVaultTeam({ user, data, fs, now }) {
+  const [tab, err] = await memberTab(user, data, fs, now); if (err) return err;
+  const [ids, meta] = await Promise.all([fs.query(`vaults/${data.owner}`, 'ids', [['tab', 'EQUAL', data.tabId]]), fs.get(`vaults/${data.owner}/meta/colors`)]);
+  const rows = ids.map(x => ({ id: x.id, text: String(x.data.text || ''), ammo: Math.max(0, Math.floor(num(x.data.ammo))), color: Math.max(0, Math.min(6, Math.floor(num(x.data.color)))), note: String(x.data.note || ''), pass: String(x.data.pass || '').slice(0, 100), at: num(x.data.seq) || Date.parse(x.data.createdAt) || 0 }))
+    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)).map(({ at, ...r }) => r);
+  return [{ name: String(tab.name || ''), labels: Array.isArray(meta?.labels) ? meta.labels.map(v => str(v, 20)) : [], ids: rows }];
+}
+export async function routeVaultMark({ user, data, fs, fetchFn, now, later }) {
+  const [tab, err] = await memberTab(user, data, fs, now); if (err) return err;
   const id = String(data.id || '');
-  const row = /^[\w-]{1,64}$/.test(id) ? await fs.get(`vaults/${link.uid}/ids/${id}`) : null;
-  if (!row || row.assignee !== link.memberId) return [{ error: 'ไม่พบไอดีนี้' }, 404];
-  const done = data.done === true;
-  await fs.commit([
-    { update: { name: fs.name(`vaults/${link.uid}/ids/${id}`), fields: fs.fields({ done }) }, updateMask: { fieldPaths: ['done'] }, currentDocument: { exists: true } },
-    { update: { name: fs.name(`vaults/${link.uid}/logs/${crypto.randomUUID()}`), fields: fs.fields({ action: done ? 'done' : 'undone', detail: `${link.name}: ${String(row.text).split(/[|:\s]/)[0].slice(0, 40)}`, at: new Date(now) }) } }
-  ]);
+  const row = /^[\w-]{1,64}$/.test(id) ? await fs.get(`vaults/${data.owner}/ids/${id}`) : null;
+  if (!row || row.tab !== data.tabId) return [{ error: 'ไม่พบไอดีนี้ (อาจถูกย้ายหรือขายไปแล้ว) กดรีเฟรช' }, 404];
+  const fields = {};
+  if (data.color != null) { const c = Number(data.color); if (!Number.isInteger(c) || c < 0 || c > 6) return [{ error: 'สถานะไม่ถูกต้อง' }, 400]; fields.color = c; }
+  if (data.ammo != null) { const a = Number(data.ammo); if (!Number.isInteger(a) || a < 0 || a > 999999) return [{ error: 'จำนวนกระสุนไม่ถูกต้อง' }, 400]; fields.ammo = a; }
+  if (data.note != null) fields.note = str(data.note, 200);
+  if (!Object.keys(fields).length) return [{ ok: true }];
+  await fs.commit([{ update: { name: fs.name(`vaults/${data.owner}/ids/${id}`), fields: fs.fields(fields) }, updateMask: { fieldPaths: Object.keys(fields) }, currentDocument: { exists: true } }]);
+  if (fields.color != null && fields.color !== num(row.color) && later) later(notifyLeader({ fs, fetchFn, now, owner: data.owner, tabId: data.tabId, tab, color: fields.color, who: user.name || String(user.email || '').split('@')[0] }));
   return [{ ok: true }];
 }
 
-async function routeVaultIssue({ data, fs, now }) {
-  const [link, err] = await vaultLink(fs, data, now);
-  if (err) return err;
-  const id = String(data.id || ''), issue = str(data.issue, 200); // empty text clears the report
-  const row = /^[\w-]{1,64}$/.test(id) ? await fs.get(`vaults/${link.uid}/ids/${id}`) : null;
-  if (!row || row.assignee !== link.memberId) return [{ error: 'ไม่พบไอดีนี้' }, 404];
-  await fs.commit([
-    { update: { name: fs.name(`vaults/${link.uid}/ids/${id}`), fields: fs.fields({ issue }) }, updateMask: { fieldPaths: ['issue'] }, currentDocument: { exists: true } },
-    ...(issue ? [{ update: { name: fs.name(`users/${link.uid}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('vaultAlerts', 1)], currentDocument: { exists: true } }, { update: { name: fs.name(`vaults/${link.uid}/logs/${crypto.randomUUID()}`), fields: fs.fields({ action: 'issue', detail: `${link.name}: ${issue}`, items: [String(row.text).split(/[|:\s]/)[0].slice(0, 40)], count: 1, at: new Date(now) }) } }] : [])
-  ]);
-  return [{ ok: true }];
+
+// ---------- Web Push (RFC 8291 aes128gcm + RFC 8292 VAPID), no library ----------
+// The VAPID key pair is made on first use and kept in system_private/vapid; browsers subscribe with its public key.
+const ub64u = (t) => { t = String(t).replace(/-/g, '+').replace(/_/g, '/'); return Uint8Array.from(atob(t + '='.repeat((4 - t.length % 4) % 4)), c => c.charCodeAt(0)); };
+const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of a) { o.set(x, i); i += x.length; } return o; };
+const utf8 = (t) => new TextEncoder().encode(t);
+async function vapidKeys(fs) {
+  const have = await fs.get('system_private/vapid');
+  if (have?.jwk && have?.pub) return have;
+  const k = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const out = { jwk: JSON.stringify(await crypto.subtle.exportKey('jwk', k.privateKey)), pub: b64u(await crypto.subtle.exportKey('raw', k.publicKey)) };
+  try { await fs.commit([{ update: { name: fs.name('system_private/vapid'), fields: fs.fields(out) }, currentDocument: { exists: false } }]); return out; }
+  catch (e) { if (e.code === 'already-exists' || e.code === 'conflict') return fs.get('system_private/vapid'); throw e; } // two first calls at once: keep the one saved first
 }
+const hkdf = async (salt, ikm, info, len) => new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), len * 8));
+/** Encrypts one message for one subscription (single record, aes128gcm). */
+export async function encryptPush(sub, text, { salt = crypto.getRandomValues(new Uint8Array(16)), local } = {}) {
+  const ua = ub64u(sub.p256dh), auth = ub64u(sub.auth);
+  local ||= await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', local.publicKey));
+  const uaKey = await crypto.subtle.importKey('raw', ua, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, local.privateKey, 256));
+  const ikm = await hkdf(auth, shared, cat(utf8('WebPush: info\0'), ua, asPub), 32);
+  const cek = await hkdf(salt, ikm, utf8('Content-Encoding: aes128gcm\0'), 16), nonce = await hkdf(salt, ikm, utf8('Content-Encoding: nonce\0'), 12);
+  const key = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const body = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, cat(utf8(text), new Uint8Array([2]))));
+  return cat(salt, new Uint8Array([0, 0, 16, 0]), new Uint8Array([65]), asPub, body); // header: salt | rs=4096 | idlen | keyid
+}
+export async function vapidAuth(endpoint, keys, now) {
+  const jwt = (o) => b64u(utf8(JSON.stringify(o)));
+  const head = `${jwt({ typ: 'JWT', alg: 'ES256' })}.${jwt({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: 'mailto:admin@astraphex.panderx.xyz' })}`;
+  const key = await crypto.subtle.importKey('jwk', JSON.parse(keys.jwk), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, utf8(head));
+  return `vapid t=${head}.${b64u(sig)}, k=${keys.pub}`;
+}
+/** Sends { title, body, url } to every device the user turned notifications on for. Dead subscriptions are removed. */
+export async function pushTo(fs, fetchFn, uid, msg, now = Date.now()) {
+  const subs = await fs.query('', 'push_subs', [['uid', 'EQUAL', uid]]);
+  if (!subs.length) return 0;
+  const keys = await vapidKeys(fs);
+  let sent = 0;
+  await Promise.all(subs.map(async ({ id, data: sub }) => {
+    try {
+      const res = await fetchFn(sub.endpoint, { method: 'POST', headers: { authorization: await vapidAuth(sub.endpoint, keys, now), 'content-encoding': 'aes128gcm', 'content-type': 'application/octet-stream', ttl: '86400', urgency: 'high' }, body: await encryptPush(sub, JSON.stringify(msg)) });
+      if (res.status === 404 || res.status === 410) await fs.commit([{ delete: fs.name(`push_subs/${id}`) }]);
+      else if (res.ok) sent++;
+      else console.warn('push', res.status, await res.text().catch(() => ''));
+    } catch (e) { console.warn('push failed', e); }
+  }));
+  return sent;
+}
+const routePushKey = async ({ fs }) => [{ key: (await vapidKeys(fs)).pub }];
+/** Back office pressed เริ่มทำงาน / ส่งมอบสำเร็จ on a service order: tell the customer, and on start tell the next one in line. Each message once. */
+export async function routePushQueue({ user, data, fs, fetchFn, now }) {
+  if (!user.admin && !user.perms.includes('orders')) return [{ error: 'ไม่มีสิทธิ์' }, 403];
+  const id = String(data.orderId || ''), ev = data.event;
+  if (!/^[\w-]{1,64}$/.test(id) || !['start', 'done'].includes(ev)) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
+  const o = await fs.get(`orders/${id}`);
+  if (!o || o.productType !== 'service' || o.queueStatus !== (ev === 'start' ? 'working' : 'done')) return [{ ok: true, skipped: 'state' }];
+  const once = async (key) => { try { await fs.commit([{ update: { name: fs.name(`notify_log/${key}`), fields: fs.fields({ by: user.uid }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } }]); return true; } catch (e) { if (e.code === 'already-exists' || e.code === 'conflict') return false; throw e; } };
+  const what = `${str(o.productName, 80)} ${num(o.receiveQty) || num(o.quantity)} ${str(o.unit, 10)}`.trim(), url = '/front/account.html#orders';
+  let sent = 0;
+  if (await once(`q_${ev}_${id}`)) sent += await pushTo(fs, fetchFn, o.userId, ev === 'start'
+    ? { title: 'ถึงคิวของคุณแล้ว', body: `ทีมงานเริ่มทำ ${what} แล้ว`, url, tag: `q-${id}` }
+    : { title: 'งานเสร็จแล้ว ✓', body: `${what} ส่งมอบเรียบร้อย`, url, tag: `q-${id}` }, now);
+  if (ev === 'start') { // the oldest one still waiting for the same service is next
+    const wait = (await fs.query('', 'queue', [['productId', 'EQUAL', o.productId], ['status', 'EQUAL', 'waiting']])).sort((a, b) => Date.parse(a.data.createdAt) - Date.parse(b.data.createdAt) || a.id.localeCompare(b.id));
+    const nx = wait.find(q => q.id !== id && q.data.uid);
+    if (nx && await once(`q_next_${nx.id}`)) sent += await pushTo(fs, fetchFn, nx.data.uid, { title: 'อีก 1 คิวถึงคุณ', body: `${str(nx.data.productName, 80)} — เตรียมพร้อมได้เลย`, url, tag: `q-${nx.id}` }, now);
+  }
+  return [{ ok: true, sent }];
+}
+const routePushTest = async ({ user, fs, fetchFn, now }) => {
+  const sent = await pushTo(fs, fetchFn, user.uid, { title: 'ASTRAPHEX HUB', body: 'แจ้งเตือนทำงานแล้ว 🎉', url: '/front/vault.html' }, now);
+  return sent ? [{ ok: true, sent }] : [{ error: 'ไม่พบเครื่องที่เปิดแจ้งเตือน กด "เปิดแจ้งเตือนบนเครื่องนี้" ก่อน' }, 404];
+};
 
 // ---------- Loot boxes (กล่องสุ่ม) ----------
 // boxes/{id} (written by the admin): { name, price, active, prizes: [{ id, label, kind, weight, rarity, ... }] }
@@ -1016,15 +1188,14 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply({ error: 'method not allowed' }, 405);
   const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
-  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/team': routeVaultTeam, '/vault/team/done': routeVaultDone, '/vault/team/issue': routeVaultIssue };
-  const open = path.startsWith('/vault/team'); // the link token is the credential, not a login
+  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/redeem': routeVaultRedeem, '/push/key': routePushKey, '/push/test': routePushTest, '/push/queue': routePushQueue, '/vault/team': routeVaultTeam, '/vault/team/mark': routeVaultMark, '/vault/invite': routeVaultInvite, '/vault/join': routeVaultJoin };
   const route = routes[path];
   if (!route) return reply({ error: 'not found' }, 404);
   const pending = [];
   const later = (p) => { const q = Promise.resolve(p).catch((e) => console.warn('later:', e)); if (ctx?.waitUntil) ctx.waitUntil(q); else pending.push(q); };
   try {
     const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
-    const user = open ? null : await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer /, ''), sa.project_id, fetchFn, now);
+    const user = await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer /, ''), sa.project_id, fetchFn, now);
     const data = await request.json().catch(() => ({}));
     const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
     const [body, status = 200] = await route({ user, data: data || {}, fs, env, sa, fetchFn, now, later });

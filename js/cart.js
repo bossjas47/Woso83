@@ -2,23 +2,25 @@ import { db, auth } from "../firebase-config.js";
 import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
-import { esc, num, baht, money, toast, callWorker, imgAttrs, workerBase } from "./ui.js";
+import { esc, num, baht, money, toast, callWorker, imgAttrs, workerBase, getSettings } from "./ui.js";
+import { rankDiscount } from "./rank.js";
 import { saveCart } from "./cart-store.js";
 
 /** Cart page: game IDs and services, paid with credit through the Worker (/cart). Buyer details are asked here, never stored in the cart. */
 const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
-let user = null, items = [], PRODUCTS = {}, CATS = [], balance = null, ready = false, paying = false;
+let prof = null, user = null, items = [], PRODUCTS = {}, CATS = [], balance = null, ready = false, paying = false;
 const form = { facebook: '' };            // typed buyer details survive re-renders (line key -> fields)
 const root = () => document.getElementById('cart-root');
 const key = (it) => `${it.productId}|${it.farmMode || ''}`;
 
+const lineTotal = (base) => Math.round((base - rankDiscount(base, prof || window.__wallet?.profile, getSettings())) * 100) / 100; // rank discount, same as the Worker
 function info(it) {
   const p = PRODUCTS[it.productId];
   if (!p) return null;
   const srv = isServiceProduct(p, CATS), mode = (p.farmModes || []).find(m => m.key === it.farmMode) || null;
   const rate = mode ? num(mode.price) : srv ? (num(p.serviceRate) || num(p.price)) : num(p.price);
   const min = srv ? minQtyOf(p, CATS) : 1, max = srv ? 99999 : Math.max(0, Math.floor(num(p.stock)));
-  return { p, srv, mode, rate, min, max, unit: unitOf(p, CATS), self: srv && mode?.key === 'self', out: num(p.stock) <= 0, total: Math.round(it.quantity * rate * 100) / 100 };
+  return { p, srv, mode, rate, min, max, unit: unitOf(p, CATS), self: srv && mode?.key === 'self', out: num(p.stock) <= 0, total: lineTotal(Math.round(it.quantity * rate * 100) / 100) };
 }
 const live = () => items.map((it, i) => ({ it, i, d: info(it) })).filter(x => x.d && !x.d.out);
 
@@ -88,7 +90,7 @@ document.addEventListener('input', (e) => {
   if (t.id === 'cart-facebook') form.facebook = t.value;
   else if (t.dataset?.k) (form[t.dataset.k] ||= {})[t.dataset.f] = t.value;
 });
-document.addEventListener('wallet', (e) => { balance = e.detail.balance; if (!paying) render(); });
+document.addEventListener('wallet', (e) => { balance = e.detail.balance; prof = e.detail.profile || null; if (!paying) render(); });
 
 /** Only the products that are in the cart, read once each (prices and stock stay current for this visit). */
 const asked = new Set();

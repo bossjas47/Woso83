@@ -6,8 +6,10 @@ import { esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, wor
 import { deliveryBadge, productCardHtml, isRentProduct } from "./card.js";
 import { mountPromptPay, promptpayReady } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
+import { rankDiscount, rankOf, RANKS } from "./rank.js";
 import { orderCardHtml } from "./orders-ui.js";
 import { addToCart } from "./cart-store.js";
+import { mountPushCard } from "./push.js";
 import { readProducts, writeProducts } from "./products-cache.js";
 
 /**
@@ -22,7 +24,7 @@ const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB'
 let allProducts = [], CATS = [], P = null;
 let gallery = [], gIdx = 0;
 let qty = 1, farmMode = '';
-let promo = null, promoCode = null, discount = 0;
+let promo = null, promoCode = null, discount = 0, rankOff = 0, prof = null;
 let method = 'wallet';
 let balance = null, user = null;
 let submitting = false;
@@ -195,7 +197,7 @@ function selectFarmMode(key) { farmMode = key; renderFarmModes(); renderValuePac
 
 // ---------- Price ----------
 const subtotal = () => Math.round(qty * unitRate() * 100) / 100;
-const finalPrice = () => Math.max(0, Math.round((subtotal() - discount) * 100) / 100);
+const finalPrice = () => Math.max(0, Math.round((subtotal() - discount - rankOff) * 100) / 100);
 function recalc() {
   if (!P) return;
   const unit = unitOf(P, CATS);
@@ -204,6 +206,8 @@ function recalc() {
     const r = evaluatePromo(promo, P, sub);
     discount = r.ok ? r.discount : 0;
   } else discount = 0;
+  prof = prof || window.__wallet?.profile || null;
+  rankOff = rankDiscount(sub - discount, prof, getSettings()); // the Worker takes the same off
   const fin = finalPrice();
   $('product-unit-price').textContent = baht(unitRate());
   $('product-unit-suffix').textContent = `/ ${unit}`;
@@ -212,6 +216,8 @@ function recalc() {
   $('calc-subtotal').textContent = baht(sub);
   $('calc-discount-row').classList.toggle('hidden', !discount);
   $('calc-discount-val').textContent = `-${baht(discount)}`;
+  $('calc-rank-row').classList.toggle('hidden', !rankOff);
+  if (rankOff) { $('calc-rank-label').textContent = `ส่วนลดยศ ${RANKS[rankOf(prof, getSettings())].name}`; $('calc-rank-val').textContent = `-${baht(rankOff)}`; }
   $('calc-final-price').textContent = baht(fin);
   $('qty-buy-price').textContent = baht(fin);
   $('voucher-exact-total').textContent = baht(fin);
@@ -491,7 +497,8 @@ function showSuccess(order, paid) {
       <div><p class="text-xs text-slate">${paid ? 'ชำระเงินสำเร็จ' : 'ได้รับคำสั่งซื้อแล้ว'}</p>
         <h2 class="text-xl font-heading font-semibold">${paid ? (srv ? 'งานของคุณเข้าคิวแล้ว' : 'รับไอดีของคุณได้เลย') : 'รอทีมงานตรวจสอบการชำระเงิน'}</h2></div>
     </div>
-    ${orderCardHtml(order)}
+    ${orderCardHtml({ ...order, image: P?.image })}
+    <div id="push-card"></div>
     <div class="grid grid-cols-2 gap-3">
       <a href="account.html#orders" class="apple-pricing-pill py-3 text-[15px]">ออเดอร์ของฉัน</a>
       <a href="${srv ? 'queue.html' : 'category.html'}" class="apple-explore-pill py-3 text-[15px]">${srv ? 'ดูคิวงาน' : 'ดูสินค้าอื่น'}</a>
@@ -499,6 +506,7 @@ function showSuccess(order, paid) {
   card.classList.remove('hidden');
   $('checkout-card').classList.add('hidden');
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (srv && paid) mountPushCard($('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ');
 }
 
 function scrollToCheckoutForm() { $('checkout-anchor-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -511,13 +519,14 @@ onAuthStateChanged(auth, (u) => {
   if (P) { updateWalletPanel(); updateButton(); }
 });
 document.addEventListener('wallet', (e) => {
-  balance = e.detail.balance;
+  balance = e.detail.balance; prof = e.detail.profile || null;
   const fb = e.detail.profile?.facebook;
   if (fb && !$('buyer-facebook').value) $('buyer-facebook').value = fb;
-  if (P) { updateWalletPanel(); updateButton(); }
+  if (P) { recalc(); updateWalletPanel(); updateButton(); }
 });
 onSettings(() => {
   if (!P) return;
+  recalc();
   renderBadges();
   renderRelated();
   updateWalletPanel();

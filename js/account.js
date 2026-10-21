@@ -1,9 +1,11 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, onSnapshot, query, updateDoc, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDocs, onSnapshot, query, updateDoc, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged, signOut, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { esc, num, toast, fmtDate, icon, ICONS } from "./ui.js";
-import { orderCardHtml } from "./orders-ui.js";
+import { esc, num, toast, fmtDate, icon, ICONS, onSettings, money } from "./ui.js";
+import { RANKS, rankTable, rankOf, rankIcon } from "./rank.js";
+import { orderCardHtml, PRODUCT_IMAGES } from "./orders-ui.js";
 import { ensureProfile } from "./profile.js";
+import { mountPushCard } from "./push.js";
 
 /** Account page: profile + status, balance with top-up shortcut, game-ID orders, service queue, settings. */
 const $ = (id) => document.getElementById(id);
@@ -35,7 +37,29 @@ function renderProfile() {
     $('pf-facebook').value = profile.facebook || '';
     $('pf-email').value = profile.contactEmail || (/@tactical\.store$/.test(user.email || '') ? '' : user.email || '');
   }
+  renderRank();
 }
+
+let ST = {};
+// product pictures for the order cards (one read; a missing picture falls back to an icon)
+getDocs(collection(db, 'products')).then(s => { s.forEach(d => d.data().image && PRODUCT_IMAGES.set(d.id, d.data().image)); if (user && orders.length) renderOrders(); }).catch(e => console.warn('products:', e));
+/** Rank card: current rank, what it gives, how much more to top up for the next one, and the whole ladder. */
+function renderRank() {
+  const el = $('acc-rank'); if (!el || !user) return;
+  const tb = rankTable(ST), at = rankOf(profile, ST), total = num(profile.topupTotal);
+  const next = tb.slice(at + 1).find(r => r.min > 0 && r.min > total);
+  const perks = (r) => [r.discount && `ลด ${r.discount}% ทุกออเดอร์`, r.bonus && `โบนัสเติมเงิน +${r.bonus}%`].filter(Boolean).join(' · ') || 'ป้ายยศ';
+  const pct = next ? Math.min(100, Math.round(total / next.min * 100)) : 100;
+  el.innerHTML = `<div class="flex items-center gap-4">
+      <span class="shrink-0 w-16 h-16 rounded-[20px] bg-mist flex items-center justify-center">${at < 0 ? `<span style="filter:grayscale(1);opacity:.35">${rankIcon(0, 'w-11 h-11')}</span>` : rankIcon(at, 'w-11 h-11')}</span>
+      <div class="min-w-0 flex-1"><p class="text-xs text-slate">ยศสมาชิก</p><p class="text-2xl font-heading font-semibold leading-tight">${at < 0 ? 'ยังไม่มียศ' : RANKS[at].name}</p>
+        <p class="text-sm text-slate mt-0.5">${at < 0 ? 'ซื้อสินค้าครั้งแรกเพื่อรับยศ Bronze' : esc(perks(tb[at]))}</p></div></div>
+    ${at < 0 ? '' : `<div class="mt-4"><div class="flex justify-between text-xs text-slate"><span>ยอดเติมสะสม ฿${money(total, 0)}</span><span>${next ? `อีก ฿${money(next.min - total, 0)} เป็น ${next.name}` : 'ยศสูงสุดแล้ว'}</span></div>
+      <div class="rank-bar mt-1.5"><span style="width:${pct}%"></span></div></div>`}
+    <details class="mt-4"><summary class="text-sm text-appleBlue cursor-pointer">ดูยศทั้งหมด</summary>
+      <ol class="mt-3 divide-y divide-hairline">${tb.map((r, i) => `<li class="py-2.5 flex items-center gap-3 ${i === at ? 'font-semibold' : ''}">${rankIcon(i, 'w-7 h-7 shrink-0')}<span class="w-20">${r.name}</span><span class="flex-1 text-xs text-slate">${i ? (r.min ? `เติมสะสม ฿${money(r.min, 0)}` : 'ยังไม่เปิด') : 'ซื้อครั้งแรก'}</span><span class="text-xs text-right">${esc(perks(r))}</span></li>`).join('')}</ol></details>`;
+}
+onSettings((s) => { ST = s; renderRank(); });
 
 function renderOrders() {
   const ids = orders.filter(o => o.productType !== 'service');
@@ -47,8 +71,9 @@ function renderOrders() {
     <p class="font-semibold mt-4">${title}</p><a href="${href}" class="apple-pricing-pill px-6 py-2.5 text-sm mt-5">${cta}</a></div>`;
   $('sec-ids').innerHTML = ids.length ? ids.map(orderCardHtml).join('') : empty('ยังไม่มีไอดีที่ซื้อ', 'category.html', 'เลือกซื้อไอดี');
   $('sec-services').innerHTML = srv.length
-    ? `<a href="queue.html" class="flex items-center justify-between soft-card px-5 py-3.5 text-[15px]"><span>ดูคิวงานทั้งหมดของร้าน</span>${icon('M9 6l6 6-6 6', 'w-4 h-4 text-steel', 2)}</a>` + srv.map(orderCardHtml).join('')
+    ? `<div id="push-card"></div><a href="queue.html" class="flex items-center justify-between soft-card px-5 py-3.5 text-[15px]"><span>ดูคิวงานทั้งหมดของร้าน</span>${icon('M9 6l6 6-6 6', 'w-4 h-4 text-steel', 2)}</a>` + srv.map(orderCardHtml).join('')
     : empty('ยังไม่มีงานบริการ', 'category.html', 'ดูบริการ');
+  if (srv.some(o => o.status !== 'completed' && o.status !== 'cancelled')) mountPushCard($('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ');
 }
 
 function watch(u) {

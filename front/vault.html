@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
   <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="canonical" href="https://astraphex.panderx.xyz/front/vault.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
@@ -27,6 +29,7 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/vault.css">
   <script src="../js/theme.js"></script>
   <script src="../js/transition.js" defer></script>
   <script type="module" src="../js/shell.js"></script>
@@ -34,53 +37,43 @@
 <body>
   <header id="site-header"></header>
 
-  <main class="max-w-[960px] mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-16">
-    <div class="flex items-end justify-between gap-3 flex-wrap">
-      <h1 class="font-heading font-semibold text-3xl sm:text-4xl">โปรแกรมจัดการไอดีไก่</h1>
-      <p id="v-until" class="text-sm text-slate"></p>
-    </div>
-    <div id="v-warn" class="hidden mt-4 rounded-[20px] bg-mist px-4 py-3 text-sm"></div>
-    <div id="v-gate" class="soft-card py-12 px-6 text-center mt-6"><div class="skeleton h-10 !rounded-[20px]"></div></div>
+  <main class="max-w-[1180px] mx-auto px-4 sm:px-6 pt-6 sm:pt-10 pb-40">
+    <div id="v-warn" class="hidden mb-4 rounded-[20px] bg-mist px-4 py-3 text-sm"></div>
+    <div id="v-gate" class="vx-empty mt-6"><div class="skeleton h-10 !rounded-[20px]"></div></div>
 
-    <div id="v-app" class="hidden mt-6">
-      <div class="flex items-center gap-2 overflow-x-auto pb-1" id="v-tabs"></div>
-
-      <section class="soft-card p-4 sm:p-5 mt-4">
-        <div class="flex flex-wrap items-center gap-2" id="v-bar">
-          <button type="button" onclick="vAdd()" class="apple-pricing-pill px-4 py-2 text-[13px]">+ เพิ่มไอดี</button>
-          <button type="button" onclick="vPull()" class="rounded-full border border-steel px-4 py-2 text-[13px]">ดึงตามจำนวน</button>
-          <button type="button" onclick="vExport()" class="rounded-full border border-steel px-4 py-2 text-[13px]">ส่งออก</button>
-          <button type="button" onclick="vTrash()" class="rounded-full border border-steel px-4 py-2 text-[13px]">ถังขยะ <span id="v-trash-n" class="text-slate"></span></button>
-          <button type="button" onclick="vGuide()" class="text-appleBlue text-[13px] px-2">วิธีใช้</button>
+    <p class="text-[13px] text-slate mb-4 flex flex-wrap gap-2 justify-end"><span id="v-until"></span><a href="team.html" class="text-appleBlue">ทีมของฉัน (ลูกทีม) ›</a></p>
+    <div id="v-app" class="hidden vx">
+      <aside class="vx-side" id="v-side" aria-label="แท็บ"></aside>
+      <section class="min-w-0">
+        <div id="v-head"></div>
+        <div class="vx-tools">
+          <input id="v-q" type="search" placeholder="ค้นหา" oninput="vFilter()" class="vx-search" aria-label="ค้นหา">
+          <span class="vx-quick" title="ติ๊กอัตโนมัติ">ติ๊ก <input id="v-n" type="number" min="1" inputmode="numeric" value="10" aria-label="จำนวนที่จะติ๊ก"><button type="button" onclick="vQuick('first')">แรก</button><button type="button" onclick="vQuick('rand')">สุ่ม</button></span>
+          <button type="button" id="v-add" onclick="vAdd()" class="vx-btn pri">+ สต๊อก</button>
+          <details class="vx-menu"><summary class="vx-btn" aria-label="เมนูเพิ่มเติม">⋯</summary><div class="vx-pop" onclick="this.closest('details').open=false">
+            <button type="button" onclick="vCopyAll()">คัดลอกทั้งแท็บ</button>
+            <button type="button" onclick="vSortAmmo()">เรียงตามกระสุน (มาก→น้อย)</button>
+            <button type="button" onclick="vNotify()">แจ้งเตือนเข้ามือถือ</button>
+            <button type="button" onclick="vLabels()">ตั้งชื่อสถานะ</button>
+            <button type="button" onclick="vRename()">เปลี่ยนชื่อแท็บ</button>
+            <button type="button" onclick="vTrash()">ถังขยะ <span id="v-trash-n"></span></button>
+            <button type="button" onclick="vGuide()">วิธีใช้</button>
+            <button type="button" onclick="vDelTab()" class="warn">ลบแท็บนี้</button>
+          </div></details>
         </div>
-        <div class="flex flex-wrap items-center gap-2 mt-3">
-          <input id="v-q" type="search" placeholder="ค้นหาไอดี" oninput="vFilter()" class="flex-1 min-w-[140px] apple-input px-3.5 py-2 text-[14px]">
-          <select id="v-flt" onchange="vFilter()" class="apple-input px-3 py-2 text-[14px]"><option value="">ทั้งหมด</option><option value="free">ยังไม่มอบหมาย</option><option value="assigned">มอบหมายแล้ว</option><option value="done">เสร็จแล้ว</option><option value="issue">มีปัญหา</option><option value="sold">ขายแล้ว</option><option value="hold">พักไว้</option></select>
-          <label class="text-[13px] text-slate flex items-center gap-2"><input type="checkbox" id="v-all" onchange="vSelAll(this.checked)"> เลือกทั้งหมด</label>
-        </div>
-        <div id="v-sel" class="hidden flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-hairline">
-          <span id="v-sel-n" class="text-[13px] font-medium"></span><span class="flex-1"></span>
-          <button type="button" onclick="vMove()" class="rounded-full border border-steel px-3.5 py-1.5 text-[13px]">ย้ายแท็บ</button>
-          <button type="button" onclick="vAssign()" class="rounded-full border border-steel px-3.5 py-1.5 text-[13px]">มอบหมายทีม</button>
-          <button type="button" onclick="vStatus()" class="rounded-full border border-steel px-3.5 py-1.5 text-[13px]">ตั้งสถานะ</button>
-          <button type="button" onclick="vClearIssue()" class="rounded-full border border-steel px-3.5 py-1.5 text-[13px]">ล้างปัญหา</button>
-          <button type="button" onclick="vDelete()" class="rounded-full border border-launchOrange text-launchOrange px-3.5 py-1.5 text-[13px]">ลบ</button>
-        </div>
-        <div id="v-list" class="mt-3 divide-y divide-hairline"></div>
-      </section>
-
-      <section class="mt-10">
-        <div class="flex items-center justify-between"><h2 class="font-heading font-semibold text-2xl">ทีมงาน</h2><button type="button" onclick="vNewMember()" class="text-appleBlue text-[15px]">+ เพิ่มคน</button></div>
-        <p class="text-sm text-slate mt-1">มอบหมายไอดีให้ใคร แล้วส่งลิงก์ให้คนนั้น เขาเปิดเห็นเฉพาะไอดีของตัวเอง ไม่ต้องสมัครสมาชิก</p>
-        <div id="v-team" class="mt-3 space-y-2"></div>
-      </section>
-
-      <section class="mt-10">
-        <h2 class="font-heading font-semibold text-2xl">ประวัติย้อนหลัง</h2>
-        <div id="v-logs" class="mt-3 soft-card divide-y divide-hairline"></div>
+        <div id="v-team"></div>
+        <div id="v-list" class="mt-4"></div>
+        <details class="vx-more"><summary>ประวัติการขาย <span id="v-sales-n" class="text-slate font-normal"></span></summary><div id="v-sales"></div></details>
+        <details class="vx-more" style="margin-top:12px"><summary>ประวัติการทำรายการ</summary><div id="v-logs"></div></details>
       </section>
     </div>
   </main>
+
+  <div id="v-bar" class="vx-bar" role="region" aria-label="รายการที่เลือก">
+    <div class="vx-bar-top"><b id="v-bar-n"></b><span id="v-bar-sum"></span><span class="sp"></span><button type="button" onclick="vClear()" class="x" aria-label="ยกเลิกการเลือก">✕</button></div>
+    <div class="vx-dest"><button type="button" onclick="vSell()" class="pri">ขาย</button><button type="button" onclick="vEdit()">แก้ไข</button><button type="button" onclick="vCopySel()">คัดลอก</button><button type="button" onclick="vDelete()">ลบ</button></div>
+    <div class="vx-dest" id="v-dest"></div>
+  </div>
 
   <div id="v-modal" class="modal" role="dialog" aria-modal="true" aria-label="คลังไอดี">
     <div class="modal-card !max-w-md">

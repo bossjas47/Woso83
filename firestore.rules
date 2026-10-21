@@ -98,7 +98,7 @@ service cloud.firestore {
     // Public feed of finished orders (home page) and the public counters: written by admin / Worker.
     match /recent_orders/{id} {
       allow read: if true; allow write: if can('pay');
-      allow create: if isStaff() && request.resource.data.keys().hasOnly(['productName', 'amount', 'buyerMask', 'kind', 'createdAt']);
+      allow create: if isStaff() && request.resource.data.keys().hasOnly(['productName', 'productId', 'amount', 'buyerMask', 'kind', 'createdAt']);
     }
     match /stats/{docId} {
       allow read: if true;
@@ -249,18 +249,37 @@ service cloud.firestore {
     match /vaults/{uid}/{col}/{id} {
       allow read: if can('vault'); // usage stats in the back office
       allow read, delete: if vaultOpen(uid);
-      allow create, update: if vaultOpen(uid) && request.resource.data.keys().size() <= 10
-        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300));
+      allow create, update: if vaultOpen(uid) && request.resource.data.keys().size() <= 14
+        && (!('text' in request.resource.data) || (request.resource.data.text is string && request.resource.data.text.size() <= 300))
+        && (!('pass' in request.resource.data) || (request.resource.data.pass is string && request.resource.data.pass.size() <= 100));
     }
-    // Team link = secret token; the Worker reads it (no client read), the owner creates / deletes it.
+    // Team tab token = secret; the Worker reads it (no client read), the owner creates / deletes it. One token opens one tab.
     match /vault_links/{token} {
       allow create: if vaultOpen(request.resource.data.uid) && token.matches('[A-Za-z0-9]{20,40}')
-        && request.resource.data.keys().hasOnly(['uid', 'memberId', 'name', 'createdAt']);
+        && request.resource.data.keys().hasOnly(['uid', 'tabId', 'name', 'createdAt']);
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
+    // Team membership (a member works in a leader's team tab): created by the Worker (invite / join); either side can end it.
+    match /vault_members/{id} {
+      allow read, delete: if signedIn() && (resource.data.member == request.auth.uid || resource.data.owner == request.auth.uid);
+      allow create, update: if false;
+    }
     // Vault access purchases / trials / admin grants (written by the Worker or an admin), read in the back office.
     match /vault_sales/{id} { allow read, write: if can('vault'); }
+    // day codes for the ID vault: created in the back office, redeemed only through the Worker (/vault/redeem)
+    match /vault_codes/{code} { allow read, write: if can('vault'); match /uses/{uid} { allow read: if can('vault'); } }
+    // Web Push subscriptions: the owner saves / removes their own device; the Worker reads them to send
+    match /push_subs/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'endpoint', 'p256dh', 'auth', 'createdAt'])
+        && request.resource.data.endpoint is string && request.resource.data.endpoint.size() < 1000 && request.resource.data.endpoint.matches('https://.*');
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'endpoint', 'p256dh', 'auth', 'createdAt'])
+        && request.resource.data.endpoint is string && request.resource.data.endpoint.size() < 1000 && request.resource.data.endpoint.matches('https://.*');
+    }
 
     match /{document=**} { allow read, write: if false; }
   }

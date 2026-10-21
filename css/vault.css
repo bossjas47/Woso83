@@ -1,0 +1,130 @@
+/* ID vault app (front/vault.html, front/team.html): Apple-style workspace. White canvas, #f5f5f7 panels, no shadows. */
+.vx { display: grid; gap: 24px; }
+@media (min-width: 900px) { .vx { grid-template-columns: 240px 1fr; align-items: start; } .vx-side { position: sticky; top: 76px; } }
+
+/* sidebar: list of tabs (desktop) / horizontal chips (phone) */
+.vx-side { display: flex; flex-direction: column; gap: 20px; }
+.vx-group h3 { font-size: 12px; font-weight: 600; color: #707070; letter-spacing: -.12px; margin: 0 0 6px 12px; text-transform: none; }
+.vx-items { display: flex; flex-direction: column; gap: 2px; }
+.vx-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 14px; text-align: left; color: #1d1d1f; background: transparent; border: 0; cursor: pointer; }
+.vx-item:hover { background: #f5f5f7; }
+.vx-item.on { background: #1d1d1f; color: #fff; }
+.vx-item .nm { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vx-item .ct { font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vx-add { color: #0066cc; font-size: 14px; padding: 8px 12px; border: 0; background: none; text-align: left; cursor: pointer; }
+@media (max-width: 899px) {
+  .vx-side { flex-direction: row; overflow-x: auto; gap: 16px; padding-bottom: 4px; scrollbar-width: none; }
+  .vx-side::-webkit-scrollbar { display: none; }
+  .vx-group { flex-shrink: 0; }
+  .vx-group h3 { margin-left: 4px; }
+  .vx-items { flex-direction: row; gap: 6px; }
+  .vx-item { width: auto; padding: 8px 14px; border-radius: 9999px; background: #f5f5f7; }
+  .vx-item .ct { display: none; }
+  .vx-add { padding: 8px 12px; border-radius: 9999px; box-shadow: inset 0 0 0 1px #d6d6d6; white-space: nowrap; }
+}
+
+/* header + stats */
+.vx-kicker { font-size: 13px; font-weight: 600; color: #707070; margin: 0; }
+.vx-title { font-size: 34px; line-height: 1.1; font-weight: 600; letter-spacing: -.5px; margin: 2px 0 0; }
+@media (min-width: 640px) { .vx-title { font-size: 40px; } }
+.vx-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.vx-stat { padding: 12px 16px; border-radius: 18px; background: #f5f5f7; min-width: 104px; }
+.vx-stat b { display: block; font-size: 24px; font-weight: 600; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.vx-stat span { font-size: 12px; color: #707070; }
+.vx-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.vx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 13px; color: #1d1d1f; background: #fff; box-shadow: inset 0 0 0 1px #d6d6d6; border: 0; cursor: pointer; }
+.vx-chip.on { box-shadow: inset 0 0 0 1.5px #1d1d1f; font-weight: 600; }
+.vx-chip i { font-style: normal; color: #707070; font-variant-numeric: tabular-nums; }
+
+/* toolbar */
+.vx-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 20px; }
+.vx-search { flex: 1; min-width: 140px; height: 40px; border-radius: 9999px; border: 0; background: #f5f5f7; padding: 0 16px; font-size: 15px; outline: none; }
+.vx-search:focus { box-shadow: 0 0 0 2px #0071e3; background: #fff; }
+.vx-btn { height: 40px; padding: 0 18px; border-radius: 9999px; font-size: 15px; border: 0; cursor: pointer; white-space: nowrap; background: #fff; color: #1d1d1f; box-shadow: inset 0 0 0 1px #86868b; }
+.vx-btn.pri { background: #0071e3; color: #fff; box-shadow: none; }
+.vx-btn.ghost { box-shadow: none; color: #0066cc; padding: 0 10px; }
+.vx-btn:disabled { opacity: .4; cursor: not-allowed; }
+.vx-quick { display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px 0 14px; border-radius: 9999px; background: #f5f5f7; font-size: 14px; color: #707070; }
+.vx-quick input { width: 52px; height: 32px; border: 0; border-radius: 9999px; background: #fff; text-align: center; font-size: 15px; outline: none; color: #1d1d1f; }
+.vx-quick button { height: 32px; padding: 0 12px; border-radius: 9999px; border: 0; background: transparent; color: #0066cc; font-size: 14px; cursor: pointer; }
+.vx-menu { position: relative; }
+.vx-menu summary { list-style: none; display: flex; align-items: center; justify-content: center; width: 40px; padding: 0; font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: 1px; padding-bottom: 6px; }
+.vx-menu summary { } .vx-menu summary::-webkit-details-marker { display: none; }
+.vx-pop { position: absolute; left: 0; top: 46px; z-index: 30; width: 220px; padding: 6px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1px #e6e6e8; }
+.vx-pop button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 12px; border: 0; background: none; font-size: 15px; color: #1d1d1f; cursor: pointer; }
+.vx-pop button:hover { background: #f5f5f7; } .vx-pop button.warn { color: #b64400; }
+
+/* team panel */
+.vx-team { margin-top: 16px; padding: 16px; border-radius: 20px; background: #f5f5f7; display: grid; gap: 12px; }
+.vx-team form { display: flex; gap: 8px; flex-wrap: wrap; }
+.vx-team input { flex: 1; min-width: 160px; height: 40px; border-radius: 9999px; border: 0; background: #fff; padding: 0 16px; font-size: 15px; outline: none; }
+.vx-member { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; border-radius: 9999px; background: #fff; font-size: 14px; }
+.vx-member button { height: 24px; padding: 0 10px; border-radius: 9999px; border: 0; background: #f5f5f7; color: #b64400; font-size: 12px; cursor: pointer; }
+
+/* selection bar */
+.vx-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 60; width: min(calc(100vw - 24px), 760px);
+  display: none; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 22px; background: rgba(29, 29, 31, .96); color: #fff; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+@media (min-width: 640px) { .vx-bar { bottom: 24px; } }
+.vx-bar.on { display: flex; animation: vx-up .2s ease; }
+.vx-bar-top { display: flex; align-items: center; gap: 8px; }
+.vx-bar-top b { font-size: 15px; } .vx-bar-top span { font-size: 13px; opacity: .7; }
+.vx-bar .sp { flex: 1; }
+.vx-bar button { height: 36px; padding: 0 14px; border-radius: 9999px; border: 0; font-size: 14px; cursor: pointer; background: rgba(255, 255, 255, .14); color: #fff; white-space: nowrap; }
+.vx-bar button.pri { background: #0071e3; } .vx-bar button.x { width: 36px; padding: 0; }
+.vx-dest { display: flex; gap: 6px; overflow-x: auto; align-items: center; scrollbar-width: none; }
+.vx-dest::-webkit-scrollbar { display: none; }
+.vx-dest small { font-size: 12px; opacity: .7; white-space: nowrap; }
+@keyframes vx-up { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+.vx-more { margin-top: 40px; border-radius: 20px; background: #f5f5f7; }
+.vx-more > summary { cursor: pointer; padding: 16px 20px; font-size: 17px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+.vx-more > summary::-webkit-details-marker { display: none; }
+.vx-more > div { padding: 0 8px 8px; }
+.vx-more .row { background: #fff; border-radius: 14px; margin-top: 6px; }
+.vx-empty { padding: 48px 20px; text-align: center; color: #707070; border-radius: 20px; background: #f5f5f7; }
+.vx-empty b { display: block; color: #1d1d1f; font-size: 19px; margin-bottom: 6px; }
+
+/* sheet rows become cards on phones */
+@media (max-width: 639px) {
+  .sh { min-width: 0; } .sh-wrap { box-shadow: none; background: transparent; border-radius: 0; overflow: visible; }
+  .sh thead { display: none; }
+  .sh tbody { display: grid; gap: 8px; }
+  .sh tr { display: grid; grid-template-columns: auto 1fr 1fr; grid-template-areas: "ck id cp" "ck am st" "ck nt nt"; gap: 2px 8px; padding: 10px 12px; border-radius: 16px; background: #f5f5f7; }
+  .sh tr.on { background: #e8f1fd; }
+  .sh tr.on td { background: transparent; }
+  .sh td { border: 0; height: auto; padding: 0; }
+  .sh .sh-n { display: none; }
+  .sh .sh-ck { grid-area: ck; align-self: center; width: auto; }
+  .sh .sh-id { grid-area: id; align-self: center; min-width: 0; } .sh .sh-id code { white-space: normal; word-break: break-all; font-size: 14px; }
+  .sh .sh-cp { grid-area: cp; width: auto; align-self: center; }
+  .sh .sh-ammo { grid-area: am; width: auto; } .sh .sh-st { grid-area: st; width: auto; }
+  .sh td:nth-last-child(2) { grid-area: nt; }
+  .sh .sh-ammo input { text-align: left; } .sh .sh-ammo::before { content: 'กระสุน'; font-size: 12px; color: #707070; margin-right: 4px; }
+  .sh .sh-ammo { display: flex; align-items: center; }
+  .sh input:not([type=checkbox]), .sh select { background: #fff; }
+}
+
+/* bulk edit dialog */
+.vx-seg { display: flex; gap: 4px; padding: 3px; border-radius: 9999px; background: #f5f5f7; }
+.vx-seg label { flex: 1; cursor: pointer; }
+.vx-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.vx-seg span { display: block; text-align: center; padding: 8px 6px; border-radius: 9999px; font-size: 13px; color: #1d1d1f; }
+.vx-seg input:checked + span { background: #fff; font-weight: 600; box-shadow: 0 0 0 1px #d6d6d6; }
+.vx-seg input:focus-visible + span { outline: 2px solid #0071e3; }
+.vx-each { max-height: 240px; overflow-y: auto; display: grid; gap: 6px; }
+.vx-each > div { display: flex; align-items: center; gap: 8px; }
+.vx-each code { width: 38%; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.vx-each input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: 0; background: #f5f5f7; padding: 0 10px; font-size: 14px; outline: none; }
+.sh .sh-id small { display: block; font-size: 12px; color: #707070; margin-top: 2px; }
+@media (min-width: 640px) { .vx-pop { left: auto; right: 0; } } /* desktop: ⋯ is the last item on the row */
+
+/* Apple-style round checkbox (sheet rows + header) */
+.sh input[type=checkbox], .vx-check { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; margin: 0; border-radius: 9999px; box-shadow: inset 0 0 0 1.5px #c7c7cc; background: #fff; cursor: pointer; display: inline-grid; place-content: center; transition: background .15s, box-shadow .15s; flex-shrink: 0; }
+.sh input[type=checkbox]::after, .vx-check::after { content: ''; width: 10px; height: 6px; border: solid #fff; border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg) scale(0); transition: transform .15s; }
+.sh input[type=checkbox]:checked, .vx-check:checked { background: #0071e3; box-shadow: none; }
+.sh input[type=checkbox]:checked::after, .vx-check:checked::after { transform: translateY(-1px) rotate(-45deg) scale(1); }
+.sh input[type=checkbox]:indeterminate { background: #0071e3; box-shadow: none; }
+.sh input[type=checkbox]:indeterminate::after { width: 10px; height: 0; border-width: 0 0 2px 0; transform: none; }
+.sh input[type=checkbox]:focus-visible, .vx-check:focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+/* vault.css loads after tw.css, so its display rules would beat .hidden */
+.vx.hidden, .vx-tools.hidden, .vx-team.hidden { display: none; }

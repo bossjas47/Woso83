@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>งานของฉัน — ASTRAPHEX HUB</title>
+  <title>ทีมของฉัน — ASTRAPHEX HUB</title>
   <meta name="description" content="ไอดีที่ได้รับมอบหมาย">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
@@ -11,7 +11,7 @@
   <meta name="robots" content="noindex"><link rel="canonical" href="https://astraphex.panderx.xyz/front/team.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
-  <meta property="og:title" content="งานของฉัน — ASTRAPHEX HUB">
+  <meta property="og:title" content="ทีมของฉัน — ASTRAPHEX HUB">
   <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
   <meta property="og:url" content="https://astraphex.panderx.xyz/front/team.html">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
@@ -27,17 +27,41 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/vault.css">
   <script src="../js/theme.js"></script>
   <script src="../js/transition.js" defer></script>
-
+  <script type="module" src="../js/shell.js"></script>
 </head>
 <body>
-  <main class="max-w-[640px] mx-auto px-4 sm:px-6 pt-10 pb-16">
-    <p class="text-[12px] text-slate">ASTRAPHEX HUB · คลังไอดี</p>
-    <h1 id="t-title" class="font-heading font-semibold text-3xl">งานของฉัน</h1>
-    <p id="t-sub" class="text-sm text-slate mt-1"></p>
-    <div id="t-list" class="mt-6 space-y-2"><div class="skeleton h-16 !rounded-[20px]"></div></div>
+  <header id="site-header"></header>
+  <main class="max-w-[1180px] mx-auto px-4 sm:px-6 pt-6 sm:pt-10 pb-32">
+    <div id="t-gate" class="hidden vx-empty mt-6"></div>
+    <div id="t-app" class="hidden vx">
+      <aside class="vx-side" aria-label="ทีม">
+        <div class="vx-group"><h3>ทีมที่ฉันอยู่</h3><div class="vx-items" id="t-teams"></div></div>
+        <div class="vx-group"><h3>คลังของฉัน</h3><div class="vx-items"><a href="vault.html" class="vx-add">ไปหน้าคลัง (หัวหน้า) ›</a></div></div>
+      </aside>
+      <section class="min-w-0">
+        <div id="t-head"></div>
+        <div id="t-bar" class="vx-tools hidden">
+          <input id="t-q" type="search" placeholder="ค้นหาไอดีหรือหมายเหตุ" oninput="tFilter()" class="vx-search" aria-label="ค้นหา">
+          <button type="button" onclick="tCopyAll()" class="vx-btn pri">คัดลอกทั้งหมด</button>
+          <details class="vx-menu"><summary class="vx-btn" aria-label="เมนูเพิ่มเติม">⋯</summary><div class="vx-pop" onclick="this.closest('details').open=false">
+            <button type="button" onclick="tLoad()">รีเฟรช</button>
+            <button type="button" onclick="tSortAmmo()">เรียงตามกระสุน (มาก→น้อย)</button>
+            <button type="button" onclick="tLeave()" class="warn">ออกจากทีมนี้</button>
+          </div></details>
+        </div>
+        <div id="t-list" class="mt-4"></div>
+        <div class="vx-team" style="margin-top:32px">
+          <p class="text-[15px] font-semibold">เข้าร่วมทีมใหม่</p>
+          <p class="text-[13px] text-slate">บอกหัวหน้าว่าชื่อผู้ใช้ของคุณคือ <b id="t-me" class="text-ink"></b> <button type="button" onclick="tCopyMe()" class="text-appleBlue">คัดลอก</button> หรือวางลิงก์/รหัสเชิญที่ได้รับ</p>
+          <form onsubmit="tJoin(event)"><input id="t-code" autocomplete="off" spellcheck="false" placeholder="ลิงก์หรือรหัสเชิญ" aria-label="ลิงก์หรือรหัสเชิญ"><button type="submit" class="vx-btn pri">เข้าร่วม</button></form>
+        </div>
+      </section>
+    </div>
   </main>
+  <footer id="site-footer"></footer>
   <script type="module" src="../js/team.js"></script>
 </body>
 </html>

@@ -1,22 +1,23 @@
 import { db, auth } from "../../firebase-config.js";
-import { collection, doc, getDocs, onSnapshot, query, orderBy, limit, setDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDocs, onSnapshot, query, orderBy, limit, setDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { esc, num, money, toast, fmtDate } from "../ui.js";
 
 /**
  * Back office: ID vault program (โปรแกรมจัดการไอดีไก่). Who has access (users/{uid}.vaultUntil), usage per user
- * (counts under vaults/{uid}/ids and /team), purchases and grants (vault_sales), packages / free trial (system/settings).
+ * (rows in vaults/{uid}/ids, team tabs in /tabs), purchases and grants (vault_sales), packages / free trial (system/settings).
  */
 const $ = (id) => document.getElementById(id);
 const DAY = 864e5;
 const ms = (v) => v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0);
 const users = () => window.getAdminUsers?.() || [];
-let SALES = [], USAGE = {}, started = false, loading = false;
+let SALES = [], USAGE = {}, CODES = [], started = false, loading = false;
 
 export function startVaultWatch() {
   if (started) return;
   started = true;
   onSnapshot(query(collection(db, 'vault_sales'), orderBy('at', 'desc'), limit(200)), (s) => { SALES = s.docs.map(d => ({ id: d.id, ...d.data() })); renderAdminVault(); },
     (e) => console.warn('vault_sales:', e));
+  onSnapshot(collection(db, 'vault_codes'), (s) => { CODES = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.createdAt) - ms(a.createdAt)); renderCodes(); }, (e) => console.warn('vault_codes:', e));
   loadUsage();
 }
 
@@ -26,8 +27,8 @@ async function loadUsage() {
   const list = users().filter(u => u.vaultUntil || u.vaultTrialUsed);
   await Promise.all(list.map(async (u) => {
     try {
-      const [ids, team] = await Promise.all([getDocs(collection(db, 'vaults', u.uid, 'ids')), getDocs(collection(db, 'vaults', u.uid, 'team'))]);
-      USAGE[u.uid] = { ids: ids.size, team: team.size };
+      const [ids, team] = await Promise.all([getDocs(collection(db, 'vaults', u.uid, 'ids')), getDocs(collection(db, 'vaults', u.uid, 'tabs'))]);
+      USAGE[u.uid] = { ids: ids.size, team: team.docs.filter(d => d.data().zone === 'team').length };
     } catch (e) { console.warn('vault usage', u.uid, e); }
   }));
   loading = false; renderAdminVault();
@@ -89,5 +90,33 @@ function vaultGrantForm(e) {
   vaultGrant(u.uid, days).then(() => { $('vault-grant-user').value = ''; loadUsage(); });
 }
 
+// ---------- day codes ----------
+function renderCodes() {
+  const el = $('vault-codes'); if (!el) return;
+  const now = Date.now();
+  el.innerHTML = CODES.length ? CODES.map(c => { const exp = ms(c.expiresAt), dead = c.active === false || (exp && exp < now) || (num(c.maxUses) > 0 && num(c.used) >= num(c.maxUses));
+    return `<tr class="border-b border-hairline ${dead ? 'text-slate' : ''}">
+      <td class="py-3 px-4"><button type="button" onclick="navigator.clipboard?.writeText('${esc(c.id)}')" class="font-mono font-semibold" title="คัดลอก">${esc(c.id)}</button>${c.active === false ? ' · ปิดอยู่' : ''}</td>
+      <td class="py-3 px-4 font-mono">${num(c.days)}</td>
+      <td class="py-3 px-4 font-mono">${num(c.used)} / ${num(c.maxUses) || '∞'}</td>
+      <td class="py-3 px-4">${exp ? esc(fmtDate(exp)) : '-'}</td>
+      <td class="py-3 px-4 text-right whitespace-nowrap space-x-1"><button type="button" onclick="vaultCodeToggle('${esc(c.id)}')" class="apple-explore-pill px-3 py-1 text-[11px]">${c.active === false ? 'เปิด' : 'ปิด'}</button><button type="button" onclick="vaultCodeDelete('${esc(c.id)}')" class="apple-explore-pill px-3 py-1 text-[11px] text-launchOrange">ลบ</button></td></tr>`; }).join('')
+    : '<tr><td colspan="5" class="py-8 text-center text-slate">ยังไม่มีโค้ด</td></tr>';
+}
+const randCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
+async function vaultCodeCreate(e) {
+  e.preventDefault();
+  const id = ($('vc-code').value.trim().toUpperCase() || randCode()), days = Math.round(num($('vc-days').value)), maxUses = Math.max(0, Math.round(num($('vc-max').value))), exp = $('vc-exp').value;
+  if (!/^[A-Z0-9_-]{4,32}$/.test(id)) return toast('โค้ดใช้ได้แค่ A-Z 0-9 _ - ยาว 4-32 ตัว', 'error');
+  if (!(days >= 1 && days <= 365)) return toast('ใส่จำนวนวัน 1-365', 'error');
+  if (CODES.some(c => c.id === id)) return toast('มีโค้ดนี้แล้ว', 'error');
+  try {
+    await setDoc(doc(db, 'vault_codes', id), { days, maxUses, used: 0, active: true, ...(exp ? { expiresAt: Timestamp.fromMillis(new Date(exp + 'T23:59:59').getTime()) } : {}), by: auth.currentUser?.uid || '', createdAt: serverTimestamp() });
+    $('vc-code').value = ''; navigator.clipboard?.writeText(id).catch(() => {}); toast(`สร้างโค้ด ${id} แล้ว (คัดลอกให้แล้ว)`, 'success');
+  } catch (err) { console.warn(err); toast('สร้างโค้ดไม่สำเร็จ', 'error'); }
+}
+const vaultCodeToggle = (id) => { const c = CODES.find(x => x.id === id); if (c) updateDoc(doc(db, 'vault_codes', id), { active: c.active === false }).catch(() => toast('บันทึกไม่สำเร็จ', 'error')); };
+const vaultCodeDelete = (id) => { if (confirm(`ลบโค้ด ${id}?`)) deleteDoc(doc(db, 'vault_codes', id)).catch(() => toast('ลบไม่สำเร็จ', 'error')); };
+
 document.addEventListener('adminusers', () => { if (started) renderAdminVault(); });
-Object.assign(window, { startVaultWatch, renderAdminVault, vaultGrant, vaultGrantForm, vaultReloadUsage: () => { USAGE = {}; renderAdminVault(); loadUsage(); } });
+Object.assign(window, { vaultCodeCreate, vaultCodeToggle, vaultCodeDelete, startVaultWatch, renderAdminVault, vaultGrant, vaultGrantForm, vaultReloadUsage: () => { USAGE = {}; renderAdminVault(); loadUsage(); } });

@@ -358,6 +358,19 @@ r = await run(w, await req({ rentalId: id4, action: 'forfeit' }, AD, '/admin/ren
 assert.strictEqual(r.refunded, 0); assert.strictEqual(w.docs['users/u1'].walletBalance, 840); assert.strictEqual(w.docs[`rentals/${id4}`].depositStatus, 'forfeited');
 console.log('ok  cron: expired rental locked at end time (deposit still held); admin forfeit keeps the deposit');
 
+const teamWorld = world({
+  'users/owner': { vaultUntil: new Date(NOW + 864e5).toISOString() },
+  'vault_members/u1_owner_tab1': { member: 'u1', owner: 'owner', tabId: 'tab1' },
+  'vaults/owner/tabs/tab1': { name: 'Dispatch', zone: 'team' },
+  'vaults/owner/ids/item1': { tab: 'tab1', text: 'account@example|old', pass: 'shared-pass', ammo: 10, color: 0, note: '', seq: 1 }
+});
+const teamView = await run(teamWorld, await req({ owner: 'owner', tabId: 'tab1' }, undefined, '/vault/team'));
+assert.strictEqual(teamView.http, 200); assert.strictEqual(teamView.ids.length, 1); assert.strictEqual(teamView.ids[0].pass, 'shared-pass');
+const outsiderWorld = world({ 'users/owner': { vaultUntil: new Date(NOW + 864e5).toISOString() }, 'vaults/owner/tabs/tab1': { name: 'Dispatch', zone: 'team' } });
+const outsiderView = await run(outsiderWorld, await req({ owner: 'owner', tabId: 'tab1' }, undefined, '/vault/team'));
+assert.strictEqual(outsiderView.http, 403);
+console.log('ok  team: invited members can read shared credentials; non-members are denied');
+
 w = world(); const vr = await handle(await req({}, undefined, '/nope'), env, { fetchFn: w.fetchFn, now: NOW });
-assert.strictEqual(vr.headers.get('x-astraphex-worker'), '6'); console.log('ok  version header for old-deployment detection');
+assert.strictEqual(vr.headers.get('x-astraphex-worker'), '8'); console.log('ok  version header for old-deployment detection');
 console.log('worker: all checks passed');

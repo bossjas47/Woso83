@@ -3,7 +3,11 @@ import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/fireb
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { ROOT, SHOP_NAME, esc, icon, ICONS, onSettings, contactsOf, toast, openModal, num } from "./ui.js";
 import { ensureProfile } from "./profile.js";
+import { RANKS, rankOf, rankIcon } from "./rank.js";
 
+let lastProfile = null, lastST = {};
+onSettings((st) => { lastST = st; });
+const rankLine = () => { const i = rankOf(lastProfile, lastST); return i < 0 ? '<span class="opacity-70">ซื้อครั้งแรกรับยศ Bronze</span>' : `${rankIcon(i, 'w-5 h-5')}<a href="${ROOT}front/account.html" class="font-semibold">ยศ ${RANKS[i].name}</a>`; };
 /**
  * Shared shell for every customer page:
  *  - announcement bar (admin: settings > ประกาศ), header with logo + nav, footer with contacts
@@ -149,6 +153,7 @@ function renderMoreSheet() {
       <div class="rounded-3xl p-5 text-gallery mb-3" style="background:#1d1d1f">
         <p class="text-[13px] opacity-80">ยอดเงินในบัญชี</p>
         <p id="more-balance" class="text-3xl font-heading font-bold mt-1">${balance === null ? 'กำลังโหลด…' : `คงเหลือ ${fmtBal(balance)}฿`}</p>
+        <p id="more-rank" class="text-[13px] mt-1.5 flex items-center gap-1.5">${rankLine()}</p>
         <a href="${L.topup}" class="mt-4 inline-flex items-center gap-1.5 bg-cyanGlow text-[#04131c] font-semibold text-sm rounded-full px-4 py-2">${icon(ICONS.plus, 'w-4 h-4', 2.6)}เติมเงิน</a>
       </div>` : `
       <div class="rounded-3xl bg-mist p-5 mb-3">
@@ -205,8 +210,10 @@ function watchUser(u) {
     balance = num(d.walletBalance);
     const el = document.getElementById('more-balance');
     if (el) el.textContent = `คงเหลือ ${fmtBal(balance)}฿`;
+    lastProfile = d; const rk = document.getElementById('more-rank'); if (rk) rk.innerHTML = rankLine();
     document.querySelectorAll('[onclick="openTools()"], [data-tools]').forEach(b => b.classList.toggle('has-dot', num(d.vaultAlerts) > 0));
-    document.dispatchEvent(new CustomEvent('wallet', { detail: { balance, profile: d } }));
+    window.__wallet = { balance, profile: d }; // pages that load after this event read the last one
+    document.dispatchEvent(new CustomEvent('wallet', { detail: window.__wallet }));
     if (d.status === 'suspended') {
       toast('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อแอดมิน', 'error');
       signOut(auth).catch(() => {});
@@ -241,3 +248,5 @@ function init() {
 
 Object.assign(window, { toggleMore, closeMore, openTools, shellSignOut });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+// a page module that ran after the first wallet snapshot gets it again once every module has loaded
+document.addEventListener('DOMContentLoaded', () => { if (window.__wallet) document.dispatchEvent(new CustomEvent('wallet', { detail: window.__wallet })); });
