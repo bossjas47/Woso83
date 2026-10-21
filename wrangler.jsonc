@@ -1,0 +1,10 @@
+{
+  "name": "hidden-paper-f7a5",
+  "main": "worker/slip-worker.js",
+  "compatibility_date": "2026-10-17",
+  "workers_dev": true,
+  "keep_vars": true,
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}
