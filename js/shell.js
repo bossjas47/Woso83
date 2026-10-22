@@ -1,113 +1,238 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { ROOT, SHOP_NAME, esc, icon, ICONS, onSettings, contactsOf, toast, openModal, num } from "./ui.js";
+import { ensureProfile } from "./profile.js";
 
 /**
- * Shared shell for every customer page: credit balance + top-up button in the header and a
- * bottom tab bar on phones (the desktop nav links are hidden below md). Load as a module.
+ * Shared shell for every customer page:
+ *  - announcement bar (admin: settings > ประกาศ), header with logo + nav, footer with contacts
+ *  - phone bottom bar: หน้าหลัก | สินค้า | เติมเงิน (floating) | เครื่องมือ | เพิ่มเติม
+ *  - "เพิ่มเติม" sheet: balance (คงเหลือ X฿), account, queue, contacts
+ * Pages only need <header id="site-header"></header> and <footer id="site-footer"></footer>.
  */
-const ROOT = new URL('../', import.meta.url).href;
 const page = location.pathname.split('/').pop() || 'index.html';
-const onTopup = page === 'topup.html';
-const ICONS = {
-  home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
-  shop: 'M4 7h16l-1 13H5L4 7zm4 0a4 4 0 018 0',
-  topup: 'M3 7h18v12H3zM3 11h18M7 15h3',
-  orders: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
-  queue: 'M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z',
-  moon: 'M21 13A9 9 0 1111 3a7 7 0 0010 10z',
-  wallet: 'M3 7h16a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm0 0V6a2 2 0 012-2h11M16 14h.01',
-  user: 'M12 12a4 4 0 100-8 4 4 0 000 8zm-8 9a8 8 0 0116 0'
+const ACTIVE = { 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more' }[page] || '';
+const L = {
+  home: ROOT + 'index.html', shop: ROOT + 'front/category.html', topup: ROOT + 'front/topup.html',
+  account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', orders: ROOT + 'front/account.html#orders',
+  login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
 };
-const TABS = [
-  ['index.html', 'หน้าแรก', 'home', ROOT + 'index.html'],
-  ['category.html', 'สินค้า', 'shop', ROOT + 'front/category.html'],
-  ['queue.html', 'คิวงาน', 'queue', ROOT + 'front/queue.html'],
-  ['topup.html', 'เติมเงิน', 'topup', ROOT + 'front/topup.html'],
-  ['account.html', 'บัญชี', 'user', ROOT + 'front/account.html']
-];
-const svg = (d, cls = 'w-5 h-5') => `<svg class="${cls}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${d}"/></svg>`;
+const LOGO = ROOT + 'assets/logo-icon.png';
+const LOGO_FULL = ROOT + 'assets/logo-full.jpg';
 
-function addHeaderChip() {
-  const header = document.querySelector('header');
-  if (!header || document.getElementById('wallet-chip')) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'flex items-center gap-2 shrink-0';
-  wrap.className = 'flex items-center gap-2 shrink-0 relative';
-  wrap.innerHTML = `
-    <button id="theme-toggle" type="button" onclick="toggleTheme()" aria-label="สลับโหมดสว่าง/มืด" class="w-8 h-8 rounded-full bg-mist border border-hairline text-ink flex items-center justify-center">${svg(ICONS.moon, 'w-4 h-4')}</button>
-    <button id="wallet-chip" type="button" aria-expanded="false" class="hidden items-center gap-1.5 bg-mist border border-hairline pl-2.5 pr-3 py-1 rounded-full text-xs whitespace-nowrap" title="เครดิตคงเหลือ">
-      ${svg(ICONS.wallet, 'w-4 h-4 text-slate')}<strong id="wallet-chip-amount" class="text-ink font-mono font-semibold">0.00</strong>
-    </button>
-    <div id="wallet-pop" class="hidden fixed right-4 top-14 sm:absolute sm:right-0 sm:top-full sm:mt-2 w-72 max-w-[calc(100vw-2rem)] z-50 bg-gallery border border-hairline rounded-[28px] p-5 text-left">
-      <p class="text-xs text-slate">เครดิตคงเหลือ</p>
-      <p class="text-3xl font-heading font-semibold mt-0.5">฿<span id="wallet-pop-amount">0.00</span></p>
-      ${onTopup ? '' : `<a href="${ROOT}front/topup.html" class="apple-pricing-pill w-full py-2.5 text-sm mt-4">เติมเงิน</a>`}
-      <p class="text-xs text-slate mt-5 mb-2">รายการเติมเงินล่าสุด</p>
-      <div id="wallet-pop-list" class="space-y-2 text-sm"><p class="text-slate text-xs">-</p></div>
-    </div>
-    ${onTopup ? '' : `<a href="${ROOT}front/topup.html" class="apple-pricing-pill px-3.5 py-1 text-xs whitespace-nowrap max-sm:hidden">เติมเงิน</a>`}`;
-  const loggedOut = document.getElementById('auth-logged-out');
-  if (loggedOut) loggedOut.parentElement.prepend(wrap);
-  else {
-    const back = header.querySelector('a.apple-explore-pill');
-    if (back) back.parentElement.insertBefore(wrap, back); else header.firstElementChild?.append(wrap);
+let user = null;
+let balance = null;
+let settings = {};
+
+function renderAnnouncement() {
+  let bar = document.getElementById('announce-bar');
+  const on = settings.announcementEnabled === true && String(settings.announcementText || '').trim();
+  if (!on) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'announce-bar';
+    bar.className = 'bg-ink text-gallery text-[13px] overflow-hidden whitespace-nowrap select-none';
+    const header = document.getElementById('site-header');
+    (header?.parentNode || document.body).insertBefore(bar, header || document.body.firstChild);
   }
+  const text = esc(String(settings.announcementText).trim());
+  const link = /^(https:\/\/|\/|#|\.\.?\/)/.test(String(settings.announcementLink || '')) ? settings.announcementLink : '';
+  const item = `<span class="inline-flex items-center gap-2 px-8 py-2"><span class="w-1.5 h-1.5 rounded-full bg-cyanGlow"></span>${text}</span>`;
+  const track = `<div class="marquee-track">${item.repeat(6)}</div>`;
+  bar.innerHTML = link ? `<a href="${esc(link)}" class="block">${track}</a>` : track;
 }
 
-function addTabBar() {
-  if (document.getElementById('shell-tabbar') || page === 'product.html') return; // product has its own buy bar
-  const bar = document.createElement('nav');
-  bar.id = 'shell-tabbar';
-  bar.setAttribute('aria-label', 'เมนูหลัก');
-  bar.className = 'md:hidden fixed bottom-0 inset-x-0 z-40 bg-gallery/90 backdrop-blur-xl border-t border-hairline grid grid-cols-5 pb-[env(safe-area-inset-bottom)]';
-  bar.innerHTML = TABS.map(([file, label, icon, href]) => {
-    const active = file === page;
-    return `<a href="${href}" ${active ? 'aria-current="page"' : ''} class="flex flex-col items-center gap-0.5 py-2 text-[11px] ${active ? 'text-appleBlue font-semibold' : 'text-slate'}">${svg(ICONS[icon])}<span>${label}</span></a>`;
-  }).join('');
-  document.body.append(bar);
-  document.body.style.paddingBottom = 'calc(3.5rem + env(safe-area-inset-bottom))'; // keep content clear of the bar
+function renderHeader() {
+  const h = document.getElementById('site-header');
+  if (!h) return;
+  h.className = 'site-header';
+  const navItem = (key, label, href) => `<a href="${href}" class="${ACTIVE === key ? 'text-ink font-semibold' : 'text-slate hover:text-ink'} transition-colors">${label}</a>`;
+  h.innerHTML = `
+    <nav class="max-w-[1200px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4" aria-label="เมนูหลัก">
+      <a href="${L.home}" class="flex items-center gap-2.5 shrink-0" aria-label="${SHOP_NAME} หน้าหลัก">
+        <img src="${LOGO}" alt="" width="34" height="34" class="w-[34px] h-[34px] object-contain">
+        <span class="font-heading font-bold text-[17px] tracking-tight text-ink">ASTRAPHEX <span class="text-brandTeal">HUB</span></span>
+      </a>
+      <div class="hidden md:flex items-center gap-7 text-[14px]">
+        ${navItem('home', 'หน้าหลัก', L.home)}
+        ${navItem('shop', 'สินค้า', L.shop)}
+        <a href="${L.topup}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-semibold text-[#04131c] bg-cyanGlow shadow-[0_0_16px_rgba(0,229,255,.55)] hover:shadow-[0_0_22px_rgba(0,229,255,.8)] transition">${icon(ICONS.wallet, 'w-4 h-4', 2)}เติมเงิน</a>
+        <button type="button" onclick="openTools()" class="text-slate hover:text-ink transition-colors">เครื่องมือ</button>
+        <button type="button" onclick="toggleMore(event)" class="${ACTIVE === 'more' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'} inline-flex items-center gap-1 transition-colors" aria-haspopup="dialog">เพิ่มเติม ${icon('M6 9l6 6 6-6', 'w-3.5 h-3.5', 2)}</button>
+      </div>
+      <div id="header-auth" class="flex items-center gap-2 shrink-0"></div>
+    </nav>`;
+  renderHeaderAuth();
 }
 
-let unsub = null;
-const TOPUP_ST = { pending: 'รอตรวจสอบ', completed: 'สำเร็จ', rejected: 'ไม่อนุมัติ' };
-async function openWalletPop(user) {
-  const pop = document.getElementById('wallet-pop'); if (!pop) return;
-  pop.classList.toggle('hidden');
-  document.getElementById('wallet-chip').setAttribute('aria-expanded', String(!pop.classList.contains('hidden')));
-  if (pop.classList.contains('hidden')) return;
-  const list = document.getElementById('wallet-pop-list');
-  try {
-    const snap = await getDocs(query(collection(db, 'topup_transactions'), where('uid', '==', user.uid)));
-    const ms = (d) => d.createdAt?.toMillis?.() || 0;
-    const rows = snap.docs.map(d => d.data()).sort((a, b) => ms(b) - ms(a)).slice(0, 4);
-    list.innerHTML = rows.length ? rows.map(r => `<div class="flex justify-between"><span>฿${Number(r.amount).toLocaleString('th-TH')}</span><span class="text-slate">${TOPUP_ST[r.status] || r.status}</span></div>`).join('') : '<p class="text-slate text-xs">ยังไม่มีรายการ</p>';
-  } catch (e) { list.innerHTML = '<p class="text-slate text-xs">โหลดรายการไม่สำเร็จ</p>'; }
+function renderHeaderAuth() {
+  const box = document.getElementById('header-auth');
+  if (!box) return;
+  if (!user) {
+    box.innerHTML = `<span class="hidden sm:flex items-center gap-2"><a href="${L.login}" class="text-[14px] text-slate hover:text-ink px-2 py-1 whitespace-nowrap">เข้าสู่ระบบ</a>
+      <a href="${L.register}" class="apple-pricing-pill px-4 py-1.5 text-[13px] whitespace-nowrap">สมัครสมาชิก</a></span>
+      <span class="sm:hidden"><a href="${L.login}" class="apple-pricing-pill px-4 py-1.5 text-[13px] whitespace-nowrap">เข้าสู่ระบบ</a></span>`;
+    return;
+  }
+  const name = user.displayName || (user.email || '').split('@')[0] || 'สมาชิก';
+  box.innerHTML = `<a href="${L.account}" class="flex items-center gap-2 text-[14px] text-ink rounded-full pl-1 pr-3 py-1 hover:bg-mist transition" title="บัญชีของฉัน">
+      <span class="w-7 h-7 rounded-full bg-ink text-gallery text-xs font-semibold flex items-center justify-center">${esc([...name][0]?.toUpperCase() || 'A')}</span>
+      <span class="max-w-[90px] truncate font-medium max-[360px]:hidden">${esc(name)}</span></a>`;
 }
 
-function watchWallet(user) {
-  if (unsub) { unsub(); unsub = null; }
-  const chip = document.getElementById('wallet-chip');
-  const amount = document.getElementById('wallet-chip-amount');
-  if (!chip || !amount) return;
-  chip.classList.toggle('hidden', !user);
-  chip.classList.toggle('inline-flex', !!user);
-  chip.onclick = user ? (e) => { e.stopPropagation(); openWalletPop(user); } : null;
-  if (!user) { document.getElementById('wallet-pop')?.classList.add('hidden'); return; }
-  unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-    amount.innerText = (parseFloat(snap.exists() ? snap.data().walletBalance : 0) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const pa = document.getElementById('wallet-pop-amount'); if (pa) pa.innerText = amount.innerText;
-  }, (e) => console.warn('Wallet chip:', e));
+function renderFooter() {
+  const f = document.getElementById('site-footer');
+  if (!f) return;
+  const c = contactsOf(settings);
+  f.className = 'bg-mist border-t border-hairline mt-16';
+  f.innerHTML = `
+    <div class="max-w-[1200px] mx-auto px-4 sm:px-6 py-12 grid gap-10 md:grid-cols-3 text-sm">
+      <div>
+        <div class="rounded-2xl overflow-hidden bg-black w-[240px] max-w-full"><img src="${LOGO_FULL}" alt="${SHOP_NAME}" width="1200" height="463" class="w-full h-auto"></div>
+        <p class="text-slate mt-4 leading-relaxed">ศูนย์รวมไอดีและบริการในเกม Arena Breakout ตรวจสอบได้ทุกออเดอร์</p>
+      </div>
+      <div>
+        <h2 class="font-semibold text-ink mb-3">เมนู</h2>
+        <ul class="space-y-2 text-slate">
+          <li><a class="hover:text-ink" href="${L.home}">หน้าหลัก</a></li>
+          <li><a class="hover:text-ink" href="${L.shop}">สินค้าทั้งหมด</a></li>
+          <li><a class="hover:text-ink" href="${L.topup}">เติมเงิน</a></li>
+          <li><a class="hover:text-ink" href="${L.queue}">คิวงานบริการ</a></li>
+          <li><a class="hover:text-ink" href="${L.orders}">ออเดอร์ของฉัน</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2 class="font-semibold text-ink mb-3">ติดต่อแอดมิน</h2>
+        <div class="flex flex-wrap gap-2">${c.length ? c.map(contactBtn).join('') : '<p class="text-slate">ร้านยังไม่ได้ใส่ช่องทางติดต่อ</p>'}</div>
+      </div>
+    </div>
+    <div class="border-t border-hairline"><p class="max-w-[1200px] mx-auto px-4 sm:px-6 py-5 text-xs text-slate">© ${new Date().getFullYear()} ${SHOP_NAME} · การซื้อขายไอดีและไอเท็มอาจขัดต่อข้อกำหนดของผู้พัฒนาเกม</p></div>`;
 }
 
-document.addEventListener('click', (e) => {
-  const pop = document.getElementById('wallet-pop');
-  if (pop && !pop.classList.contains('hidden') && !pop.contains(e.target)) pop.classList.add('hidden');
-});
+const contactBtn = (c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-gallery border border-hairline rounded-full pl-2 pr-4 py-1.5 text-sm font-medium text-ink hover:border-steel transition">
+  <span class="w-6 h-6 rounded-full flex items-center justify-center text-gallery" style="background:${c.color}">${icon(ICONS.chat, 'w-3.5 h-3.5', 2.2)}</span>${esc(c.label)}</a>`;
+
+function renderBottomNav() {
+  if (document.getElementById('bottom-nav')) return;
+  const nav = document.createElement('nav');
+  nav.id = 'bottom-nav';
+  nav.className = 'bottom-nav';
+  nav.setAttribute('aria-label', 'เมนูด้านล่าง');
+  const tab = (key, label, ic, href) => `<a href="${href}" class="${ACTIVE === key ? 'is-active' : ''}" ${ACTIVE === key ? 'aria-current="page"' : ''}>${icon(ic, '', 2)}<span>${label}</span></a>`;
+  nav.innerHTML = `
+    ${tab('home', 'หน้าหลัก', ICONS.home, L.home)}
+    ${tab('shop', 'สินค้า', ICONS.shop, L.shop)}
+    <a href="${L.topup}" class="nav-topup ${ACTIVE === 'topup' ? 'is-active' : ''}" aria-label="เติมเงิน"><span class="nav-topup-orb">${icon(ICONS.plus, '', 2.6)}</span><span>เติมเงิน</span></a>
+    <button type="button" onclick="openTools()">${icon(ICONS.tools, '', 2)}<span>เครื่องมือ</span></button>
+    <button type="button" onclick="toggleMore(event)" class="${ACTIVE === 'more' ? 'is-active' : ''}" aria-haspopup="dialog">${icon(ICONS.grid, '', 2)}<span>เพิ่มเติม</span></button>`;
+  document.body.append(nav);
+  document.body.classList.add('has-bottom-nav');
+}
+
+function renderMoreSheet() {
+  if (!document.getElementById('more-sheet')) {
+    const bd = document.createElement('div');
+    bd.id = 'more-backdrop'; bd.className = 'sheet-backdrop'; bd.onclick = closeMore;
+    const sh = document.createElement('div');
+    sh.id = 'more-sheet'; sh.className = 'sheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'เมนูเพิ่มเติม');
+    document.body.append(bd, sh);
+  }
+  const sh = document.getElementById('more-sheet');
+  const c = contactsOf(settings);
+  const row = (href, ic, label, extra = '') => `<a href="${href}" class="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-mist transition text-[16px] font-medium text-ink">${icon(ic, 'w-6 h-6 text-slate', 2)}<span class="flex-1">${label}</span>${extra}${icon('M9 6l6 6-6 6', 'w-4 h-4 text-steel', 2)}</a>`;
+  sh.innerHTML = `
+    <div class="w-10 h-1.5 rounded-full bg-control mx-auto mb-4 md:hidden"></div>
+    ${user ? `
+      <div class="rounded-3xl p-5 text-gallery mb-3" style="background:linear-gradient(135deg,#0b1f6b 0%,#0e3a8a 55%,#159a9c 100%)">
+        <p class="text-[13px] opacity-80">ยอดเงินในบัญชี</p>
+        <p id="more-balance" class="text-3xl font-heading font-bold mt-1">${balance === null ? 'กำลังโหลด…' : `คงเหลือ ${fmtBal(balance)}฿`}</p>
+        <a href="${L.topup}" class="mt-4 inline-flex items-center gap-1.5 bg-cyanGlow text-[#04131c] font-semibold text-sm rounded-full px-4 py-2 shadow-[0_0_16px_rgba(0,229,255,.6)]">${icon(ICONS.plus, 'w-4 h-4', 2.6)}เติมเงิน</a>
+      </div>` : `
+      <div class="rounded-3xl bg-mist p-5 mb-3">
+        <p class="font-semibold text-ink">ยังไม่ได้เข้าสู่ระบบ</p>
+        <p class="text-sm text-slate mt-0.5">เข้าสู่ระบบเพื่อดูยอดเงินและออเดอร์ของคุณ</p>
+        <div class="flex gap-2 mt-4"><a href="${L.login}" class="apple-pricing-pill px-5 py-2 text-sm">เข้าสู่ระบบ</a><a href="${L.register}" class="apple-explore-pill px-5 py-2 text-sm">สมัครสมาชิก</a></div>
+      </div>`}
+    <div class="space-y-0.5">
+      ${row(L.account, ICONS.user, 'บัญชี')}
+      ${row(L.orders, ICONS.orders, 'ออเดอร์ของฉัน')}
+      ${row(L.queue, ICONS.queue, 'คิวงาน')}
+      <button type="button" onclick="toggleTheme()" class="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-mist transition text-[16px] font-medium text-ink">${icon(ICONS.moon, 'w-6 h-6 text-slate', 2)}<span class="flex-1 text-left">สลับโหมดสว่าง / มืด</span></button>
+    </div>
+    <div class="mt-4 pt-4 border-t border-hairline">
+      <p class="text-sm font-semibold text-ink px-1 mb-2.5">ติดต่อแอดมิน</p>
+      <div class="flex flex-wrap gap-2">${c.length ? c.map(contactBtn).join('') : '<p class="text-sm text-slate px-1">ร้านยังไม่ได้ใส่ช่องทางติดต่อ</p>'}</div>
+    </div>
+    ${user ? `<button type="button" onclick="shellSignOut()" class="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-[15px] font-medium text-launchOrange hover:bg-mist">${icon(ICONS.logout, 'w-5 h-5', 2)}ออกจากระบบ</button>` : ''}`;
+}
+
+const fmtBal = (v) => num(v).toLocaleString('th-TH', { maximumFractionDigits: 2 });
+
+function toggleMore(e) {
+  e?.stopPropagation();
+  const sh = document.getElementById('more-sheet');
+  if (!sh) return;
+  sh.classList.contains('open') ? closeMore() : (sh.classList.add('open'), document.getElementById('more-backdrop')?.classList.add('open'));
+}
+function closeMore() {
+  document.getElementById('more-sheet')?.classList.remove('open');
+  document.getElementById('more-backdrop')?.classList.remove('open');
+}
+
+function renderToolsModal() {
+  if (document.getElementById('tools-modal')) return;
+  const m = document.createElement('div');
+  m.id = 'tools-modal'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'เครื่องมือ');
+  m.innerHTML = `<div class="modal-card text-center">
+      <button type="button" onclick="closeModal('tools-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-mist text-slate flex items-center justify-center">${icon(ICONS.x, 'w-4 h-4', 2)}</button>
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-mist flex items-center justify-center text-pricingBlue">${icon(ICONS.tools, 'w-8 h-8', 2)}</div>
+      <p class="text-xs font-semibold text-launchOrange mt-5 tracking-wide">COMING SOON</p>
+      <h2 class="text-2xl font-heading font-semibold mt-1">โปรแกรมจัดการไอดีไก่</h2>
+      <p class="text-slate mt-2">อยู่ระหว่างการพัฒนา (Coming Soon)<br>เปิดให้ใช้งานเร็ว ๆ นี้</p>
+      <button type="button" onclick="closeModal('tools-modal')" class="apple-pricing-pill w-full py-3 text-[15px] mt-6">รับทราบ</button>
+    </div>`;
+  document.body.append(m);
+}
+function openTools() { closeMore(); renderToolsModal(); openModal('tools-modal'); }
+
+async function shellSignOut() {
+  try { await signOut(auth); toast('ออกจากระบบแล้ว'); closeMore(); } catch (_) { toast('ออกจากระบบไม่สำเร็จ', 'error'); }
+}
+
+let unsubUser = null;
+function watchUser(u) {
+  if (unsubUser) { unsubUser(); unsubUser = null; }
+  balance = null;
+  if (!u) return;
+  unsubUser = onSnapshot(doc(db, 'users', u.uid), (snap) => {
+    const d = snap.exists() ? snap.data() : {};
+    balance = num(d.walletBalance);
+    const el = document.getElementById('more-balance');
+    if (el) el.textContent = `คงเหลือ ${fmtBal(balance)}฿`;
+    document.dispatchEvent(new CustomEvent('wallet', { detail: { balance, profile: d } }));
+    if (d.status === 'suspended') {
+      toast('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อแอดมิน', 'error');
+      signOut(auth).catch(() => {});
+    }
+  }, (e) => console.warn('wallet:', e.code || e));
+}
 
 function init() {
-  addHeaderChip();
-  addTabBar();
-  onAuthStateChanged(auth, watchWallet);
+  renderHeader();
+  renderFooter();
+  renderBottomNav();
+  renderMoreSheet();
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(); });
+  onSettings((s) => { settings = s || {}; renderAnnouncement(); renderFooter(); renderMoreSheet(); });
+  onAuthStateChanged(auth, (u) => {
+    user = u;
+    renderHeaderAuth();
+    renderMoreSheet();
+    watchUser(u);
+    if (u) ensureProfile(u);
+  });
 }
+
+Object.assign(window, { toggleMore, closeMore, openTools, shellSignOut });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

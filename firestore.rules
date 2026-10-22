@@ -3,38 +3,39 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    // Admin = Firebase custom claim {admin: true}. Set it once with scripts/set-admin-claim.js.
-    // Do NOT gate on an email address: login.js lets anyone register any username@tactical.store.
+    // Admin = Firebase custom claim {admin: true}. Set it with scripts/set-admin-claim.js or the Worker (/admin/user).
+    // Never gate on an e-mail address: anyone can register any username.
     function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function docAt(p) { return path('/databases/' + database + '/documents/' + p); }
+    // A suspended account (users/{uid}.status) cannot file orders or top-ups.
+    function notSuspended() {
+      return !exists(docAt('users/' + request.auth.uid))
+        || get(docAt('users/' + request.auth.uid)).data.get('status', 'active') != 'suspended';
+    }
+    function shortStr(d, k, n) { return !(k in d) || (d[k] is string && d[k].size() <= n); }
 
-    // Catalog: public read, admin write. Account credentials (stock_items) are admin-only and
-    // are never readable by shoppers.
+    // ---------- Catalogue ----------
     match /products/{productId} {
       allow read: if true;
       allow write: if isAdmin();
-
-      match /stock_items/{itemId} {
-        allow read, write: if isAdmin();
-      }
+      // Game-ID credentials: admin (and the Worker, which bypasses rules) only.
+      match /stock_items/{itemId} { allow read, write: if isAdmin(); }
     }
+    match /categories/{catId} { allow read: if true; allow write: if isAdmin(); }
+    // Codes can be looked up by exact name but not listed.
+    match /promo_codes/{code} { allow get: if true; allow list, write: if isAdmin(); }
+    match /inventory_vault/{vaultId} { allow read, write: if false; }
 
-    // Reserved for a server-side vault; closed to every client.
-    match /inventory_vault/{vaultId} {
-      allow read, write: if false;
-    }
-
-    // Customers can only file a pending order for themselves. Status, credentials and delivery
-    // can only be set by an admin after the payment is verified.
+    // ---------- Orders (customers file pending_payment only; wallet purchases are written by the Worker) ----------
     match /orders/{orderId} {
-      allow create: if signedIn()
+      allow create: if signedIn() && notSuspended()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending_payment'
+        && request.resource.data.paymentMethod in ['promptpay', 'truemoney']
         && request.resource.data.createdAt == request.time
         && request.resource.data.amount is number
         && request.resource.data.amount >= 0
         && request.resource.data.amount <= 1000000
-        // Arithmetic must be consistent and the unit price cannot be below the catalogue price.
-        // (A promo code's validity is still checked by the admin when approving.)
         && request.resource.data.quantity is int
         && request.resource.data.quantity > 0
         && request.resource.data.quantity <= 100000
@@ -45,17 +46,20 @@ service cloud.firestore {
         && request.resource.data.finalPrice == request.resource.data.amount
         && math.abs(request.resource.data.subtotal - request.resource.data.discount - request.resource.data.amount) < 0.011
         && math.abs(request.resource.data.quantity * request.resource.data.unitPrice - request.resource.data.subtotal) < 0.011
-        && request.resource.data.unitPrice >= get(/databases/$(database)/documents/products/$(request.resource.data.productId)).data.price
-        && request.resource.data.get('gamePassword', '').size() <= 200
-        && request.resource.data.get('gameEmail', '').size() <= 200
-        && request.resource.data.get('paymentProof', '').size() <= 300
-        && request.resource.data.get('buyerContact', '').size() <= 200
-        && request.resource.data.get('playTime', '').size() <= 200
+        && request.resource.data.unitPrice >= get(docAt('products/' + request.resource.data.productId)).data.price
+        && shortStr(request.resource.data, 'gamePassword', 200) && shortStr(request.resource.data, 'gameEmail', 200)
+        && shortStr(request.resource.data, 'paymentProof', 300) && shortStr(request.resource.data, 'buyerContact', 200)
+        && shortStr(request.resource.data, 'buyerFacebook', 200) && shortStr(request.resource.data, 'buyerEmail', 200)
+        && shortStr(request.resource.data, 'playTime', 200)
+        // an attached slip must be registered under its hash in the same batch (slip_hashes blocks reuse)
+        && (!('slipHash' in request.resource.data)
+            || getAfter(docAt('slip_hashes/' + request.resource.data.slipHash)).data.refId == orderId)
         && request.resource.data.keys().hasOnly([
              'orderNumber', 'orderId', 'productId', 'productName', 'productType',
              'quantity', 'bonusQty', 'receiveQty', 'unit', 'unitPrice', 'subtotal', 'discount', 'promoCode',
-             'amount', 'finalPrice', 'paymentMethod', 'paymentProof',
-             'buyerEmail', 'buyerContact', 'gameEmail', 'gamePassword', 'farmMode', 'playTime', 'status', 'userEmail', 'userId', 'createdAt'
+             'amount', 'finalPrice', 'paymentMethod', 'paymentProof', 'slipHash', 'hasSlip',
+             'buyerEmail', 'buyerFacebook', 'buyerContact', 'gameEmail', 'gamePassword', 'farmMode', 'playTime',
+             'status', 'userEmail', 'userId', 'createdAt'
            ]);
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow update, delete: if isAdmin();
@@ -68,75 +72,124 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending_payment'
         && request.resource.data.createdAt == request.time
-        // must belong to an order created in the same batch, so nobody can post fake queue entries
-        && getAfter(/databases/$(database)/documents/orders/$(id)).data.userId == request.auth.uid
-        && getAfter(/databases/$(database)/documents/orders/$(id)).data.productId == request.resource.data.productId
-        && getAfter(/databases/$(database)/documents/orders/$(id)).data.quantity == request.resource.data.quantity
+        && getAfter(docAt('orders/' + id)).data.userId == request.auth.uid
+        && getAfter(docAt('orders/' + id)).data.productId == request.resource.data.productId
+        && getAfter(docAt('orders/' + id)).data.quantity == request.resource.data.quantity
         && request.resource.data.nameMask.size() <= 8
         && request.resource.data.productName.size() <= 200
         && request.resource.data.unit.size() <= 20
-        && request.resource.data.keys().hasOnly([
-             'orderNumber', 'productId', 'productName', 'unit', 'quantity', 'nameMask', 'uid', 'status', 'createdAt'
-           ]);
+        && request.resource.data.keys().hasOnly(['orderNumber', 'productId', 'productName', 'unit', 'quantity', 'nameMask', 'uid', 'status', 'createdAt']);
       allow update, delete: if isAdmin();
     }
 
-    // Category list (names, kind, default minimum order): public read, admin write.
-    match /categories/{catId} {
+    // Public feed of finished orders (home page) and the public counters: written by admin / Worker.
+    match /recent_orders/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /stats/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+      // Signing up adds exactly one to the user counter, in the same batch that creates the caller's profile.
+      allow create: if signedIn() && docId == 'public'
+        && request.resource.data.keys().hasOnly(['users']) && request.resource.data.users == 1
+        && !exists(docAt('users/' + request.auth.uid)) && existsAfter(docAt('users/' + request.auth.uid));
+      allow update: if signedIn() && docId == 'public'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['users'])
+        && request.resource.data.users == resource.data.get('users', 0) + 1
+        && !exists(docAt('users/' + request.auth.uid)) && existsAfter(docAt('users/' + request.auth.uid));
     }
 
-    // Promo codes can be looked up by exact code but not listed; usage counts are admin-managed.
-    match /promo_codes/{code} {
-      allow get: if true;
-      allow list, write: if isAdmin();
-    }
+    // ---------- Store settings ----------
+    // system/settings (banner, contacts, PromptPay name/number, base stats) and system/promptpay_qr: public.
+    match /system/{docId} { allow read: if true; allow write: if isAdmin(); }
+    match /system_settings/{docId} { allow read, write: if isAdmin(); }   // admin PIN hash (screen lock only)
+    match /system_private/{docId} { allow read, write: if isAdmin(); }    // Discord webhook, provider keys
 
-    // Public storefront settings (banner text, QR image, shop name). Secrets must NOT live here.
-    match /system/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // Admin PIN hash (UI lock only; the real gate is the admin claim above).
-    match /system_settings/{docId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Payment-provider keys (SlipOK, TrueMoney): admin only.
-    match /system_private/{docId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Wallet balances and top-up records can only change through an admin until a server verifies
-    // payments. A browser must never be able to credit its own balance.
+    // ---------- Users & wallet ----------
+    // A user may create / edit their own profile fields; balance, role and status are admin / Worker only.
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username', 'email', 'facebook', 'contactEmail', 'createdAt', 'lastLoginAt'])
+        && request.resource.data.createdAt == request.time
+        && shortStr(request.resource.data, 'username', 40) && shortStr(request.resource.data, 'facebook', 200)
+        && shortStr(request.resource.data, 'contactEmail', 200) && shortStr(request.resource.data, 'email', 200);
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'email', 'facebook', 'contactEmail', 'lastLoginAt'])
+        && shortStr(request.resource.data, 'username', 40) && shortStr(request.resource.data, 'facebook', 200)
+        && shortStr(request.resource.data, 'contactEmail', 200) && shortStr(request.resource.data, 'email', 200);
       allow write: if isAdmin();
     }
+    match /wallet_logs/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /topup_promos/{id} { allow read: if true; allow write: if isAdmin(); }
+
+    function promoBonus(p, amount) {
+      return p.get('active', true) == true && amount >= p.minAmount
+        ? (p.type == 'percent' ? math.floor(amount * p.value / 100) : math.floor(p.value))
+        : -1;
+    }
+    // A browser can only ask for credit; the bonus must match the named promotion (or be 0 without one).
     match /topup_transactions/{txnId} {
       allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if signedIn()
+      allow create: if signedIn() && notSuspended()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
+        && request.resource.data.paymentMethod in ['promptpay', 'truemoney']
         && request.resource.data.amount is number
         && request.resource.data.amount >= 20
+        && request.resource.data.amount <= 50000
         && request.resource.data.bonusCredit is number
-        && request.resource.data.bonusCredit >= 0
-        && request.resource.data.bonusCredit <= request.resource.data.amount * 0.1
+        && (('promoId' in request.resource.data)
+             ? promoBonus(get(docAt('topup_promos/' + request.resource.data.promoId)).data, request.resource.data.amount) == request.resource.data.bonusCredit
+             : request.resource.data.bonusCredit == 0)
         && math.abs(request.resource.data.finalCredit - request.resource.data.amount - request.resource.data.bonusCredit) < 0.011
-        && request.resource.data.get('proofRef', '').size() <= 300
+        && shortStr(request.resource.data, 'proofRef', 300)
+        && (!('slipHash' in request.resource.data)
+            || getAfter(docAt('slip_hashes/' + request.resource.data.slipHash)).data.refId == txnId)
         && request.resource.data.keys().hasOnly([
-             'txnId', 'uid', 'email', 'amount', 'bonusCredit', 'finalCredit',
-             'paymentMethod', 'proofRef', 'status', 'createdAt'
+             'txnId', 'uid', 'email', 'amount', 'bonusCredit', 'finalCredit', 'promoId',
+             'paymentMethod', 'proofRef', 'slipHash', 'hasSlip', 'status', 'createdAt'
            ]);
       allow update, delete: if isAdmin();
     }
 
-    match /{document=**} {
-      allow read, write: if false;
+    // ---------- Slips ----------
+    // The slip picture of an order / top-up (shrunk JPEG data URL), same id as the order / top-up.
+    match /slip_images/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['kind', 'uid', 'image', 'createdAt'])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.image is string
+        && request.resource.data.image.size() < 900000
+        && request.resource.data.image.matches('data:image/(jpeg|png|webp);base64,.*')
+        && ((request.resource.data.kind == 'order' && getAfter(docAt('orders/' + id)).data.userId == request.auth.uid)
+            || (request.resource.data.kind == 'topup' && getAfter(docAt('topup_transactions/' + id)).data.uid == request.auth.uid));
+      allow update, delete: if isAdmin();
     }
+    // SHA-256 of each slip file ever sent. Create-only, so the same file cannot be sent twice.
+    match /slip_hashes/{hash} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create: if signedIn()
+        && hash.matches('[0-9a-f]{64}')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['kind', 'refId', 'uid', 'createdAt'])
+        && request.resource.data.createdAt == request.time
+        && ((request.resource.data.kind == 'order' && getAfter(docAt('orders/' + request.resource.data.refId)).data.slipHash == hash)
+            || (request.resource.data.kind == 'topup' && getAfter(docAt('topup_transactions/' + request.resource.data.refId)).data.slipHash == hash));
+      allow update, delete: if isAdmin();
+    }
+
+    // Server only (Worker with the service account): slip references, throttle, Discord de-dup.
+    match /slip_refs/{id} { allow read, write: if false; }
+    match /slip_attempts/{id} { allow read, write: if false; }
+    match /notify_log/{id} { allow read, write: if false; }
+
+    match /{document=**} { allow read, write: if false; }
   }
 }
