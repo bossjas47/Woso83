@@ -67,8 +67,8 @@ function switchTopupPaymentTab(m) {
 const autoMode = () => getSettings().slipAutoVerify === true && !!workerBase();
 function updateNote() {
   $('topup-mode-note').textContent = method === 'promptpay'
-    ? (autoMode() ? 'ระบบตรวจสลิปอัตโนมัติ ผ่านแล้วได้เครดิตทันที' : 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ (เติมด้วยซองอั่งเปาแทนได้)')
-    : 'รับซองอัตโนมัติ เครดิตเข้าทันที';
+    ? (autoMode() ? 'บอทเช็กสลิปให้เอง ผ่านปุ๊บเครดิตเข้าปั๊บ' : 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ (เติมด้วยซองอั่งเปาแทนได้)')
+    : 'บอทรับซองให้เอง เครดิตเข้าทันที';
   if (!submitting) $('btn-topup').textContent = method === 'promptpay' ? 'ส่งสลิปและรับเครดิต' : 'รับซองและเติมเครดิต';
 }
 
@@ -122,7 +122,7 @@ const ST = { pending: ['รอตรวจสอบ', 'bg-[#fff3e6] text-[#a04a0
 function renderHistory() {
   const box = $('topup-history');
   if (!user) { box.innerHTML = `<p class="py-8 text-center text-slate text-sm">เข้าสู่ระบบเพื่อดูประวัติการเติมเงิน</p>`; return; }
-  if (!history.length) { box.innerHTML = `<p class="py-8 text-center text-slate text-sm">ยังไม่มีประวัติการเติมเงิน</p>`; return; }
+  if (!history.length) { box.innerHTML = `<p class="py-8 text-center text-slate text-sm">ยังไม่เคยเติม เติมครั้งแรกรับโบนัสตามโปรได้เลย</p>`; return; }
   box.innerHTML = history.map(t => {
     const [label, cls] = ST[t.status] || [t.status, 'bg-mist text-slate'];
     return `<div class="py-3 flex items-center justify-between gap-3">

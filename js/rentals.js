@@ -63,7 +63,7 @@ function render() {
   const box = el(); if (!box) return;
   if (!authReady) return;
   if (!uid) { box.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">เข้าสู่ระบบเพื่อดูการเช่าของคุณ</p><a href="login.html?mode=login&next=rentals.html" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a></div>'; return; }
-  if (!RENTALS.length) { box.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ยังไม่มีการเช่า</p><p class="text-slate text-sm mt-1">เลือกไอดีที่มีป้าย "เช่า" แล้วกดเช่าได้เลย</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูไอดีให้เช่า</a></div>'; return; }
+  if (!RENTALS.length) { box.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ยังไม่มีการเช่า</p><p class="text-slate text-sm mt-1">ยังไม่ได้เช่าอะไร เลือกไอดีที่มีป้าย "เช่า" แล้วลองเล่นได้เลย</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูไอดีให้เช่า</a></div>'; return; }
   box.innerHTML = RENTALS.map(card).join('');
 }
 

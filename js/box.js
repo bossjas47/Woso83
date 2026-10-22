@@ -2,7 +2,7 @@ import { db, auth } from "../firebase-config.js";
 import { collection, doc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { esc, num, money, toast, callWorker, openModal, closeModal, onSettings, timeAgo, tsDate } from "./ui.js";
-import { GAMES, playGame } from "./minigame.js";
+import { GAMES, playGame, sfx, confetti } from "./minigame.js";
 
 const RARITY = {
   common: ['ทั่วไป', 'bx-r-common'], rare: ['หายาก', 'bx-r-rare'], epic: ['เอพิค', 'bx-r-epic'], legendary: ['ตำนาน', 'bx-r-legendary']
@@ -55,14 +55,14 @@ function renderBoxes() {
           <p class="bx-price">฿${money(b.price, 0)} <span>ต่อครั้ง</span></p>
           <div><p class="bx-label">เลือกวิธีเปิด</p><div class="bx-games" role="group" aria-label="เลือกมินิเกม">${GAMES.map(g => `<button type="button" class="bx-game-btn ${g.id === game ? 'on' : ''}" data-game="${g.id}"><span>${g.icon}</span>${g.label}</button>`).join('')}</div></div>
           ${openBtn(b)}
-          <p class="bx-fine">ผลสุ่มตัดสินที่ระบบหลังร้านก่อนเริ่มเกม ฝีมือไม่มีผลกับรางวัล เปิดแล้วไม่คืนเงิน</p>
+          <p class="bx-fine">ระบบสุ่มผลไว้ก่อนเริ่มมินิเกม ฝีมือไม่มีผลกับของที่ได้ · เปิดแล้วไม่คืนเงิน</p>
         </div>
       </section>
       <section class="bx-band"><h2 class="bx-h2">ของรางวัลในกล่อง</h2><div class="bx-panel bx-prizes">${prizeRows(b)}</div></section>
       ${others.length ? `<section class="mt-12"><h2 class="bx-h2">กล่องอื่น</h2><div class="bx-others">${others.map(o => `<a class="bx-mini" href="?id=${encodeURIComponent(o.id)}"><span class="bx-mini-art">${artHtml(o)}</span><span class="font-semibold">${esc(o.name)}</span><span class="text-sm text-slate">฿${money(o.price, 0)}</span></a>`).join('')}</div></section>` : ''}`;
     return;
   }
-  if (!list.length) { wrap.innerHTML = '<div class="text-center text-slate py-16">ยังไม่มีกล่องสุ่มเปิดให้เล่นตอนนี้ แวะมาใหม่นะครับ</div>'; return; }
+  if (!list.length) { wrap.innerHTML = '<div class="text-center text-slate py-16">ตอนนี้ยังไม่มีกล่องให้เปิด เดี๋ยวแอดมินเติมของ แวะมาใหม่นะ</div>'; return; }
   wrap.innerHTML = `<div class="bx-others">${list.map(o => `<a class="bx-mini" href="?id=${encodeURIComponent(o.id)}"><span class="bx-mini-art">${artHtml(o)}</span><span class="font-semibold">${esc(o.name)}</span><span class="text-sm text-slate">฿${money(o.price, 0)} · ${(o.prizes || []).length} รางวัล</span></a>`).join('')}</div>`;
 }
 window.__bxCrate = CRATE;
@@ -96,7 +96,7 @@ const stage = () => $('bx-stage');
 
 function showReveal(p, boxId) {
   const [rl, rc] = rar(p.rarity);
-  const sub = p.kind === 'credit' ? 'เครดิตเข้ากระเป๋าเงินของคุณแล้ว' : p.kind === 'account' ? `ไอดีเกมถูกส่งไปที่ "ออเดอร์ของฉัน" แล้ว${p.productName ? `<br><b>${esc(p.productName)}</b>` : ''}` : `${p.productName ? `<b>${esc(p.productName)}</b>${p.qty > 1 ? ` × ${p.qty}` : ''}<br>` : ''}กรอกข้อมูลรับรางวัลเพื่อเข้าคิวงาน`;
+  const sub = p.kind === 'credit' ? 'เครดิตเข้ากระเป๋าแล้ว เอาไปช้อปต่อได้เลย' : p.kind === 'account' ? `ไอดีเกมถูกส่งไปที่ "ออเดอร์ของฉัน" แล้ว${p.productName ? `<br><b>${esc(p.productName)}</b>` : ''}` : `${p.productName ? `<b>${esc(p.productName)}</b>${p.qty > 1 ? ` × ${p.qty}` : ''}<br>` : ''}กรอกข้อมูลรับรางวัลเพื่อเข้าคิวงาน`;
   const r = $('bx-reveal'); r.className = `bx-reveal on ${rc}`;
   r.innerHTML = `<div class="bx-reveal-card ${rc}"><span class="bx-rarity">${rl}</span>
     <div class="bx-prize-art">${KIND_ICON[p.kind] || '🎁'}</div><h3 class="bx-prize-name">${esc(p.label)}</h3><p class="bx-prize-sub">${sub}</p>
@@ -105,6 +105,16 @@ function showReveal(p, boxId) {
       <button type="button" class="bx-btn ${p.needsClaim || p.kind === 'account' ? 'sub' : 'main'}" data-rv="again">เปิดอีกครั้ง</button>
       <button type="button" class="bx-btn sub" data-rv="close">ปิด</button></div></div>`;
   r.dataset.box = boxId; r.dataset.open = p.openId || '';
+}
+
+/** Suspense scene between the game and the prize card: the crate shakes and glows; rarer prizes wait longer. */
+async function suspense(rarity) {
+  const r = $('bx-reveal'), [, rc] = rar(rarity);
+  r.className = `bx-reveal on susp ${rc}`;
+  r.innerHTML = `<div class="bx-susp"><div class="bx-crate"><span>📦</span></div><p class="bx-susp-t">กำลังเปิดลัง…</p><div class="bx-susp-dots"><i></i><i></i><i></i></div></div>`;
+  sfx('boom'); try { navigator.vibrate?.(rarity === 'common' ? [40] : [40, 60, 40, 60, 120]); } catch { /* ignore */ }
+  await new Promise(res => setTimeout(res, { common: 1100, rare: 1500, epic: 1900, legendary: 2500 }[rarity] || 1200));
+  r.classList.add('flash'); await new Promise(res => setTimeout(res, 220));
 }
 
 function closeStage() { const s = stage(); s.classList.remove('on'); $('bx-reveal').className = 'bx-reveal'; $('bx-arena').innerHTML = ''; document.body.style.overflow = ''; skipCurrent = null; }
@@ -128,7 +138,10 @@ async function openBox(id) {
     await g.done;
     $('bx-skip').classList.add('hidden'); $('bx-close').classList.remove('hidden');
     if (res.prize?.openId) WON[res.prize.openId] = { prizeLabel: res.prize.label, productName: res.prize.productName, qty: res.prize.qty, claimMode: res.prize.claimMode };
+    await suspense(res.prize.rarity);
     showReveal(res.prize, id);
+    const rr = res.prize.rarity; sfx(rr === 'common' ? 'good' : rr === 'rare' ? 'win' : 'big');
+    if (rr !== 'common') confetti($('bx-reveal'), { rare: 36, epic: 60, legendary: 100 }[rr] || 30, rr === 'legendary' ? ['#f2c94c', '#b64400', '#1d1d1f', '#fff'] : undefined);
   } catch (e) { console.warn(e); closeStage(); toast('เปิดกล่องแล้ว ดูของรางวัลได้ที่ประวัติด้านล่าง', 'success'); }
   finally { busy = false; renderBoxes(); }
 }
@@ -156,10 +169,11 @@ async function submitClaim(e) {
 
 // ---------- events ----------
 document.addEventListener('click', (e) => {
-  const t = e.target.closest?.('[data-open],[data-game],[data-claim],[data-rv],#bx-skip,#bx-close'); if (!t) return;
+  const t = e.target.closest?.('[data-open],[data-game],[data-claim],[data-rv],#bx-skip,#bx-close,#bx-mute'); if (!t) return;
   if (t.dataset.open) return openBox(t.dataset.open);
   if (t.dataset.game) { game = t.dataset.game; try { localStorage.setItem('bx-game', game); } catch { /* ignore */ } document.querySelectorAll('.bx-game-btn[data-game]').forEach(b => b.classList.toggle('on', b.dataset.game === game)); return; }
   if (t.dataset.claim) return openClaim(t.dataset.claim);
+  if (t.id === 'bx-mute') { let m = '0'; try { m = localStorage.getItem('bx-mute') === '1' ? '0' : '1'; localStorage.setItem('bx-mute', m); } catch { /* ignore */ } t.textContent = m === '1' ? '🔇' : '🔊'; return; }
   if (t.id === 'bx-skip') return skipCurrent?.();
   if (t.id === 'bx-close') return closeStage();
   const rv = t.dataset.rv, r = $('bx-reveal');

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ASTRAPHEX HUB — ไอดีเกมและบริการ Arena Breakout</title>
-  <meta name="description" content="ASTRAPHEX HUB ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta name="description" content="ASTRAPHEX HUB ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
   <meta property="og:title" content="ASTRAPHEX HUB — ไอดีเกมและบริการ Arena Breakout">
-  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:description" content="ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta property="og:url" content="https://astraphex.panderx.xyz/">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,11 +22,16 @@
   <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
   <link rel="stylesheet" href="css/tw.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/transition.css">
   <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/polish.css">
   <script src="js/theme.js"></script>
   <script src="js/transition.js" defer></script>
   <script type="module" src="js/shell.js"></script>
@@ -39,7 +44,7 @@
     <section class="max-w-[1200px] mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
       <div class="text-center px-2 sm:px-12 pt-6 pb-2 sm:pt-10">
         <h1 class="font-heading font-semibold text-[36px] sm:text-6xl leading-[1.08] tracking-[-0.02em] text-ink">Your Next Gear.<br class="sm:hidden"> Starts Here.</h1>
-        <p class="text-[17px] sm:text-xl text-slate mt-3">ไอดีเกมและบริการในเกม Arena Breakout · เติมเงินแล้วซื้อได้ทันที</p>
+        <p class="text-[17px] sm:text-xl text-slate mt-3">ไอดีพร้อมลงเรด โยนของถึงกระเป๋า · เติมปุ๊บ ซื้อได้ปั๊บ</p>
         <div class="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 max-w-md sm:max-w-none mx-auto">
           <button type="button" onclick="document.getElementById('catalog-section').scrollIntoView({behavior:'smooth'})" class="apple-pricing-pill px-9 py-4 text-[19px] font-semibold">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-1 13H5L4 7zm4 0a4 4 0 018 0"/></svg>
@@ -56,11 +61,17 @@
           </span>
           <span class="flex-1 min-w-0">
             <span class="block text-[19px] font-semibold text-ink leading-tight mt-0.5">โปรแกรมจัดการไอดีไก่</span>
-            <span class="block text-sm text-slate mt-0.5">แยกแท็บ แจกงานทีม ตรวจประวัติย้อนหลัง</span>
+            <span class="block text-sm text-slate mt-0.5">แยกแท็บ แจกงานให้ทีม ย้อนดูได้ทุกการเปลี่ยนแปลง</span>
           </span>
           <svg class="w-5 h-5 text-steel shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </a>
       </div>
+    </section>
+
+
+    <!-- Quick links -->
+    <section class="max-w-[1200px] mx-auto px-4 sm:px-6 mt-6" aria-label="ทางลัด">
+      <div id="hm-quick" class="hm-quick"></div>
     </section>
 
     <!-- Recent orders + stats -->
@@ -89,7 +100,7 @@
       <div class="flex items-end justify-between gap-3 mb-6">
         <div>
           <p class="text-launchOrange text-sm font-semibold">แนะนำ</p>
-          <h2 class="text-2xl sm:text-4xl font-heading font-semibold">สินค้าแนะนำจากร้าน</h2>
+          <h2 class="text-2xl sm:text-4xl font-heading font-semibold">ของเด็ดประจำร้าน</h2>
         </div>
       </div>
       <div id="featured-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"></div>
@@ -109,12 +120,24 @@
     </section>
 
     <!-- How it works -->
-    <section class="max-w-[1200px] mx-auto px-4 sm:px-6 mt-20">
-      <h2 class="text-2xl sm:text-4xl font-heading font-semibold mb-6">สั่งซื้อง่าย ๆ 3 ขั้นตอน</h2>
+    <section class="max-w-[1200px] mx-auto px-4 sm:px-6 mt-20 cv-auto">
+      <h2 class="text-2xl sm:text-4xl font-heading font-semibold mb-6">จบใน 3 สเต็ป</h2>
       <div class="grid md:grid-cols-3 gap-5">
-        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">01</p><h3 class="text-lg font-semibold mt-3">เติมเงินเข้าบัญชี</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">สแกน QR พร้อมเพย์ แนบสลิป รับเครดิตพร้อมโบนัสตามโปรโมชั่น</p></div>
-        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">02</p><h3 class="text-lg font-semibold mt-3">เลือกไอดีหรือบริการ</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">ดูรายละเอียดไอดี หรือเลือกจำนวนที่ต้องการให้ทีมงานโยนให้ในเกม</p></div>
-        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">03</p><h3 class="text-lg font-semibold mt-3">รับของในเมนูออเดอร์</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">ไอดีเกมแสดงในบัญชีของคุณ งานบริการติดตามสถานะได้ตามคิว</p></div>
+        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">01</p><h3 class="text-lg font-semibold mt-3">เติมเงินเข้าบัญชี</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">สแกนพร้อมเพย์ แนบสลิป เครดิตเข้าพร้อมโบนัสโปร</p></div>
+        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">02</p><h3 class="text-lg font-semibold mt-3">เลือกไอดีหรือบริการ</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">ส่องสเปกไอดีให้ถูกใจ หรือกดจำนวนของที่อยากให้ทีมโยนให้ในเกม</p></div>
+        <div class="soft-card p-7"><p class="text-pricingBlue font-heading font-semibold">03</p><h3 class="text-lg font-semibold mt-3">รับของได้เลย</h3><p class="text-slate text-sm mt-1.5 leading-relaxed">ไอดีเด้งเข้าหน้าบัญชีทันที ส่วนงานบริการดูคิวสดได้ตลอด</p></div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="max-w-[1200px] mx-auto px-4 sm:px-6 mt-20 mb-6 cv-auto">
+      <h2 class="text-2xl sm:text-4xl font-heading font-semibold mb-6">คำถามที่พบบ่อย</h2>
+      <div class="hm-faq">
+        <details><summary>เติมเงินแล้วเครดิตเข้าเมื่อไหร่?</summary><p>แนบสลิปในหน้าเติมเงิน บอทเช็กให้เอง ผ่านปุ๊บเครดิตเข้าปั๊บ ถ้าสลิปต้องตรวจมือ แอดมินจะอนุมัติให้เร็วที่สุด</p></details>
+        <details><summary>ซื้อไอดีแล้วรับของที่ไหน?</summary><p>ไอดีอยู่ในหน้าบัญชี แท็บ "ไอดีเกม" กดคัดลอกชื่อผู้ใช้กับรหัสได้เลย เข้าเกมแล้วเปลี่ยนรหัสและผูกอีเมลของตัวเองก่อนลงเรด</p></details>
+        <details><summary>งานบริการใช้เวลานานแค่ไหน?</summary><p>คิวเรียงตามลำดับการจ่าย ดูได้ที่หน้า "ตรวจสอบคิว" เปิดแจ้งเตือนไว้ ถึงตาคุณเมื่อไหร่มือถือเด้งทันที</p></details>
+        <details><summary>กล่องสุ่มผลออกอย่างไร?</summary><p>ระบบสุ่มผลไว้ก่อนเริ่มมินิเกมทุกครั้ง เล่นเก่งหรือไม่เก่งได้ของเท่ากัน ทุกกล่องโชว์เรตจริงให้ดูก่อนเปิด</p></details>
+        <details><summary>ยศสมาชิกคืออะไร?</summary><p>ยศอัปตามยอดเติมสะสม ยศยิ่งสูงยิ่งได้ส่วนลดทุกออเดอร์และโบนัสเติมเงินเพิ่ม เช็กยศตัวเองได้ในหน้าบัญชี</p></details>
       </div>
     </section>
   </main>

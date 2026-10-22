@@ -4,6 +4,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query } from "https://www.
 import { esc, num, money, timeAgo, onSettings, icon, ICONS } from "./ui.js";
 import { mountCatalog, cardFor, stockOf } from "./catalog.js";
 import { orderThumb, PRODUCT_IMAGES } from "./orders-ui.js";
+import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /** Home page: hero, live recent-orders feed, stats (admin base + real counts), featured products, catalog. */
 
@@ -27,7 +28,11 @@ function renderStats() {
   show('stat-orders', num(base.orders) + num(actual.orders));
   if (stockTotal !== null) show('stat-stock', stockTotal);
 }
-onSettings((s) => { base = s.baseStats || {}; renderStats(); });
+onSettings((s) => { base = s.baseStats || {}; renderStats(); renderQuick(s); });
+function renderQuick(s) {
+  const el = document.getElementById('hm-quick'); if (!el) return;
+  el.innerHTML = quickOf(s).filter(q => q.on !== false && q.title).map(q => `<a href="${esc(safeHref(q.href))}" class="hm-q"><span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(QUICK_ICONS[q.icon] || QUICK_ICONS.star)[1]}</svg></span><b>${esc(q.title)}</b>${q.sub ? `<small>${esc(q.sub)}</small>` : ''}</a>`).join('');
+}
 onSnapshot(doc(db, 'stats', 'public'), (snap) => { actual = snap.exists() ? snap.data() : {}; renderStats(); }, () => renderStats());
 
 // ---------- Recent orders feed (recent_orders is written only by admin / Worker when an order completes) ----------
@@ -35,7 +40,7 @@ onSnapshot(doc(db, 'stats', 'public'), (snap) => { actual = snap.exists() ? snap
 const pidOf = (o) => o.productId || PRODUCTS.find(p => p.name && String(o.productName || '').startsWith(p.name))?.id;
 function renderRecent() {
   const ul = document.getElementById('recent-orders'); if (!RECENT) return;
-  if (!RECENT.length) { ul.innerHTML = `<li class="py-8 text-center text-slate text-sm">ยังไม่มีรายการสั่งซื้อ เป็นคนแรกเลย!</li>`; return; }
+  if (!RECENT.length) { ul.innerHTML = `<li class="py-8 text-center text-slate text-sm">ยังไม่มีใครเปิดบิล มาเป็นคนแรกกัน!</li>`; return; }
   ul.innerHTML = RECENT.map(o => `<li class="py-3 flex items-center gap-3">
       ${orderThumb({ ...o, productId: pidOf(o) }, 48)}
       <div class="min-w-0 flex-1">

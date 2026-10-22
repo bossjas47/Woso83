@@ -96,7 +96,7 @@ function renderFooter() {
     <div class="max-w-[1200px] mx-auto px-4 sm:px-6 py-12 grid gap-10 md:grid-cols-3 text-sm">
       <div>
         <div class="flex items-center gap-2.5"><img src="${LOGO}" alt="" width="40" height="40" class="w-10 h-10 object-contain"><span class="font-heading font-bold text-[19px] tracking-tight text-ink">ASTRAPHEX <span class="text-brandTeal">HUB</span></span></div>
-        <p class="text-slate mt-4 leading-relaxed">ศูนย์รวมไอดีและบริการในเกม Arena Breakout ตรวจสอบได้ทุกออเดอร์</p>
+        <p class="text-slate mt-4 leading-relaxed">ไอดีและบริการ Arena Breakout ของคนเล่นจริง เช็กได้ทุกออเดอร์</p>
       </div>
       <div>
         <h2 class="font-semibold text-ink mb-3">เมนู</h2>

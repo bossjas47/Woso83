@@ -80,7 +80,7 @@ onAuthStateChanged(auth, async (u) => {
   const joinToken = new URLSearchParams(location.search).get('join');
   if (!u) {
     $('t-app').classList.add('hidden'); $('t-gate').classList.remove('hidden');
-    $('t-gate').innerHTML = `<p class="font-semibold">เข้าสู่ระบบเพื่อดูทีมของคุณ</p><p class="text-sm text-slate mt-2">ลูกทีมไม่ต้องซื้อสิทธิ์ ใช้บัญชีเว็บนี้บัญชีเดียวอยู่ได้หลายทีม</p><a href="login.html?mode=login&next=${encodeURIComponent('team.html' + location.search)}" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a>`;
+    $('t-gate').innerHTML = `<p class="font-semibold">เข้าสู่ระบบเพื่อดูทีมของคุณ</p><p class="text-sm text-slate mt-2">ลูกทีมไม่ต้องซื้อสิทธิ์ บัญชีเดียวเข้าได้หลายทีม</p><a href="login.html?mode=login&next=${encodeURIComponent('team.html' + location.search)}" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a>`;
     return;
   }
   $('t-gate').classList.add('hidden'); $('t-app').classList.remove('hidden');

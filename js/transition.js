@@ -11,6 +11,6 @@
     if (a.pathname === location.pathname && a.search === location.search) return; // same page / #hash
     e.preventDefault();
     root.classList.add('pt-out');
-    setTimeout(function () { location.href = a.href; }, 180);
+    setTimeout(function () { location.href = a.href; }, 160);
   });
 })();

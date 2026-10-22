@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
   <meta property="og:title" content="รายละเอียดสินค้า — ASTRAPHEX HUB">
-  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:description" content="ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta property="og:url" content="https://astraphex.panderx.xyz/front/product.html">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,7 +22,11 @@
   <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
   <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
@@ -48,7 +52,7 @@
 
     <div id="product-not-found" class="hidden py-24 text-center max-w-md mx-auto">
       <h1 class="text-3xl font-heading font-semibold mb-2">ไม่พบสินค้านี้</h1>
-      <p class="text-slate mb-8">สินค้าอาจถูกปิดการขาย หรือลิงก์ไม่ถูกต้อง</p>
+      <p class="text-slate mb-8">ของชิ้นนี้อาจหมดหรือปิดขายไปแล้ว หรือลิงก์ผิด</p>
       <a href="category.html" class="apple-pricing-pill px-7 py-3 text-[15px]">ดูสินค้าทั้งหมด</a>
     </div>
 
@@ -158,7 +162,7 @@
               <div id="facebook-field" class="hidden">
                 <label for="buyer-facebook" class="block text-sm font-medium mb-1.5">ชื่อ Facebook หรือลิงก์โปรไฟล์ Facebook</label>
                 <input id="buyer-facebook" type="text" autocomplete="off" maxlength="200" placeholder="เช่น Somchai Gamer หรือ https://facebook.com/..." class="w-full apple-input px-4 py-3">
-                <p class="text-xs text-slate mt-1.5">ทีมงานจะทักไปทาง Facebook เพื่อนัดเวลาทำงาน</p>
+                <p class="text-xs text-slate mt-1.5">ทีมจะทัก Facebook ไปนัดเวลาลงเกมกับคุณ</p>
               </div>
               <div id="self-fields" class="hidden space-y-3">
                 <div><label for="buyer-contact" class="block text-sm font-medium mb-1.5">ชื่อในเกม / UID</label>
@@ -195,7 +199,7 @@
 
             <div id="panel-pay-wallet" class="bg-gallery rounded-2xl p-5 space-y-3">
               <div class="row"><span class="text-slate">ยอดเงินคงเหลือ</span><span id="wallet-balance" class="text-xl font-heading font-semibold">-</span></div>
-              <p id="wallet-note" class="text-sm text-slate">ตัดเงินจากเครดิตทันที ไอดีเกมแสดงให้เห็นทันทีหลังชำระ</p>
+              <p id="wallet-note" class="text-sm text-slate">ตัดเครดิตทันที จ่ายเสร็จไอดีขึ้นให้เห็นเลย</p>
               <a id="wallet-topup-link" href="topup.html" class="hidden apple-explore-pill w-full py-2.5 text-sm">เครดิตไม่พอ · ไปหน้าเติมเงิน</a>
             </div>
             <div id="panel-pay-promptpay" class="hidden bg-gallery rounded-2xl p-5"></div>
@@ -207,7 +211,7 @@
               </ol>
               <label for="product-voucher-input" class="block text-sm font-medium">ลิงก์ซองอั่งเปา TrueMoney</label>
               <input id="product-voucher-input" type="url" inputmode="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/?v=..." class="w-full apple-input px-4 py-3">
-              <p class="text-xs text-slate">ระบบรับซองอัตโนมัติ ถ้ายอดซองเกินราคาสินค้า ส่วนที่เกินจะเข้าเครดิตในบัญชี</p>
+              <p class="text-xs text-slate">บอทรับซองให้เอง ถ้าใส่ซองเกินราคา เงินที่เกินเข้าเครดิตให้ ไม่หายไปไหน</p>
             </div>
           </div>
 
@@ -229,7 +233,7 @@
       </section>
 
       <section class="pt-10">
-        <div class="flex items-end justify-between mb-6"><h2 class="font-heading font-semibold text-2xl sm:text-3xl">สินค้าที่คุณอาจสนใจ</h2><a href="category.html" class="text-appleBlue text-[15px] hover:underline">ดูทั้งหมด ›</a></div>
+        <div class="flex items-end justify-between mb-6"><h2 class="font-heading font-semibold text-2xl sm:text-3xl">ของที่น่าโดนต่อ</h2><a href="category.html" class="text-appleBlue text-[15px] hover:underline">ดูทั้งหมด ›</a></div>
         <div id="related-products-grid" class="grid grid-cols-2 gap-3 sm:gap-4"></div>
       </section>
     </div>

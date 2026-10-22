@@ -119,3 +119,46 @@
 .bx-mini { display: flex; flex-direction: column; gap: 4px; color: #1d1d1f; text-decoration: none; }
 .bx-mini-art { aspect-ratio: 1; border-radius: 28px; background: #f5f5f7; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 8px; }
 .bx-mini-art svg { width: 55%; height: 55%; } .bx-mini-art img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------- v2 polish: feel, suspense, confetti ---------- */
+.bx-pulse { animation: bx-pulse .35s ease-out; }
+.bx-opened .bx-dial { animation: bx-open .6s ease-in forwards; }
+.bx-crate-bar i { transition: width .3s cubic-bezier(.3, 1.4, .5, 1); }
+.bx-range { box-shadow: 0 0 0 1px #e6e6e8; }
+.bx-target::after { content: ""; position: absolute; inset: -6px; border-radius: 9999px; border: 2px solid #0071e3; opacity: .5; animation: bx-shrink 1.4s linear forwards; }
+.bx-float { position: absolute; transform: translate(-50%, 0); font-size: 20px; font-weight: 600; color: #1d1d1f; pointer-events: none; animation: bx-float .8s ease-out forwards; z-index: 3; white-space: nowrap; }
+.bx-scratch { box-shadow: 0 0 0 1px #e6e6e8; }
+.bx-scratch-q { animation: bx-bob 1.4s ease-in-out infinite; }
+.bx-scratch-cv.done { transform: scale(1.06); }
+
+.bx-reveal.susp { background: #1d1d1f; }
+.bx-reveal.susp.flash { background: #fff; transition: background .2s; }
+.bx-susp { text-align: center; color: #fff; }
+.bx-crate { width: 150px; height: 150px; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; font-size: 84px; position: relative; animation: bx-crate-shake .5s infinite; }
+.bx-crate::before, .bx-crate::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; border: 2px solid var(--rc, #707070); animation: bx-ripple 1.2s ease-out infinite; }
+.bx-crate::after { animation-delay: .6s; }
+.bx-r-legendary .bx-crate::before, .bx-r-legendary .bx-crate::after { border-color: #f2c94c; }
+.bx-susp-t { font-size: 21px; font-weight: 600; margin: 0; }
+.bx-susp-dots { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+.bx-susp-dots i { width: 8px; height: 8px; border-radius: 9999px; background: #fff; opacity: .3; animation: bx-dot 1s infinite; }
+.bx-susp-dots i:nth-child(2) { animation-delay: .2s; } .bx-susp-dots i:nth-child(3) { animation-delay: .4s; }
+
+.bx-reveal-card { position: relative; }
+.bx-reveal-card .bx-prize-art { animation: bx-prize-pop .7s cubic-bezier(.2, 1.6, .4, 1) both .1s; }
+.bx-reveal-card.bx-r-legendary { box-shadow: 0 0 0 2px #f2c94c; }
+.bx-reveal-card.bx-r-epic { box-shadow: 0 0 0 2px #1d1d1f; }
+.bx-reveal-card .bx-rarity { display: inline-block; padding: 4px 12px; border-radius: 9999px; background: #f5f5f7; }
+.bx-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 8; }
+.bx-confetti i { position: absolute; top: -20px; border-radius: 2px; opacity: 0; animation: bx-fall linear forwards; }
+
+@keyframes bx-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.05); } 100% { transform: scale(1); } }
+@keyframes bx-open { to { transform: rotate(540deg) scale(.2); opacity: 0; } }
+@keyframes bx-shrink { from { transform: scale(2); opacity: .6; } to { transform: scale(1); opacity: 0; } }
+@keyframes bx-float { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -48px); opacity: 0; } }
+@keyframes bx-bob { 50% { transform: scale(1.12); } }
+@keyframes bx-crate-shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-8deg) scale(1.04); } 40% { transform: rotate(8deg) scale(1.04); } 60% { transform: rotate(-5deg); } 80% { transform: rotate(5deg); } }
+@keyframes bx-ripple { from { transform: scale(.8); opacity: .9; } to { transform: scale(2); opacity: 0; } }
+@keyframes bx-dot { 50% { opacity: 1; transform: translateY(-4px); } }
+@keyframes bx-prize-pop { from { transform: scale(0) rotate(-30deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes bx-fall { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), 110vh) rotate(var(--rot)); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bx-crate, .bx-susp-dots i, .bx-crate::before, .bx-crate::after, .bx-confetti i, .bx-scratch-q, .bx-target::after { animation: none; } }

@@ -27,7 +27,7 @@ const live = () => items.map((it, i) => ({ it, i, d: info(it) })).filter(x => x.
 function render() {
   const el = root(); if (!el || !ready) return;
   if (!user) { el.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">เข้าสู่ระบบเพื่อใช้ตะกร้า</p><a href="login.html?mode=login&next=cart.html" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a></div>'; return; }
-  if (!items.length) { el.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ตะกร้าว่าง</p><p class="text-slate text-sm mt-1">เลือกสินค้าแล้วกด "เพิ่มลงตะกร้า"</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูสินค้า</a></div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ตะกร้าว่าง</p><p class="text-slate text-sm mt-1">ตะกร้ายังว่าง เลือกของแล้วกด "เพิ่มลงตะกร้า" ได้เลย</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูสินค้า</a></div>'; return; }
   const lines = live(), total = Math.round(lines.reduce((a, x) => a + x.d.total, 0) * 100) / 100;
   const anySrv = lines.some(x => x.d.srv), short = balance !== null && balance < total;
   el.innerHTML = items.map((it, i) => {

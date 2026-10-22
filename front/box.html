@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>กล่องสุ่ม — ASTRAPHEX HUB</title>
-  <meta name="description" content="กล่องสุ่มของรางวัล ไอดีเกม เครดิต และงานบริการ พร้อมมินิเกมเปิดกล่อง">
+  <meta name="description" content="เปิดกล่องลุ้นไอดี เครดิต และงานบริการ พร้อมมินิเกมให้มันส์ก่อนเฉลย">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
   <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
   <meta property="og:title" content="กล่องสุ่ม — ASTRAPHEX HUB">
-  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:description" content="ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta property="og:url" content="https://astraphex.panderx.xyz/front/box.html">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,7 +22,11 @@
   <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
   <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
@@ -39,19 +43,19 @@
     <nav class="text-sm text-slate mb-6" aria-label="breadcrumb"><a href="category.html" class="hover:text-ink">สินค้าทั้งหมด</a> › <a href="category.html?cat=_box" class="hover:text-ink">กล่องสุ่ม</a></nav>
     <div id="box-head" class="mb-6">
       <h1 class="font-heading font-semibold text-3xl sm:text-4xl">กล่องสุ่ม</h1>
-      <p class="text-slate mt-2">เลือกกล่องที่อยากลุ้น ทุกกล่องแสดงอัตราได้ของจริง</p>
+      <p class="text-slate mt-2">เลือกกล่องที่อยากเสี่ยง ทุกกล่องโชว์เรตดรอปจริง</p>
     </div>
     <div id="box-balance" class="bx-chip hidden mb-4"></div>
     <div id="box-winners" class="bx-winners mb-6"></div>
     <div id="box-list"><div class="skeleton h-96 !rounded-[28px]"></div></div>
     <section class="mt-12">
       <h2 class="font-heading font-semibold text-2xl">ประวัติการเปิดของฉัน</h2>
-      <div id="box-history" class="mt-4 space-y-2"><p class="text-slate text-sm">เข้าสู่ระบบเพื่อดูประวัติ</p></div>
+      <div id="box-history" class="mt-4 space-y-2"><p class="text-slate text-sm">ล็อกอินเพื่อดูว่าเคยเปิดได้อะไรไปบ้าง</p></div>
     </section>
   </main>
 
   <div id="bx-stage" class="bx-stage" role="dialog" aria-modal="true" aria-label="เปิดกล่องสุ่ม">
-    <div class="bx-top"><span class="bx-title" id="bx-stage-title"></span><div class="bx-top-btns"><button type="button" class="bx-ghost" id="bx-skip">ข้าม</button><button type="button" class="bx-ghost hidden" id="bx-close">ปิด</button></div></div>
+    <div class="bx-top"><span class="bx-title" id="bx-stage-title"></span><div class="bx-top-btns"><button type="button" class="bx-ghost" id="bx-mute" aria-label="เปิด/ปิดเสียง">🔊</button><button type="button" class="bx-ghost" id="bx-skip">ข้าม</button><button type="button" class="bx-ghost hidden" id="bx-close">ปิด</button></div></div>
     <div class="bx-arena"><div id="bx-arena" style="display:contents"></div><p class="bx-msg" id="bx-msg"></p></div>
     <div class="bx-reveal" id="bx-reveal"></div>
   </div>

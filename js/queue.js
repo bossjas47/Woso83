@@ -56,7 +56,7 @@ function renderMine() {
   if (!uid) { el.innerHTML = `<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">เข้าสู่ระบบเพื่อดูการจ้างของคุณ</p><a href="login.html?mode=login&next=queue.html%23mine" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a></div>`; return; }
   seqOf(QUEUE.filter(q => q.status !== 'cancelled' && when(q.createdAt).getTime() >= Date.now() - DAY30));
   const mine = QUEUE.filter(q => q.uid === uid).sort((a, b) => when(b.createdAt) - when(a.createdAt));
-  if (!mine.length) { el.innerHTML = `<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ยังไม่มีการจ้างงาน</p><p class="text-slate text-sm mt-1">เมื่อคุณสั่งงานบริการ คิวของคุณจะแสดงที่นี่</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูบริการ</a></div>`; return; }
+  if (!mine.length) { el.innerHTML = `<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ยังไม่มีการจ้างงาน</p><p class="text-slate text-sm mt-1">สั่งงานบริการเมื่อไหร่ คิวของคุณจะโผล่ตรงนี้</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูบริการ</a></div>`; return; }
   el.innerHTML = mine.map(q => {
     const [label, cls] = STATUS[q.status] || [q.status, 'text-slate'];
     const step = STEPS.indexOf(q.status);
@@ -90,7 +90,7 @@ function render() {
   const groups = services.map(p => ({ id: p.id, name: p.name, p }));
   // queue rows whose product was deleted still show
   rows.filter(q => !ids.has(q.productId)).forEach(q => { ids.add(q.productId); groups.push({ id: q.productId, name: q.productName, p: {} }); });
-  if (!groups.length) { el.innerHTML = '<div class="soft-card py-14 text-center"><p class="font-semibold">ยังไม่มีงานบริการ</p><p class="text-slate text-sm mt-1">เมื่อร้านเปิดบริการ คิวจะแสดงที่นี่</p></div>'; return; }
+  if (!groups.length) { el.innerHTML = '<div class="soft-card py-14 text-center"><p class="font-semibold">ยังไม่มีงานบริการ</p><p class="text-slate text-sm mt-1">ยังไม่มีงานในคิว ว่างอยู่ สั่งได้เลย</p></div>'; return; }
 
   chips.innerHTML = groups.length > 1 ? [['', 'ทั้งหมด'], ...groups.map(g => [g.id, g.name])].map(([id, t]) => `<button type="button" onclick="setQueueSvc('${esc(id)}')" class="shrink-0 rounded-full px-4 py-2 text-[14px] ${svc === id ? 'bg-ink text-white' : 'bg-mist text-ink'}">${esc(t)}</button>`).join('') : '';
   el.innerHTML = groups.filter(g => !svc || g.id === svc).map(g => {
@@ -137,5 +137,5 @@ onSettings((s) => { contactUrl = contactsOf(s)[0]?.url || ''; render(); });
   onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); });
   onSnapshot(query(collection(db, 'queue'), where('createdAt', '>=', Timestamp.fromMillis(Date.now() - DAY30))), (s) => { QUEUE = s.docs.map(d => ({ id: d.id, ...d.data() })); notifyChanges(); render(); },
     (e) => { document.getElementById('queue-groups').innerHTML = '<p class="text-slate text-sm">โหลดคิวไม่สำเร็จ ลองใหม่อีกครั้ง</p>'; console.warn(e); });
-  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; seen = null; authReady = true; notifyChanges(); render(); mountPushCard(document.getElementById('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ'); });
+  onAuthStateChanged(auth, (u) => { uid = u?.uid || ''; seen = null; authReady = true; notifyChanges(); render(); mountPushCard(document.getElementById('push-card'), 'เปิดแจ้งเตือนไว้ ใกล้ถึงคิว ถึงคิว หรืองานเสร็จ มือถือเด้งบอกทันที'); });
 })();

@@ -144,7 +144,7 @@ export function render() {
   backEl?.classList.toggle('hidden', browsing || S.cats.length === 0);
 
   if (S.failed) { if (countEl) countEl.textContent = 'โหลดไม่สำเร็จ'; showEmpty('โหลดรายการสินค้าไม่สำเร็จ', 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้', false); return; }
-  if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเตรียมสินค้า แวะกลับมาใหม่เร็ว ๆ นี้', false); return; }
+  if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเติมสต๊อก เดี๋ยวของมา แวะมาใหม่นะ', false); return; }
   if (browsing) { grid.innerHTML = ''; if (countEl) countEl.textContent = `${S.cats.length + (S.products.some(p => catIdOf(p, S.cats) === NONE) ? 1 : 0)} หมวดหมู่ · ${S.products.length} สินค้า`; return; }
 
   const q = S.q.toLowerCase().trim();
@@ -166,7 +166,7 @@ export function render() {
   else list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockOf(b) > 0) - (stockOf(a) > 0));
 
   if (countEl) countEl.textContent = `แสดง ${list.length} รายการ · พร้อมส่ง ${list.filter(p => stockOf(p) > 0).length}`;
-  if (!list.length) { showEmpty('ไม่พบสินค้าที่ตรงกับตัวกรอง', 'ลองเปลี่ยนหมวดหมู่ งบประมาณ หรือคำค้นหา', true); return; }
+  if (!list.length) { showEmpty('ไม่พบสินค้าที่ตรงกับตัวกรอง', 'ลองเปลี่ยนหมวด งบ หรือคำค้นดู', true); return; }
   grid.innerHTML = list.map(cardFor).join('');
 }
 

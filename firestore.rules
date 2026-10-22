@@ -80,7 +80,9 @@ service cloud.firestore {
     // Public service queue: display-only copy of a service order (masked name, no contact/credentials).
     match /queue/{id} {
       allow read: if true;
-      allow create: if signedIn()
+      // created by the Worker only (wallet checkout); the old browser path below stays off like orders.create
+      allow create: if can('pay');
+      allow create: if false && signedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending_payment'
         && request.resource.data.createdAt == request.time
@@ -187,7 +189,7 @@ service cloud.firestore {
     // The slip picture of an order / top-up (shrunk JPEG data URL), same id as the order / top-up.
     match /slip_images/{id} {
       allow read: if can('pay') || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create: if signedIn()
+      allow create: if false && signedIn() // Worker only now, like orders.create
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['kind', 'uid', 'image', 'createdAt'])
         && request.resource.data.createdAt == request.time
@@ -202,7 +204,7 @@ service cloud.firestore {
     match /slip_hashes/{hash} {
       allow get: if signedIn();
       allow list: if can('pay');
-      allow create: if signedIn()
+      allow create: if false && signedIn() // Worker only now, like orders.create
         && hash.matches('[0-9a-f]{64}')
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['kind', 'refId', 'uid', 'createdAt'])
@@ -272,11 +274,7 @@ service cloud.firestore {
     // Web Push subscriptions: the owner saves / removes their own device; the Worker reads them to send
     match /push_subs/{id} {
       allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid', 'endpoint', 'p256dh', 'auth', 'createdAt'])
-        && request.resource.data.endpoint is string && request.resource.data.endpoint.size() < 1000 && request.resource.data.endpoint.matches('https://.*');
-      allow update: if signedIn() && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['uid', 'endpoint', 'p256dh', 'auth', 'createdAt'])
         && request.resource.data.endpoint is string && request.resource.data.endpoint.size() < 1000 && request.resource.data.endpoint.matches('https://.*');
     }

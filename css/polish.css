@@ -1,0 +1,84 @@
+/* ASTRAPHEX HUB — back-office orders + account wallet card. Plain CSS (tw.css is precompiled). Apple style: flat, no gradients, no shadows. */
+
+/* ---------- back office: orders ---------- */
+.ord-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
+.ord-chips::-webkit-scrollbar { display: none; }
+.ord-chip { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: 9999px; background: #f5f5f7; color: #1d1d1f; font-size: 13px; letter-spacing: -.12px; cursor: pointer; }
+.ord-chip b { font-weight: 600; font-size: 12px; color: #707070; font-variant-numeric: tabular-nums; }
+.ord-chip.on { background: #1d1d1f; color: #fff; } .ord-chip.on b { color: #d6d6d6; }
+
+.ord { background: #fff; border-radius: 28px; padding: 20px; box-shadow: 0 0 0 1px #e6e6e8; display: flex; flex-direction: column; gap: 16px; font-size: 13px; color: #1d1d1f; position: relative; overflow: hidden; }
+.ord::before { content: ""; position: absolute; left: 0; top: 20px; bottom: 20px; width: 4px; border-radius: 0 4px 4px 0; background: #d6d6d6; }
+.ord-pending_payment::before { background: #b64400; } .ord-processing::before { background: #0071e3; } .ord-completed::before { background: #1f9d55; } .ord-cancelled::before { background: #86868b; }
+.ord-head { display: flex; gap: 14px; align-items: flex-start; }
+.ord-thumb { width: 64px; height: 64px; border-radius: 18px; object-fit: cover; background: #f5f5f7; flex: none; }
+.ord-thumb-ph { display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.ord-main { flex: 1; min-width: 0; }
+.ord-num { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 12px; color: #1d1d1f; }
+.ord-num span { margin-left: 8px; font-family: inherit; font-weight: 400; color: #707070; }
+.ord-name { margin: 4px 0 0; font-size: 17px; font-weight: 600; line-height: 1.25; letter-spacing: -.374px; overflow-wrap: anywhere; }
+.ord-qty { margin: 4px 0 0; color: #707070; font-size: 13px; }
+.ord-side { text-align: right; flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.ord-amt { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.ord-pending_payment .ord-pill { background: #fff3e6; color: #a04a00; } .ord-processing .ord-pill { background: #e8f1fd; color: #0058b9; } .ord-completed .ord-pill { background: #e8f8ee; color: #0a7a3b; } .ord-cancelled .ord-pill { background: #f5f5f7; color: #707070; }
+.ord-pill { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+@media (max-width: 520px) { .ord-head { flex-wrap: wrap; } .ord-side { flex-direction: row; width: 100%; align-items: center; justify-content: space-between; } }
+
+.ord-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ord-steps li { font-size: 11px; color: #86868b; display: flex; flex-direction: column; gap: 6px; }
+.ord-steps li i { display: block; height: 4px; border-radius: 9999px; background: #e6e6e8; }
+.ord-steps li.done { color: #1d1d1f; } .ord-steps li.done i { background: #1d1d1f; }
+.ord-steps li.now { color: #0071e3; font-weight: 600; } .ord-steps li.now i { background: #0071e3; }
+
+.ord-grid { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; background: #fafafc; box-shadow: inset 0 0 0 1px #e6e6e8; border-radius: 18px; overflow: hidden; }
+.ord-cell { box-shadow: 0 0 0 .5px #e6e6e8; background: transparent; padding: 10px 14px; min-width: 0; }
+.ord-cell dt { font-size: 11px; color: #707070; margin: 0 0 2px; }
+.ord-cell dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.ord-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 18px; background: #f5f5f7; }
+.ord-box > span { font-size: 11px; color: #707070; width: 100%; }
+.ord-box code { padding: 5px 10px; border-radius: 10px; background: #fff; font-size: 13px; overflow-wrap: anywhere; }
+.ord-note { margin: 0; padding: 12px 14px; border-radius: 18px; background: #e8f1fd; color: #003d80; line-height: 1.45; }
+.ord-note b { display: block; font-size: 11px; margin-bottom: 2px; }
+.ord-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid #e6e6e8; }
+.ord-danger { color: #d70015; border-color: #f2b8bd; }
+
+/* ---------- account: wallet card ---------- */
+.wc { border-radius: 28px; padding: 24px; background: #1d1d1f; color: #fff; display: flex; flex-direction: column; gap: 20px; position: relative; overflow: hidden; }
+.wc::after { content: ""; position: absolute; right: -60px; top: -60px; width: 200px; height: 200px; border-radius: 9999px; border: 1px solid #3a3a3d; pointer-events: none; }
+.wc::before { content: ""; position: absolute; right: -20px; top: -20px; width: 120px; height: 120px; border-radius: 9999px; border: 1px solid #3a3a3d; pointer-events: none; }
+.wc-top { display: flex; align-items: center; gap: 10px; }
+.wc-ico { width: 36px; height: 36px; border-radius: 12px; background: #2c2c2e; display: flex; align-items: center; justify-content: center; color: #fff; }
+.wc-lab { font-size: 14px; color: #d6d6d6; letter-spacing: -.224px; }
+.wc-bal { margin: 0; font-size: 44px; line-height: 1; font-weight: 600; letter-spacing: -1px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wc-bal small { font-size: 22px; font-weight: 500; color: #a1a1a6; margin-right: 4px; letter-spacing: 0; }
+.wc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #3a3a3d; border-radius: 18px; overflow: hidden; }
+.wc-stats > div { background: #262628; padding: 12px 16px; }
+.wc-n { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.wc-k { margin: 2px 0 0; font-size: 12px; color: #a1a1a6; }
+.wc-btns { display: flex; gap: 10px; }
+.wc-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 18px; border-radius: 9999px; font-size: 16px; letter-spacing: -.3px; text-decoration: none; font-weight: 600; }
+.wc-btn.pri { background: #0071e3; color: #fff; flex: 1.4; } .wc-btn.sub { background: transparent; color: #fff; box-shadow: 0 0 0 1px #6e6e73; font-weight: 500; }
+.wc-btn:active { opacity: .85; }
+
+/* ---------- home: quick links, FAQ ---------- */
+.hm-quick:empty { display: none; }
+.hm-quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (min-width: 768px) { .hm-quick { grid-template-columns: none; grid-auto-columns: 1fr; grid-auto-flow: column; gap: 16px; } }
+.hm-q { display: flex; flex-direction: column; gap: 2px; padding: 20px; border-radius: 28px; background: #f5f5f7; color: #1d1d1f; text-decoration: none; transition: background .2s, transform .15s; }
+.hm-q:hover { background: #ededf0; } .hm-q:active { transform: scale(.98); }
+.hm-q span { width: 44px; height: 44px; border-radius: 16px; background: #fff; color: #0071e3; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.hm-q b { font-size: 17px; font-weight: 600; letter-spacing: -.374px; }
+.hm-q small { font-size: 13px; color: #707070; letter-spacing: -.12px; }
+.hm-faq { border-radius: 28px; background: #f5f5f7; padding: 8px 24px; }
+.hm-faq details { border-bottom: 1px solid #d6d6d6; }
+.hm-faq details:last-child { border-bottom: 0; }
+.hm-faq summary { cursor: pointer; list-style: none; padding: 18px 0; font-size: 17px; font-weight: 500; letter-spacing: -.374px; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.hm-faq summary::-webkit-details-marker { display: none; }
+.hm-faq summary::after { content: "+"; font-size: 24px; font-weight: 300; color: #707070; transition: transform .2s; flex: none; }
+.hm-faq details[open] summary::after { transform: rotate(45deg); }
+.hm-faq p { margin: 0 0 18px; font-size: 15px; line-height: 1.55; color: #707070; }
+
+/* back office: home shortcut rows */
+.hq-row { padding-bottom: 12px; border-bottom: 1px solid #e6e6e8; }
+.hq-row:last-child { border-bottom: 0; padding-bottom: 0; }
+@media (max-width: 639px) { .hq-wide { grid-column: span 2 / span 2; } }

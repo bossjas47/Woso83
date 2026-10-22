@@ -3,6 +3,7 @@ import { collection, doc, onSnapshot, query, where, orderBy, limit, writeBatch, 
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { esc, toast, money, openModal, closeModal, onSettings, contactsOf, callWorker } from "./ui.js";
 import { enablePush } from "./push.js";
+import { SALE_TEMPLATES, fillTemplate } from "./sale-templates.js";
 import { COLORS, DEFAULT_LABELS, labelOf, parseLine, copyLine, exportLine, priceOf, money as baht, sheetHtml, sumText, bindSheet, editing } from "./sheet.js";
 
 /**
@@ -184,10 +185,22 @@ Object.assign(window, {
   /** Sell = one dialog: the list to send + one button that copies it and cuts the IDs out. */
   vSell: () => {
     const rows = picked(); if (!rows.length) return;
-    const text = rows.map(exportLine).join('\n'), total = rows.reduce((a, x) => a + priceOf(x), 0);
-    modal(`ขาย ${rows.length} ไอดี${ammoOf(rows) ? ` · ${fmt(ammoOf(rows))} กอง` : ''}${total ? ` · ${baht(total)}` : ''}`, 'กดปุ่มเดียว: คัดลอกรายการนี้ส่งลูกค้า ตัดออกจากแท็บ และบันทึกประวัติการขาย', copyBox(text), 'คัดลอกและยืนยันขาย', async () => {
-      await sellRows(rows); await copy(text, `ขาย ${rows.length} ไอดีแล้ว · คัดลอกรายการแล้ว`);
-    });
+    const ids = rows.map(exportLine).join('\n'), ammo = ammoOf(rows), total = rows.reduce((a, x) => a + priceOf(x), 0);
+    let tid = 'raw'; try { tid = localStorage.getItem('v-sale-tpl') || 'raw'; } catch { /* ignore */ }
+    if (!SALE_TEMPLATES.some(t => t.id === tid)) tid = 'raw';
+    const build = (id) => fillTemplate(id, { ids, count: rows.length, ammo, total });
+    modal(`ขาย ${rows.length} ไอดี${ammo ? ` · ${fmt(ammo)} กอง` : ''}${total ? ` · ${baht(total)}` : ''}`, 'เลือกแบบข้อความ แก้ในช่องได้ แล้วกดปุ่มเดียว: คัดลอกส่งลูกค้า ตัดออกจากแท็บ และบันทึกประวัติการขาย',
+      `<div id="vm-tpl" class="flex gap-2 overflow-x-auto pb-2 mb-2" role="group" aria-label="แบบข้อความ">${SALE_TEMPLATES.map(t => `<button type="button" data-tpl="${t.id}" class="vx-chip shrink-0 px-3 py-1.5 rounded-full text-[13px] ${t.id === tid ? 'bg-ink text-gallery' : 'bg-mist text-ink'}">${esc(t.label)}</button>`).join('')}</div>
+       <textarea id="vm-out" rows="10" class="w-full apple-input px-3.5 py-2.5 text-[13px]">${esc(build(tid))}</textarea>`,
+      'คัดลอกและยืนยันขาย', async () => {
+        const text = $('vm-out').value; await sellRows(rows); await copy(text, `ขาย ${rows.length} ไอดีแล้ว · คัดลอกข้อความแล้ว`);
+      });
+    $('vm-tpl').onclick = (e) => {
+      const b = e.target.closest('[data-tpl]'); if (!b) return;
+      try { localStorage.setItem('v-sale-tpl', b.dataset.tpl); } catch { /* ignore */ }
+      $('vm-out').value = build(b.dataset.tpl);
+      $('vm-tpl').querySelectorAll('[data-tpl]').forEach(x => { const on = x === b; x.classList.toggle('bg-ink', on); x.classList.toggle('text-gallery', on); x.classList.toggle('bg-mist', !on); x.classList.toggle('text-ink', !on); });
+    };
   },
   /** Edit every ticked ID at once: ammo, status, note, password (same for all / one each) and prices. Blank = leave as is. */
   vEdit: () => {

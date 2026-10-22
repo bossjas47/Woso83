@@ -23,7 +23,7 @@
 const MIN = 20, MAX = 50000, THROTTLE_MS = 10000, MAX_SLIP_AGE_MS = 3 * 864e5;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const SHOP = 'ASTRAPHEX HUB';
-export const WORKER_VERSION = '8';
+export const WORKER_VERSION = '9';
 
 const enc = new TextEncoder();
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -863,8 +863,11 @@ export async function routeVaultInvite({ user, data, fs, now }) {
   if (!tab || tab.zone !== 'team') return [{ error: 'เชิญได้เฉพาะแท็บทีม' }, 400];
   const want = str(data.username, 40).toLowerCase();
   if (!want) return [{ error: 'ใส่ชื่อผู้ใช้' }, 400];
-  const found = (await fs.query('', 'users', [['username', 'EQUAL', str(data.username, 40)]], { limit: 2 }))[0]
-    || (await fs.query('', 'users', [['email', 'EQUAL', usernameToEmail(want)]], { limit: 2 }))[0];
+  // the login name is unique; a display name is not (anyone can copy one), so it only counts when it matches one account
+  const byLogin = (await fs.query('', 'users', [['email', 'EQUAL', usernameToEmail(want)]], { limit: 2 }))[0];
+  const byName = byLogin ? [] : await fs.query('', 'users', [['username', 'EQUAL', str(data.username, 40)]], { limit: 2 });
+  if (byName.length > 1) return [{ error: 'ชื่อนี้ซ้ำกันหลายบัญชี ใช้ชื่อที่ลูกทีมใช้ล็อกอิน หรือส่งลิงก์เชิญแทน' }, 409];
+  const found = byLogin || byName[0];
   if (!found) return [{ error: 'ไม่พบผู้ใช้ชื่อนี้ (ให้ลูกทีมสมัครสมาชิกเว็บก่อน)' }, 404];
   if (found.id === user.uid) return [{ error: 'เชิญตัวเองไม่ได้' }, 400];
   const id = await addMember({ fs, owner: user.uid, ownerUser, tabId: data.tabId, tab, member: found.id, memberUser: found.data });

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>เติมเงิน — ASTRAPHEX HUB</title>
-  <meta name="description" content="เติมเงินเข้าบัญชี ASTRAPHEX HUB ผ่านพร้อมเพย์ พร้อมโปรโมชั่นโบนัส">
+  <meta name="description" content="เติมเครดิตผ่านพร้อมเพย์หรือซองอั่งเปา รับโบนัสตามโปร">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
   <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
   <meta property="og:title" content="เติมเงิน — ASTRAPHEX HUB">
-  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:description" content="ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta property="og:url" content="https://astraphex.panderx.xyz/front/topup.html">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,7 +22,11 @@
   <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
   <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
@@ -36,7 +40,7 @@
 
   <main class="max-w-[1100px] mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
     <h1 class="text-3xl sm:text-[40px] font-heading font-semibold leading-tight">เติมเงิน</h1>
-    <p class="text-slate mt-1">ใส่จำนวนเงิน เลือกช่องทาง แล้วส่งหลักฐานได้ในหน้านี้เลย</p>
+    <p class="text-slate mt-1">ใส่ยอด เลือกช่องทาง แนบหลักฐาน จบในหน้านี้</p>
 
     <!-- Promotions -->
     <section id="promo-section" class="mt-6">
@@ -81,7 +85,7 @@
           </ol>
           <label for="tm-link" class="block text-sm font-medium">ลิงก์ซองอั่งเปา</label>
           <input id="tm-link" type="url" inputmode="url" maxlength="300" placeholder="https://gift.truemoney.com/campaign/?v=..." class="w-full apple-input px-4 py-3">
-          <p class="text-xs text-slate">ระบบรับซองให้อัตโนมัติ เครดิตเข้าตามยอดในซอง พร้อมโบนัสโปรโมชั่น</p>
+          <p class="text-xs text-slate">บอทรับซองให้เอง เครดิตเข้าตามยอดซอง บวกโบนัสโปรให้ด้วย</p>
         </div>
         <button id="btn-topup" type="button" onclick="executeTopup()" class="w-full apple-pricing-pill py-4 text-[17px]">ส่งหลักฐานการโอน</button>
         <p id="topup-mode-note" class="text-xs text-slate text-center"></p>

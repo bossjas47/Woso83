@@ -21,7 +21,7 @@ const vault = new Map();
 export function credentialBoxHtml(order) {
   const accs = accountsOf(order);
   if (order.status !== 'completed' || !accs.length) {
-    return `<div class="rounded-2xl bg-mist p-4 text-sm text-slate">${order.status === 'cancelled' ? 'ออเดอร์นี้ถูกยกเลิก' : 'ไอดีจะแสดงที่นี่เมื่อทีมงานยืนยันการชำระเงินแล้ว'}</div>`;
+    return `<div class="rounded-2xl bg-mist p-4 text-sm text-slate">${order.status === 'cancelled' ? 'ออเดอร์นี้ถูกยกเลิก' : 'แอดมินเช็กยอดเสร็จเมื่อไหร่ ไอดีขึ้นตรงนี้ทันที'}</div>`;
   }
   return accs.map((a, i) => {
     const key = `${order.id || order.orderId}-${i}`;
@@ -41,7 +41,7 @@ export function credentialBoxHtml(order) {
           <button type="button" onclick='copyCred(${k},"password")' class="apple-explore-pill px-3.5 py-2 text-sm shrink-0">${icon(ICONS.copy, 'w-4 h-4', 2)}คัดลอก</button></div>
       </div>
     </div>`;
-  }).join('') + `<p class="text-xs text-slate">แนะนำให้เปลี่ยนรหัสผ่านและผูกอีเมลของคุณทันทีหลังเข้าเกม</p>`;
+  }).join('') + `<p class="text-xs text-slate">เข้าเกมได้แล้ว เปลี่ยนรหัสและผูกอีเมลของตัวเองก่อนลงเรดนะ</p>`;
 }
 
 export function serviceStepsHtml(order) {

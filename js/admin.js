@@ -7,6 +7,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/fi
 import { watchCategories, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
 import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
 import { rankTable, rankOf, rankBadge, rankIcon } from "./rank.js";
+import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /**
  * ASTRAPHEX HUB — back office. The real gate is the Firebase custom claim admin:true (firestore.rules);
@@ -607,12 +608,18 @@ function renderAdminOrders() {
   const rows = ORDERS.filter(o => (f === 'all' || (f === 'active' ? ['pending_payment', 'processing'].includes(o.status) : o.status === f))
     && (!q || [o.orderNumber, o.productName, o.userEmail, o.buyerEmail, o.buyerFacebook, o.buyerContact, buyerName(o)].some(v => String(v || '').toLowerCase().includes(q))));
   $('admin-orders-empty').classList.toggle('hidden', rows.length > 0);
+  const cnt = (s) => ORDERS.filter(o => o.status === s).length;
+  const chips = [['active', 'ต้องดำเนินการ', cnt('pending_payment') + cnt('processing')], ['pending_payment', 'รอตรวจสอบ', cnt('pending_payment')], ['processing', 'กำลังดำเนินการ', cnt('processing')], ['completed', 'สำเร็จ', cnt('completed')], ['cancelled', 'ยกเลิก', cnt('cancelled')], ['all', 'ทั้งหมด', ORDERS.length]];
+  const chipBox = $('order-chips');
+  if (chipBox) chipBox.innerHTML = chips.map(([v, t, n]) => `<button type="button" class="ord-chip ${f === v ? 'on' : ''}" onclick="setOrderFilter('${v}')">${t}<b>${n}</b></button>`).join('');
+  const PAY = { wallet: 'เครดิต (ชำระแล้ว)', prize: '🎁 ของรางวัลกล่องสุ่ม', truemoney: 'TrueMoney', promptpay: 'พร้อมเพย์' };
+  const STEP = { pending_payment: 0, processing: 1, completed: 2 };
   list.innerHTML = rows.slice(0, 200).map(o => {
     const id = adminEsc(JSON.stringify(o.id));
-    const [label, cls] = ORDER_UI[o.status] || [o.status, 'bg-mist text-slate'];
+    const [label] = ORDER_UI[o.status] || [o.status];
     const srv = o.productType === 'service';
     const accs = Array.isArray(o.accountsDelivered) && o.accountsDelivered.length ? o.accountsDelivered : (o.accountDelivered?.username ? [o.accountDelivered] : []);
-    const btn = (fn, text, primary) => `<button type="button" onclick='${fn}(${id})' class="${primary ? 'apple-pricing-pill' : 'apple-explore-pill'} px-3 py-1.5 text-[11px]">${text}</button>`;
+    const btn = (fn, text, primary, danger) => `<button type="button" onclick='${fn}(${id})' class="${primary ? 'apple-pricing-pill' : 'apple-explore-pill'} px-3.5 py-1.5 text-[12px] ${danger ? 'ord-danger' : ''}">${text}</button>`;
     const actions = [
       can('pay') && o.status === 'pending_payment' && btn('approveOrder', srv ? 'ยืนยันชำระ › เข้าคิว' : 'ยืนยันชำระ & ส่งไอดี', true),
       o.status === 'processing' && (srv || !STAFF_ONLY_QUEUE()) && o.queueStatus !== 'working' && btn('startWork', 'เริ่มทำงาน', false),
@@ -620,30 +627,43 @@ function renderAdminOrders() {
       can('pay') && o.gamePassword && o.status === 'completed' && btn('clearGamePassword', 'ลบรหัสเกม', false),
       (!STAFF_ONLY_QUEUE() || (srv && o.status === 'processing')) && btn('openNote', o.adminNote ? 'แก้หมายเหตุ' : 'หมายเหตุถึงลูกค้า', false),
       can('pay') && o.hasSlip && btn('viewSlip', 'ดูสลิป', false),
-      can('pay') && ['pending_payment', 'processing'].includes(o.status) && btn('cancelOrder', 'ยกเลิก', false)
-    ].filter(Boolean).join(' ');
-    return `<article class="apple-card p-4 sm:p-5 text-xs space-y-3">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <p class="font-mono font-bold text-ink">${adminEsc(o.orderNumber || o.id)} <span class="font-normal text-slate">· ${adminEsc(fmtDate(o.createdAt))}</span></p>
-          <p class="text-sm font-semibold mt-0.5">${adminEsc(o.productName)} <span class="font-normal text-slate">× ${adminEsc(o.quantity || 1)} ${adminEsc(o.unit || '')}${num(o.bonusQty) ? ` (+แถม ${adminEsc(o.bonusQty)})` : ''}</span></p>
-          <p class="text-slate mt-0.5">ผู้ซื้อ: <button type="button" class="text-appleBlue hover:underline" onclick='openUserModal(${adminEsc(JSON.stringify(o.userId || ''))})'>${adminEsc(buyerName(o))}</button>
-            ${o.buyerFacebook ? ` · FB: <span class="select-all">${adminEsc(o.buyerFacebook)}</span>` : ''}${o.buyerEmail ? ` · อีเมล: <span class="select-all">${adminEsc(o.buyerEmail)}</span>` : ''}${o.buyerContact && !o.gameEmail ? ` · ในเกม: ${adminEsc(o.buyerContact)}` : ''}${o.playTime ? ` · เวลา: ${adminEsc(o.playTime)}` : ''}</p>
-          ${o.gameEmail ? `<p class="text-slate">ล็อกอินเกม: <span class="font-mono select-all">${adminEsc(o.gameEmail)}</span> / <span class="font-mono select-all">${adminEsc(o.gamePassword || '(ลบแล้ว)')}</span></p>` : ''}
+      can('pay') && ['pending_payment', 'processing'].includes(o.status) && btn('cancelOrder', 'ยกเลิก', false, true)
+    ].filter(Boolean).join('');
+    const at = STEP[o.status], steps = ['ชำระเงิน', srv ? 'ทำงาน' : 'เตรียมไอดี', 'ส่งมอบ'];
+    const prod = PRODUCTS.find(p => p.id === o.productId), img = o.image || prod?.image;
+    const thumb = img ? `<img src="${adminEsc(img)}" alt="" class="ord-thumb" loading="lazy">` : `<span class="ord-thumb ord-thumb-ph">${srv ? '⚡' : '🎮'}</span>`;
+    const cell = (k, v) => v ? `<div class="ord-cell"><dt>${k}</dt><dd>${v}</dd></div>` : '';
+    const buyer = `<button type="button" class="text-appleBlue hover:underline" onclick='openUserModal(${adminEsc(JSON.stringify(o.userId || ''))})'>${adminEsc(buyerName(o))}</button>`;
+    const sel = (v) => `<span class="select-all">${adminEsc(v)}</span>`;
+    const pay = (PAY[o.paymentMethod] || 'พร้อมเพย์') + (o.promoCode ? ` · โค้ด ${adminEsc(o.promoCode)} -฿${money(o.discount)}` : '');
+    return `<article class="ord ord-${adminEsc(o.status)}">
+      <div class="ord-head">
+        ${thumb}
+        <div class="ord-main">
+          <p class="ord-num">${adminEsc(o.orderNumber || o.id)}<span>${adminEsc(fmtDate(o.createdAt))}</span></p>
+          <p class="ord-name">${adminEsc(o.productName)}</p>
+          <p class="ord-qty">${srv ? '⚡ งานบริการ' : '🎮 ไอดีเกม'} · × ${adminEsc(o.quantity || 1)} ${adminEsc(o.unit || '')}${num(o.bonusQty) ? ` (+แถม ${adminEsc(o.bonusQty)})` : ''}</p>
         </div>
-        <div class="text-right">
-          <p class="text-base font-display font-semibold">฿${money(o.amount)}</p>
-          <p class="text-slate">${o.paymentMethod === 'wallet' ? 'เครดิต (ชำระแล้ว)' : o.paymentMethod === 'prize' ? '🎁 ของรางวัลกล่องสุ่ม' : o.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}${o.promoCode ? ` · โค้ด ${adminEsc(o.promoCode)} -฿${money(o.discount)}` : ''}</p>
-          <span class="inline-block mt-1 px-2.5 py-0.5 rounded-full font-semibold ${cls}">${label}${o.status === 'processing' && o.queueStatus === 'working' ? ' · กำลังทำ' : ''}</span>
+        <div class="ord-side">
+          <p class="ord-amt">฿${money(o.amount)}</p>
+          <span class="ord-pill">${label}${o.status === 'processing' && o.queueStatus === 'working' ? ' · กำลังทำ' : ''}</span>
         </div>
       </div>
-      ${o.paymentProof && o.paymentMethod === 'truemoney' ? `<p class="text-slate break-all">ซอง: <a class="text-appleBlue select-all" href="${adminEsc(o.paymentProof)}" target="_blank" rel="noopener">${adminEsc(o.paymentProof)}</a></p>` : ''}
-      ${accs.length ? `<p class="text-slate">ไอดีที่ส่งมอบ: ${accs.map(a => `<span class="font-mono select-all">${adminEsc(a.username)}:${adminEsc(a.password)}</span>`).join(', ')}</p>` : ''}
-      ${o.adminNote ? `<p class="rounded-xl bg-[#e8f1fd] text-[#003d80] px-3 py-2">หมายเหตุถึงลูกค้า: ${adminEsc(o.adminNote)}</p>` : ''}
-      <div class="flex flex-wrap gap-1.5 pt-1">${actions}</div>
+      ${at === undefined ? '' : `<ol class="ord-steps">${steps.map((s, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${s}</li>`).join('')}</ol>`}
+      <dl class="ord-grid">
+        ${cell('ผู้ซื้อ', buyer)}${cell('Facebook', o.buyerFacebook && sel(o.buyerFacebook))}${cell('อีเมล', o.buyerEmail && sel(o.buyerEmail))}
+        ${cell('ชื่อในเกม', o.buyerContact && !o.gameEmail && adminEsc(o.buyerContact))}${cell('เวลาพร้อมเล่น', o.playTime && adminEsc(o.playTime))}${cell('ชำระผ่าน', pay)}
+      </dl>
+      ${o.gameEmail ? `<div class="ord-box"><span>ล็อกอินเกม</span><code class="select-all">${adminEsc(o.gameEmail)}</code><code class="select-all">${adminEsc(o.gamePassword || '(ลบแล้ว)')}</code></div>` : ''}
+      ${o.paymentProof && o.paymentMethod === 'truemoney' ? `<div class="ord-box"><span>ซองอั่งเปา</span><a class="text-appleBlue select-all break-all" href="${adminEsc(o.paymentProof)}" target="_blank" rel="noopener">${adminEsc(o.paymentProof)}</a></div>` : ''}
+      ${accs.length ? `<div class="ord-box"><span>ไอดีที่ส่งมอบ</span>${accs.map(a => `<code class="select-all">${adminEsc(a.username)}:${adminEsc(a.password)}</code>`).join('')}</div>` : ''}
+      ${o.adminNote ? `<p class="ord-note"><b>หมายเหตุถึงลูกค้า</b>${adminEsc(o.adminNote)}</p>` : ''}
+      ${actions ? `<div class="ord-actions">${actions}</div>` : ''}
     </article>`;
   }).join('');
 }
+function setOrderFilter(v) { const s = $('order-status-filter'); if (s) { s.value = v; renderAdminOrders(); } }
+window.setOrderFilter = setOrderFilter;
 function refreshOrders() { renderAdminOrders(); triggerToast('อัปเดตรายการล่าสุดแล้ว'); }
 
 /** Public feed + counters for a finished order (stats/public, recent_orders). Called inside a transaction. */
@@ -1032,7 +1052,23 @@ async function loadAdminSettings() {
     <td class="px-1"><input id="rk-min-${i}" type="number" min="0" value="${i ? r.min : 0}" ${i ? '' : 'disabled title="ซื้อครั้งแรก"'} class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td>
     <td class="px-1"><input id="rk-dis-${i}" type="number" min="0" max="100" step="0.1" value="${r.discount}" class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td>
     <td class="px-1"><input id="rk-bon-${i}" type="number" min="0" max="100" step="0.1" value="${r.bonus}" class="w-full apple-input px-2.5 py-1.5 text-xs font-mono"></td></tr>`).join('');
+  const inp = 'w-full apple-input px-2.5 py-1.5 text-xs';
+  $('quick-rows').innerHTML = quickOf(d).map((q, i) => `<div class="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center hq-row">
+    <label class="hq-wide sm:col-span-2 flex items-center gap-2 text-xs font-semibold"><input id="hq-on-${i}" type="checkbox" ${q.on !== false ? 'checked' : ''}> การ์ด ${i + 1}</label>
+    <select id="hq-icon-${i}" aria-label="ไอคอน" class="sm:col-span-2 ${inp}">${Object.entries(QUICK_ICONS).map(([k, [l]]) => `<option value="${k}" ${k === q.icon ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <input id="hq-title-${i}" value="${adminEsc(q.title)}" maxlength="24" placeholder="ชื่อ" aria-label="ชื่อ" class="sm:col-span-2 ${inp}">
+    <input id="hq-sub-${i}" value="${adminEsc(q.sub)}" maxlength="40" placeholder="คำอธิบาย" aria-label="คำอธิบาย" class="hq-wide sm:col-span-3 ${inp}">
+    <input id="hq-href-${i}" value="${adminEsc(q.href)}" maxlength="300" placeholder="front/box.html" aria-label="ลิงก์" class="hq-wide sm:col-span-3 ${inp} font-mono"></div>`).join('');
   renderStatHints();
+}
+/** Home shortcut cards, saved on their own (merge) like the ranks. */
+async function saveHomeQuick() {
+  const v = (id) => ($(id)?.value || '').trim();
+  const homeQuick = [0, 1, 2, 3].map(i => ({ on: $(`hq-on-${i}`).checked, icon: QUICK_ICONS[v(`hq-icon-${i}`)] ? v(`hq-icon-${i}`) : 'star', title: v(`hq-title-${i}`).slice(0, 24), sub: v(`hq-sub-${i}`).slice(0, 40), href: v(`hq-href-${i}`).slice(0, 300) }));
+  const bad = homeQuick.find(q => q.on && (!q.title || safeHref(q.href) === '#'));
+  if (bad) return triggerToast(!bad.title ? 'การ์ดที่เปิดอยู่ต้องมีชื่อ' : `ลิงก์ "${bad.href || '(ว่าง)'}" ใช้ไม่ได้ ใส่หน้าในเว็บหรือ https://`, 'error');
+  try { await setDoc(doc(db, 'system', 'settings'), { homeQuick, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกทางลัดแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
 function renderStatHints() {
   const b = SETTINGS.baseStats || {};
@@ -1115,6 +1151,7 @@ async function testWebhook() {
 }
 
 Object.assign(window, {
+  saveHomeQuick,
   renderDashboard, applyTypeUi, setRentalFilter, closeRental, renderAdminRentals,
   handlePinSetupSubmit, handlePinUnlockSubmit, promptResetPin, lockAdminSession, switchAdminTab,
   openStockModal, closeStockModal, handleStockTextareaInput, submitBulkStockImport, deleteSingleStockItem, openStockModalQuick,

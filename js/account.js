@@ -27,7 +27,8 @@ function renderProfile() {
   $('acc-name').textContent = name;
   $('acc-avatar').textContent = [...name][0]?.toUpperCase() || 'A';
   $('acc-since').textContent = fmtDate(profile.createdAt || user.metadata?.creationTime).split(' ').slice(0, 3).join(' ');
-  $('acc-balance').textContent = `${num(profile.walletBalance).toLocaleString('th-TH', { maximumFractionDigits: 2 })}฿`;
+  $('acc-balance').innerHTML = `<small>฿</small>${num(profile.walletBalance).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  $('acc-topup-total').textContent = `฿${num(profile.topupTotal).toLocaleString('th-TH', { maximumFractionDigits: 0 })}`;
   const suspended = profile.status === 'suspended';
   $('acc-status').innerHTML = `<span class="w-2 h-2 rounded-full ${suspended ? 'bg-launchOrange' : 'bg-emerald-500'}"></span>${suspended ? 'ถูกระงับการใช้งาน' : 'บัญชีปกติ'}`;
   const contact = [profile.facebook && `Facebook: ${profile.facebook}`, profile.contactEmail && `อีเมล: ${profile.contactEmail}`].filter(Boolean).join(' · ');
@@ -47,13 +48,14 @@ getDocs(collection(db, 'products')).then(s => { s.forEach(d => d.data().image &&
 function renderRank() {
   const el = $('acc-rank'); if (!el || !user) return;
   const tb = rankTable(ST), at = rankOf(profile, ST), total = num(profile.topupTotal);
+  const rn = $('acc-rank-name'); if (rn) rn.textContent = at >= 0 && tb[at] ? tb[at].name : 'ยังไม่มี';
   const next = tb.slice(at + 1).find(r => r.min > 0 && r.min > total);
   const perks = (r) => [r.discount && `ลด ${r.discount}% ทุกออเดอร์`, r.bonus && `โบนัสเติมเงิน +${r.bonus}%`].filter(Boolean).join(' · ') || 'ป้ายยศ';
   const pct = next ? Math.min(100, Math.round(total / next.min * 100)) : 100;
   el.innerHTML = `<div class="flex items-center gap-4">
       <span class="shrink-0 w-16 h-16 rounded-[20px] bg-mist flex items-center justify-center">${at < 0 ? `<span style="filter:grayscale(1);opacity:.35">${rankIcon(0, 'w-11 h-11')}</span>` : rankIcon(at, 'w-11 h-11')}</span>
       <div class="min-w-0 flex-1"><p class="text-xs text-slate">ยศสมาชิก</p><p class="text-2xl font-heading font-semibold leading-tight">${at < 0 ? 'ยังไม่มียศ' : RANKS[at].name}</p>
-        <p class="text-sm text-slate mt-0.5">${at < 0 ? 'ซื้อสินค้าครั้งแรกเพื่อรับยศ Bronze' : esc(perks(tb[at]))}</p></div></div>
+        <p class="text-sm text-slate mt-0.5">${at < 0 ? 'ซื้อของชิ้นแรก ปลดล็อกยศ Bronze ทันที' : esc(perks(tb[at]))}</p></div></div>
     ${at < 0 ? '' : `<div class="mt-4"><div class="flex justify-between text-xs text-slate"><span>ยอดเติมสะสม ฿${money(total, 0)}</span><span>${next ? `อีก ฿${money(next.min - total, 0)} เป็น ${next.name}` : 'ยศสูงสุดแล้ว'}</span></div>
       <div class="rank-bar mt-1.5"><span style="width:${pct}%"></span></div></div>`}
     <details class="mt-4"><summary class="text-sm text-appleBlue cursor-pointer">ดูยศทั้งหมด</summary>
@@ -73,7 +75,7 @@ function renderOrders() {
   $('sec-services').innerHTML = srv.length
     ? `<div id="push-card"></div><a href="queue.html" class="flex items-center justify-between soft-card px-5 py-3.5 text-[15px]"><span>ดูคิวงานทั้งหมดของร้าน</span>${icon('M9 6l6 6-6 6', 'w-4 h-4 text-steel', 2)}</a>` + srv.map(orderCardHtml).join('')
     : empty('ยังไม่มีงานบริการ', 'category.html', 'ดูบริการ');
-  if (srv.some(o => o.status !== 'completed' && o.status !== 'cancelled')) mountPushCard($('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ');
+  if (srv.some(o => o.status !== 'completed' && o.status !== 'cancelled')) mountPushCard($('push-card'), 'เปิดแจ้งเตือนไว้ ใกล้ถึงคิว ถึงคิว หรืองานเสร็จ มือถือเด้งบอกทันที');
 }
 
 function watch(u) {

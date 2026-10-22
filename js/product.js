@@ -83,7 +83,7 @@ function render() {
     + plain.map(t => `<div class="flex items-start gap-3"><span class="w-5 h-5 mt-0.5 rounded-full bg-appleBlue/10 text-appleBlue flex items-center justify-center shrink-0">${icon(ICONS.check, 'w-3 h-3', 3)}</span><span class="text-[15px]">${esc(t)}</span></div>`).join('');
   const lines = [[ICONS.queue, P.serviceHours], ...String(P.infoLines || '').split('\n').map(t => [null, t.trim()])].filter(l => l[1]);
   $('info-lines').innerHTML = lines.map(([ic, t]) => `<p class="flex gap-2 text-slate">${ic ? icon(ic, 'w-5 h-5 shrink-0', 1.8) : '<span>•</span>'}<span>${esc(t)}</span></p>`).join('');
-  $('product-howto').textContent = P.howTo || (srv ? 'ชำระเงินแล้วทีมงานจะทักไปทาง Facebook เพื่อนัดเวลา และอัปเดตสถานะในเมนูออเดอร์ของฉัน' : 'ชำระด้วยเครดิตรับไอดีทันทีในเมนูออเดอร์ของฉัน หากชำระผ่านพร้อมเพย์ ไอดีจะแสดงเมื่อแอดมินตรวจสอบสลิปแล้ว');
+  $('product-howto').textContent = P.howTo || (srv ? 'จ่ายเสร็จ ทีมจะทัก Facebook ไปนัดเวลา สถานะงานดูได้ที่ "ออเดอร์ของฉัน"' : 'จ่ายด้วยเครดิต ไอดีขึ้นใน "ออเดอร์ของฉัน" ทันที ถ้าจ่ายพร้อมเพย์ ไอดีขึ้นหลังสลิปผ่าน');
   $('product-warranty').textContent = P.warrantyText || 'หากมีปัญหาเกี่ยวกับสินค้า ติดต่อทีมงานพร้อมเลขที่ออเดอร์';
 
   // buyer fields: services ask Facebook instead of e-mail
@@ -191,7 +191,7 @@ function renderFarmModes() {
   const self = srv && modes.length && farmMode === 'self';
   $('service-extra-fields').classList.toggle('hidden', !(srv && !self));
   $('self-fields').classList.toggle('hidden', !self);
-  $('farm-mode-note').textContent = farmMode === 'self' ? 'คุณเข้าเกมไปยืนเอง ร้านจะนัดเวลาและเชิญเข้าห้อง ไม่ต้องให้รหัสผ่าน' : farmMode === 'with_id' ? 'ให้อีเมลและรหัสผ่านเกม ทีมงานล็อกอินไปทำให้ และลบรหัสเมื่องานเสร็จ' : '';
+  $('farm-mode-note').textContent = farmMode === 'self' ? 'คุณล็อกอินเล่นเอง ทีมนัดเวลาแล้วชวนเข้าห้อง ไม่ต้องให้รหัส' : farmMode === 'with_id' ? 'ฝากอีเมลกับรหัสเกม ทีมล็อกอินไปจัดให้ งานเสร็จลบรหัสทิ้งทันที' : '';
 }
 function selectFarmMode(key) { farmMode = key; renderFarmModes(); renderValuePacks(); recalc(); }
 
@@ -240,7 +240,7 @@ function updateWalletPanel() {
   const short = user && balance !== null && balance < fin;
   $('wallet-topup-link').classList.toggle('hidden', !short);
   $('wallet-note').textContent = !workerBase() ? 'ร้านยังไม่เปิดชำระด้วยเครดิต กรุณาเลือกพร้อมเพย์หรือ TrueMoney'
-    : isSrv() ? 'ตัดเงินจากเครดิตทันที งานเข้าคิวให้ทีมงานเริ่มทำได้เลย' : 'ตัดเงินจากเครดิตทันที ไอดีเกมแสดงให้เห็นทันทีหลังชำระ';
+    : isSrv() ? 'ตัดเครดิตทันที งานเข้าคิวให้ทีมลุยได้เลย' : 'ตัดเครดิตทันที จ่ายเสร็จไอดีขึ้นให้เห็นเลย';
 }
 function updateButton() {
   const btn = $('btn-confirm-product-order');
@@ -452,7 +452,7 @@ async function payWithWallet(b) {
     const res = await callWorker('/buy', buyBody(b));
     $('game-password').value = '';
     showSuccess(res.order, true);
-    toast(res.order?.status === 'completed' ? 'ชำระเงินสำเร็จ รับไอดีได้เลย' : 'ชำระเงินสำเร็จ งานเข้าคิวแล้ว', 'success');
+    toast(res.order?.status === 'completed' ? 'จ่ายผ่านแล้ว ไอดีพร้อมลุย!' : 'จ่ายผ่านแล้ว งานเข้าคิวเรียบร้อย', 'success');
     P.stock = num(P.stock) - qty;
   } catch (e) {
     console.warn('buy:', e);
@@ -506,7 +506,7 @@ function showSuccess(order, paid) {
   card.classList.remove('hidden');
   $('checkout-card').classList.add('hidden');
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  if (srv && paid) mountPushCard($('push-card'), 'รับแจ้งเตือนเข้ามือถือเมื่อใกล้ถึงคิว ถึงคิว และงานเสร็จ');
+  if (srv && paid) mountPushCard($('push-card'), 'เปิดแจ้งเตือนไว้ ใกล้ถึงคิว ถึงคิว หรืองานเสร็จ มือถือเด้งบอกทันที');
 }
 
 function scrollToCheckoutForm() { $('checkout-anchor-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }

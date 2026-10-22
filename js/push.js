@@ -21,13 +21,16 @@ export async function enablePush() {
   const uid = auth.currentUser?.uid; if (!uid) throw new Error('เข้าสู่ระบบก่อน');
   if (!pushSupported()) throw new Error(pushHint());
   if ((await Notification.requestPermission()) !== 'granted') throw new Error('ไม่ได้รับอนุญาตให้แจ้งเตือน เปิดสิทธิ์ในการตั้งค่าเบราว์เซอร์');
-  const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }); await navigator.serviceWorker.ready;
+  let reg;
+  try { reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }); await navigator.serviceWorker.ready; }
+  catch (e) { throw new Error('ลงทะเบียนตัวรับแจ้งเตือนไม่ได้: ไฟล์ /sw.js ยังไม่ถูกอัปโหลดขึ้นเว็บ (แจ้งแอดมิน)'); }
   const { key } = await callWorker('/push/key', {});
   const raw = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - key.length % 4) % 4)), c => c.charCodeAt(0));
   let s = await reg.pushManager.getSubscription();
   const same = (a) => a && btoa(String.fromCharCode(...new Uint8Array(a))) === btoa(String.fromCharCode(...raw));
   if (s && !same(s.options.applicationServerKey)) { await s.unsubscribe(); s = null; } // the shop key changed
-  s ||= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+  try { s ||= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw }); }
+  catch (e) { throw new Error(/permission|denied/i.test(String(e)) ? 'เบราว์เซอร์บล็อกการแจ้งเตือน เปิดสิทธิ์ในการตั้งค่าเว็บไซต์แล้วลองใหม่' : 'ผู้ให้บริการแจ้งเตือนของเบราว์เซอร์ไม่ตอบ (' + (e.name || 'error') + ') ลองปิดแล้วเปิดเบราว์เซอร์ใหม่ หรือเปลี่ยนเครือข่าย'); }
   const j = s.toJSON(), id = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(j.endpoint)))].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
   await setDoc(doc(db, 'push_subs', id), { uid, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, createdAt: serverTimestamp() });
 }
@@ -38,7 +41,10 @@ export async function mountPushCard(el, text) {
   el.innerHTML = `<div class="soft-card px-5 py-4 flex items-center gap-3"><span class="flex-1 text-[14px]">${esc(text)}</span><button type="button" class="apple-pricing-pill px-4 py-2 text-[14px] shrink-0">เปิดแจ้งเตือน</button></div>`;
   el.querySelector('button').onclick = async (e) => {
     e.target.disabled = true;
-    try { await enablePush(); el.innerHTML = ''; toast('เปิดแจ้งเตือนแล้ว', 'success'); }
+    try {
+      await enablePush(); el.innerHTML = '';
+      await callWorker('/push/test', {}).then(() => toast('เปิดแจ้งเตือนแล้ว ส่งข้อความทดสอบให้แล้ว', 'success')).catch(() => toast('เปิดแจ้งเตือนแล้ว', 'success'));
+    }
     catch (err) { toast(err.message || 'เปิดแจ้งเตือนไม่สำเร็จ', 'error'); e.target.disabled = false; }
   };
 }

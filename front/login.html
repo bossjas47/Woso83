@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ASTRAPHEX HUB">
   <meta property="og:title" content="เข้าสู่ระบบ — ASTRAPHEX HUB">
-  <meta property="og:description" content="ศูนย์รวมไอดีเกมและบริการโยนของ Arena Breakout เติมเงินง่าย ติดตามออเดอร์ได้ทุกขั้นตอน">
+  <meta property="og:description" content="ไอดี Arena Breakout พร้อมลุย และบริการโยนของถึงมือ เติมปุ๊บซื้อปั๊บ เช็กออเดอร์ได้ตลอด">
   <meta property="og:url" content="https://astraphex.panderx.xyz/front/login.html">
   <meta property="og:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <meta property="og:image:width" content="1200">
@@ -22,7 +22,11 @@
   <meta name="twitter:image" content="https://astraphex.panderx.xyz/assets/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
   <link rel="stylesheet" href="../css/tw.css">
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/transition.css">
@@ -45,7 +49,7 @@
         </div>
 
         <form id="form-login" class="space-y-4" novalidate>
-          <div><h1 class="text-2xl font-heading font-semibold">เข้าสู่ระบบ</h1><p class="text-slate text-sm mt-1">ยินดีต้อนรับกลับสู่ ASTRAPHEX HUB</p></div>
+          <div><h1 class="text-2xl font-heading font-semibold">เข้าสู่ระบบ</h1><p class="text-slate text-sm mt-1">กลับมาแล้ว! ลุยต่อกัน</p></div>
           <div><label for="login-username" class="block text-sm font-medium mb-1.5">ชื่อผู้ใช้</label>
             <input id="login-username" type="text" required autocomplete="username" placeholder="ชื่อผู้ใช้ของคุณ" class="apple-input w-full px-4 py-3"></div>
           <div><label for="login-password" class="block text-sm font-medium mb-1.5">รหัสผ่าน</label>
@@ -56,7 +60,7 @@
         </form>
 
         <form id="form-register" class="space-y-4 hidden" novalidate>
-          <div><h1 class="text-2xl font-heading font-semibold">สมัครสมาชิก</h1><p class="text-slate text-sm mt-1">สร้างบัญชีเพื่อเติมเงิน ซื้อไอดี และติดตามคิวงาน</p></div>
+          <div><h1 class="text-2xl font-heading font-semibold">สมัครสมาชิก</h1><p class="text-slate text-sm mt-1">สมัครครั้งเดียว เติมเงิน ซื้อไอดี และตามคิวงานได้ครบ</p></div>
           <div><label for="register-username" class="block text-sm font-medium mb-1.5">ชื่อผู้ใช้</label>
             <input id="register-username" type="text" required maxlength="24" autocomplete="username" placeholder="3–24 ตัวอักษร ไทยหรืออังกฤษ" class="apple-input w-full px-4 py-3"></div>
           <div><label for="register-facebook" class="block text-sm font-medium mb-1.5">ชื่อหรือลิงก์ Facebook <span class="text-slate font-normal">(ไม่บังคับ)</span></label>

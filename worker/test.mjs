@@ -372,5 +372,5 @@ assert.strictEqual(outsiderView.http, 403);
 console.log('ok  team: invited members can read shared credentials; non-members are denied');
 
 w = world(); const vr = await handle(await req({}, undefined, '/nope'), env, { fetchFn: w.fetchFn, now: NOW });
-assert.strictEqual(vr.headers.get('x-astraphex-worker'), '8'); console.log('ok  version header for old-deployment detection');
+assert.strictEqual(vr.headers.get('x-astraphex-worker'), '9'); console.log('ok  version header for old-deployment detection');
 console.log('worker: all checks passed');
