@@ -1,4 +1,4 @@
-/* ASTRAPHEX HUB — loot boxes (front/box.html) and their mini-games (js/minigame.js).
+/* Nugget Hub — loot boxes (front/box.html) and their mini-games (js/minigame.js).
    Plain CSS on purpose: the page needs no rebuild of css/tw.css. Apple style: white/#f5f5f7, flat, no gradients or shadows. */
 
 .bx-r-common { --rc: #707070; } .bx-r-rare { --rc: #1d1d1f; }

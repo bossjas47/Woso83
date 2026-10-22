@@ -3,7 +3,7 @@ import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/fireb
 
 /** Shared helpers for every customer page (toast, money, copy, images, store settings, worker calls). */
 
-export const SHOP_NAME = 'ASTRAPHEX HUB';
+export const SHOP_NAME = 'Nugget Hub';
 export const ROOT = new URL('../', import.meta.url).href; // site root, works from / and /front/
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -14,7 +14,7 @@ export const tsDate = (v) => (v?.toDate ? v.toDate() : (v ? new Date(v) : null))
 export const fmtDate = (v) => { const d = tsDate(v); return d && !isNaN(d) ? d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) : '-'; };
 
 // ---------- Images ----------
-export const FALLBACK_IMAGE = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+export const FALLBACK_IMAGE = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 /** Turn what admins paste into a loadable picture URL (adds https://, Google Drive / Imgur page links -> image links). */
 export function fixImageUrl(u) {
   let s = String(u ?? '').trim();
@@ -81,8 +81,9 @@ export function toast(message, kind = 'info') {
   el.lastChild.textContent = message;
   host.append(el);
   requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 3200);
-  while (host.children.length > 3) host.firstChild.remove();
+  const hud = document.body.classList.contains('admin-page'); // back office: centred HUD, shorter so it doesn't cover the form
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, hud && kind === 'success' ? 1800 : 3200);
+  while (host.children.length > (hud ? 1 : 3)) host.firstChild.remove();
 }
 window.triggerToast = (m, warn) => toast(m, warn === true ? 'error' : 'info');
 window.showToast = toast;
@@ -233,7 +234,7 @@ export const ICONS = {
   plus: 'M12 5v14M5 12h14',
   tools: 'M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2.4-.6-.6-2.4 2.6-2.6z',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
-  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  grid: 'M4 7h16M4 12h16M4 17h16', // "เพิ่มเติม" menu
   user: 'M12 12a4 4 0 100-8 4 4 0 000 8zm-8 9a8 8 0 0116 0',
   queue: 'M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z',
   orders: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',

@@ -10,7 +10,7 @@ import { rankTable, rankOf, rankBadge, rankIcon } from "./rank.js";
 import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /**
- * ASTRAPHEX HUB — back office. The real gate is the Firebase custom claim admin:true (firestore.rules);
+ * Nugget Hub — back office. The real gate is the Firebase custom claim admin:true (firestore.rules);
  * the PIN is only a screen lock. Sections: products & stock, categories, orders, top-ups & promotions,
  * users, promo codes (js/back/code.js), settings.
  */

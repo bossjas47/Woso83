@@ -1,4 +1,4 @@
-// ASTRAPHEX HUB — Cloudflare Worker (server side of the shop). All routes take POST + the user's Firebase ID token.
+// Nugget Hub — Cloudflare Worker (server side of the shop). All routes take POST + the user's Firebase ID token.
 //   POST /            (or /slip)   top-up slip check with EasySlip, credits the wallet           (any signed-in user)
 //   POST /angpao                   TrueMoney gift voucher: redeem, credit (+promo), optional buy
 //   POST /buy                      pay with wallet credit: price, promo, balance, stock in one transaction;
@@ -22,7 +22,7 @@
 // The Discord webhook URL lives in Firestore system_private/secrets.discordWebhook (admin > settings).
 const MIN = 20, MAX = 50000, THROTTLE_MS = 10000, MAX_SLIP_AGE_MS = 3 * 864e5;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
-const SHOP = 'ASTRAPHEX HUB';
+const SHOP = 'Nugget Hub';
 export const WORKER_VERSION = '9';
 
 const enc = new TextEncoder();
@@ -998,7 +998,7 @@ export async function routePushQueue({ user, data, fs, fetchFn, now }) {
   return [{ ok: true, sent }];
 }
 const routePushTest = async ({ user, fs, fetchFn, now }) => {
-  const sent = await pushTo(fs, fetchFn, user.uid, { title: 'ASTRAPHEX HUB', body: 'แจ้งเตือนทำงานแล้ว 🎉', url: '/front/vault.html' }, now);
+  const sent = await pushTo(fs, fetchFn, user.uid, { title: 'Nugget Hub', body: 'แจ้งเตือนทำงานแล้ว 🎉', url: '/front/vault.html' }, now);
   return sent ? [{ ok: true, sent }] : [{ error: 'ไม่พบเครื่องที่เปิดแจ้งเตือน กด "เปิดแจ้งเตือนบนเครื่องนี้" ก่อน' }, 404];
 };
 

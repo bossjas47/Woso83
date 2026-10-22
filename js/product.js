@@ -20,7 +20,7 @@ import { readProducts, writeProducts } from "./products-cache.js";
  *  - พร้อมเพย์ (slip image): the Worker checks the slip with the slip API, credits the price and buys at once (no manual approval).
  *  - ซองอั่งเปา TrueMoney: redeemed by the Worker, then bought with that credit.
  */
-const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 let allProducts = [], CATS = [], P = null;
 let gallery = [], gIdx = 0;
 let qty = 1, farmMode = '';
@@ -56,7 +56,7 @@ async function load() {
 function render() {
   const srv = isSrv();
   const unit = unitOf(P, CATS);
-  document.title = `${P.name} — ASTRAPHEX HUB`;
+  document.title = `${P.name} — Nugget Hub`;
   $('breadcrumb-product-name').textContent = P.name;
   $('breadcrumb-category').textContent = categoryOf(CATS, P.category)?.name || (srv ? 'งานบริการ' : 'ไอดีเกม');
   $('product-title-heading').textContent = P.name;

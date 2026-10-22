@@ -10,7 +10,7 @@ import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProdu
  * "ตัวกรอง" dropdown with category / budget / sort), category cards while browsing, product grid,
  * skeleton while loading and empty states. Products without a category still show (as "สินค้าอื่น ๆ").
  */
-export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 
 const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', settings: {} };
 let opts = { urlSync: false, onProducts: null };

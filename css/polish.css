@@ -1,4 +1,4 @@
-/* ASTRAPHEX HUB — back-office orders + account wallet card. Plain CSS (tw.css is precompiled). Apple style: flat, no gradients, no shadows. */
+/* Nugget Hub — back-office orders + account wallet card. Plain CSS (tw.css is precompiled). Apple style: flat, no gradients, no shadows. */
 
 /* ---------- back office: orders ---------- */
 .ord-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
@@ -82,3 +82,27 @@
 .hq-row { padding-bottom: 12px; border-bottom: 1px solid #e6e6e8; }
 .hq-row:last-child { border-bottom: 0; padding-bottom: 0; }
 @media (max-width: 639px) { .hq-wide { grid-column: span 2 / span 2; } }
+
+/* Back-office toast = centred HUD (body.admin-page). One at a time; icon drawn in CSS. */
+.admin-page .toast-host { top: 50%; transform: translate(-50%, -50%); }
+.admin-page .toast { flex-direction: column; gap: 12px; min-width: 200px; max-width: 280px; padding: 26px 24px 22px; border-radius: 28px; text-align: center; font-size: 15px; font-weight: 500; line-height: 1.35; background: rgba(29,29,31,.86); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); transform: scale(.92); }
+.admin-page .toast.show { transform: none; }
+.admin-page .toast-dot { position: relative; width: 48px; height: 48px; }
+.admin-page .toast-dot::after { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font: 600 26px/1 system-ui, sans-serif; content: 'i'; }
+.admin-page .toast.error .toast-dot::after { content: '!'; }
+.admin-page .toast.success .toast-dot::after { content: ''; inset: auto; left: 18px; top: 10px; width: 12px; height: 22px; border: solid #fff; border-width: 0 3.5px 3.5px 0; border-radius: 1px; transform: rotate(45deg); }
+.admin-page .toast.success.show .toast-dot { animation: hud-pop .45s cubic-bezier(.16,1,.3,1); }
+@keyframes hud-pop { from { transform: scale(.4); } }
+@media (prefers-reduced-motion: reduce) { .admin-page .toast, .admin-page .toast-dot { animation: none !important; transition: opacity .2s !important; } }
+
+/* Back office: mono font made Thai text/inputs look off; keep one family, aligned digits */
+.admin-page .font-mono, .admin-page input, .admin-page textarea, .admin-page select { font-family: inherit; font-variant-numeric: tabular-nums; }
+
+/* Back office checkbox: 22px rounded square, blue fill + white tick when on */
+.admin-page input[type=checkbox]:not(.sr-only) { -webkit-appearance: none; appearance: none; flex-shrink: 0; position: relative; width: 22px; height: 22px; margin: 0; border-radius: 7px; background: #fff; box-shadow: inset 0 0 0 1.5px #86868b; cursor: pointer; transition: background-color .18s, box-shadow .18s; }
+.admin-page input[type=checkbox]:not(.sr-only)::after { content: ''; position: absolute; left: 7.5px; top: 3.5px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) scale(0); transition: transform .2s cubic-bezier(.16,1,.3,1); }
+.admin-page input[type=checkbox]:not(.sr-only):checked { background: #0071e3; box-shadow: none; }
+.admin-page input[type=checkbox]:not(.sr-only):checked::after { transform: rotate(45deg) scale(1); }
+.admin-page input[type=checkbox]:not(.sr-only):focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+.admin-page input[type=checkbox]:not(.sr-only):disabled { background: #e6e6e8; cursor: not-allowed; }
+.admin-page label:has(> input[type=checkbox]) { gap: 10px; cursor: pointer; }

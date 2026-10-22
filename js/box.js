@@ -44,7 +44,7 @@ function renderBoxes() {
   const b = list.find(x => x.id === FOCUS);
   $('box-head')?.classList.toggle('hidden', !!b);
   if (b) {
-    document.title = `${b.name} — ASTRAPHEX HUB`;
+    document.title = `${b.name} — Nugget Hub`;
     const others = list.filter(x => x.id !== b.id);
     wrap.innerHTML = `<section class="bx-hero">
         <div class="bx-hero-art">${artHtml(b)}</div>

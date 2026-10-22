@@ -1,4 +1,4 @@
-/* ASTRAPHEX HUB — mini-games that "open" a loot box.
+/* Nugget Hub — mini-games that "open" a loot box.
  * The prize is already decided by the Worker before any game starts, so skill never changes the result:
  * a game only needs to finish. Each game returns { done: Promise, skip() }. */
 
@@ -150,7 +150,7 @@ function scratch({ arena, say, end, cleanups, isDone }) {
   const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
   ctx.fillStyle = '#d6d6d6'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#86868b'; ctx.font = '600 14px sans-serif'; ctx.textAlign = 'center';
-  for (let y = 24; y < H; y += 34) for (let x = (y / 34) % 2 ? 40 : 90; x < W; x += 100) ctx.fillText('ASTRAPHEX', x, y);
+  for (let y = 24; y < H; y += 34) for (let x = (y / 34) % 2 ? 40 : 90; x < W; x += 100) ctx.fillText('NUGGET', x, y);
   ctx.globalCompositeOperation = 'destination-out';
   let drawing = false, lx = 0, ly = 0, finished = false, counter = 0;
   const pos = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };

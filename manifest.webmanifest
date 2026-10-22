@@ -1,6 +1,6 @@
 {
-  "name": "ASTRAPHEX HUB",
-  "short_name": "ASTRAPHEX",
+  "name": "Nugget Hub",
+  "short_name": "Nugget Hub",
   "start_url": "/front/vault.html",
   "scope": "/",
   "display": "standalone",

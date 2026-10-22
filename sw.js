@@ -2,7 +2,7 @@
 self.addEventListener('push', (e) => {
   let m = {};
   try { m = e.data ? e.data.json() : {}; } catch (_) { m = { body: e.data?.text() }; }
-  e.waitUntil(self.registration.showNotification(m.title || 'ASTRAPHEX HUB', { body: m.body || '', icon: '/assets/logo-icon-96.png', badge: '/assets/logo-icon-96.png', tag: m.tag, renotify: !!m.tag, data: { url: m.url || '/' } }));
+  e.waitUntil(self.registration.showNotification(m.title || 'Nugget Hub', { body: m.body || '', icon: '/assets/logo-icon-96.png', badge: '/assets/logo-icon-96.png', tag: m.tag, renotify: !!m.tag, data: { url: m.url || '/' } }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();

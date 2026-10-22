@@ -7,7 +7,7 @@ import { rankDiscount } from "./rank.js";
 import { saveCart } from "./cart-store.js";
 
 /** Cart page: game IDs and services, paid with credit through the Worker (/cart). Buyer details are asked here, never stored in the cart. */
-const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=ASTRAPHEX+HUB';
+const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 let prof = null, user = null, items = [], PRODUCTS = {}, CATS = [], balance = null, ready = false, paying = false;
 const form = { facebook: '' };            // typed buyer details survive re-renders (line key -> fields)
 const root = () => document.getElementById('cart-root');

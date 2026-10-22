@@ -55,7 +55,7 @@ function renderHeader() {
     <nav class="max-w-[1200px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4" aria-label="เมนูหลัก">
       <a href="${L.home}" class="flex items-center gap-2.5 shrink-0" aria-label="${SHOP_NAME} หน้าหลัก">
         <img src="${LOGO}" alt="" width="34" height="34" class="w-[34px] h-[34px] object-contain">
-        <span class="font-heading font-bold text-[17px] tracking-tight text-ink">ASTRAPHEX <span class="text-brandTeal">HUB</span></span>
+        <span class="font-heading font-bold text-[17px] tracking-tight text-ink">Nugget <span class="text-brandTeal">Hub</span></span>
       </a>
       <div class="hidden md:flex items-center gap-7 text-[14px]">
         ${navItem('home', 'หน้าหลัก', L.home)}
@@ -95,7 +95,7 @@ function renderFooter() {
   f.innerHTML = `
     <div class="max-w-[1200px] mx-auto px-4 sm:px-6 py-12 grid gap-10 md:grid-cols-3 text-sm">
       <div>
-        <div class="flex items-center gap-2.5"><img src="${LOGO}" alt="" width="40" height="40" class="w-10 h-10 object-contain"><span class="font-heading font-bold text-[19px] tracking-tight text-ink">ASTRAPHEX <span class="text-brandTeal">HUB</span></span></div>
+        <div class="flex items-center gap-2.5"><img src="${LOGO}" alt="" width="40" height="40" class="w-10 h-10 object-contain"><span class="font-heading font-bold text-[19px] tracking-tight text-ink">Nugget <span class="text-brandTeal">Hub</span></span></div>
         <p class="text-slate mt-4 leading-relaxed">ไอดีและบริการ Arena Breakout ของคนเล่นจริง เช็กได้ทุกออเดอร์</p>
       </div>
       <div>
