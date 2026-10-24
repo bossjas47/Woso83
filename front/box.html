@@ -45,8 +45,8 @@
       <h1 class="font-heading font-semibold text-3xl sm:text-4xl">กล่องสุ่ม</h1>
       <p class="text-slate mt-2">เลือกกล่องที่อยากเสี่ยง ทุกกล่องโชว์เรตดรอปจริง</p>
     </div>
-    <div id="box-balance" class="bx-chip hidden mb-4"></div>
-    <div id="box-winners" class="bx-winners mb-6"></div>
+    <div id="box-balance" class="bx-chip mb-4" style="display:none"></div>
+    <div id="box-winners" class="bx-winners mb-6" style="display:none"></div>
     <div id="box-list"><div class="skeleton h-96 !rounded-[28px]"></div></div>
     <section class="mt-12">
       <h2 class="font-heading font-semibold text-2xl">ประวัติการเปิดของฉัน</h2>
@@ -54,15 +54,15 @@
     </section>
   </main>
 
-  <div id="bx-stage" class="bx-stage" role="dialog" aria-modal="true" aria-label="เปิดกล่องสุ่ม">
-    <div class="bx-top"><span class="bx-title" id="bx-stage-title"></span><div class="bx-top-btns"><button type="button" class="bx-ghost" id="bx-mute" aria-label="เปิด/ปิดเสียง">🔊</button><button type="button" class="bx-ghost" id="bx-skip">ข้าม</button><button type="button" class="bx-ghost hidden" id="bx-close">ปิด</button></div></div>
-    <div class="bx-arena"><div id="bx-arena" style="display:contents"></div><p class="bx-msg" id="bx-msg"></p></div>
+  <div id="bx-stage" class="bx-stage" role="dialog" aria-modal="true" aria-label="เปิดกล่องสุ่ม" tabindex="-1">
+    <div class="bx-top"><span class="bx-title" id="bx-stage-title"></span><div class="bx-top-btns"><button type="button" class="bx-ghost bx-icon-btn" id="bx-mute" aria-label="ปิดเสียง"></button><button type="button" class="bx-ghost" id="bx-skip" style="display:none">ข้าม</button><button type="button" class="bx-ghost" id="bx-close" style="display:none">ปิด</button></div></div>
+    <div class="bx-arena"><div id="bx-arena" style="display:contents"></div><p class="bx-msg" id="bx-msg" aria-live="polite"></p></div>
     <div class="bx-reveal" id="bx-reveal"></div>
   </div>
 
   <div id="box-claim-modal" class="modal" role="dialog" aria-modal="true" aria-label="รับรางวัลงานบริการ">
     <div class="modal-card">
-      <button type="button" onclick="closeModal('box-claim-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
+      <button type="button" id="claim-close" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate flex items-center justify-center"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <h3 class="text-xl font-heading font-semibold">รับรางวัลงานบริการ</h3>
       <p id="claim-info" class="text-sm text-slate mt-1"></p>
       <form id="claim-form" class="space-y-3 mt-5 text-sm">
