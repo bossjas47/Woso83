@@ -156,6 +156,9 @@ export async function callWorker(path, body, opts = {}) {
   // An older Worker answers every path as a slip check ("ยอดเงินไม่ถูกต้อง"). Say what is really wrong instead.
   if (path !== '/' && path !== '/slip' && !res.headers.get('x-astraphex-worker'))
     throw Object.assign(new Error('ระบบหลังร้านยังไม่อัปเดต (Worker เวอร์ชันเก่า) กรุณาแจ้งแอดมิน'), { status: res.status, code: 'old-worker', data });
+  // The Worker answers { error: 'not found' } (404) for a path it does not have: it is deployed from an older slip-worker.js
+  if (res.status === 404 && data.error === 'not found')
+    throw Object.assign(new Error(`Worker บน Cloudflare ยังไม่มีเส้นทาง ${path} (เป็นเวอร์ชันเก่า) กรุณาแจ้งแอดมินให้ deploy worker/slip-worker.js ใหม่`), { status: 404, code: 'old-worker', data });
   if (!res.ok) throw Object.assign(new Error(data.error || data.message || 'ทำรายการไม่สำเร็จ'), { status: res.status, data });
   return data;
 }

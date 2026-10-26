@@ -13,6 +13,9 @@
 //   POST /box/claim                give the contact or game login for a won service prize; creates the queue order
 //   POST /admin/user               change a user's login name, password, admin claim, disabled  (admin claim only)
 //   POST /ammo/quote, /ammo/pay    ammo bundles (ไก่กระสุน): pick IDs whose ammo adds up to the order, then pay (guests allowed per product)
+//   POST /ammo/extend              +5 min on a live ammo hold (once)
+//   POST /box/gift, /box/gift/cancel   gift tickets for loot boxes (pay now, receiver opens free with giftCode)
+//   POST /ammo/claim, /admin/claim  member reports a bad ammo ID within 24 h; admin refunds the order as credit or rejects
 //   POST /notify                   Discord message for a new order / top-up request ({kind:'test'} = admin only)
 // Variables (Worker > Settings > Variables and Secrets):
 //   SERVICE_ACCOUNT  secret  the Firebase service-account JSON, pasted as text
@@ -49,7 +52,7 @@ async function verifyIdTokenInner(token, projectId, fetchFn, now) {
   const head = JSON.parse(new TextDecoder().decode(unb64u(h)));
   const claims = JSON.parse(new TextDecoder().decode(unb64u(p)));
   if (head.alg !== 'RS256') throw fail('unauthenticated', 'โทเคนไม่ถูกต้อง');
-  if (now - jwksCache.at > 36e5 || !jwksCache.keys.some((k) => k.kid === head.kid)) {
+  if (now - jwksCache.at > 36e5 || (now - jwksCache.at > 60e3 && !jwksCache.keys.some((k) => k.kid === head.kid))) { // a forged unknown kid can trigger at most one refetch a minute
     jwksCache = { at: now, keys: (await (await fetchFn(JWKS_URL)).json()).keys || [] };
   }
   const jwk = jwksCache.keys.find((k) => k.kid === head.kid);
@@ -154,9 +157,11 @@ export function bestTopupPromo(promos, amount) {
   }
   return { promo: best, bonus };
 }
-export function evaluatePromo(promo, product, subtotal) {
+export function evaluatePromo(promo, product, subtotal, uid = '', now = Date.now()) {
   const value = num(promo?.value);
   if (!promo || promo.active === false || !['fixed', 'percent'].includes(promo.type) || !(value > 0)) return { ok: false, message: 'ไม่พบโค้ดส่วนลดนี้ หรือโค้ดหมดอายุ' };
+  if (promo.onlyUid && promo.onlyUid !== uid) return { ok: false, message: 'โค้ดนี้ใช้ได้เฉพาะบัญชีที่ได้รับสิทธิ์' };
+  if (num(promo.expiresAt) > 0 && num(promo.expiresAt) < now) return { ok: false, message: 'โค้ดนี้หมดอายุแล้ว' };
   const quota = num(promo.maxTotalUses);
   if (quota > 0 && num(promo.usedCount) >= quota) return { ok: false, message: 'โค้ดนี้ถูกใช้ครบตามจำนวนแล้ว' };
   const scope = promo.appliesTo || 'all';
@@ -236,7 +241,24 @@ export async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
 
   let check;
   try { check = await checkSlip({ fetchFn, key: env.EASYSLIP_KEY, receiver: env.RECEIVER_MATCH, payload, amount, now }); }
-  catch (e) { console.warn('slip api:', e); return [{ status: 'rejected', message: 'ระบบตรวจสลิปขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่' }]; }
+  catch (e) {
+    console.warn('slip api:', e);
+    if (buy) return [{ status: 'rejected', message: 'ระบบตรวจสลิปขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่' }];
+    // The slip checker is down: park the slip as a pending top-up for the admin to approve by hand (same payload twice = same slip, never queued twice).
+    if ((await fs.query('', 'topup_transactions', [['uid', 'EQUAL', user.uid], ['status', 'EQUAL', 'pending']])).length >= 3) return [{ status: 'rejected', message: 'มีสลิปรอแอดมินตรวจครบ 3 รายการแล้ว รอให้ตรวจก่อนค่อยส่งเพิ่ม' }];
+    const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload)))].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40), qid = randomId();
+    try {
+      await fs.commit([
+        { update: { name: fs.name(`slip_refs/q_${h}`), fields: fs.fields({ uid: user.uid, amount }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } },
+        { update: { name: fs.name(`topup_transactions/${qid}`), fields: fs.fields({ txnId: 'TOPUP-' + qid.slice(0, 8).toUpperCase(), uid: user.uid, email: user.email, amount, bonusCredit: 0, finalCredit: amount, paymentMethod: 'promptpay', proofRef: 'ระบบตรวจสลิปล่ม · ตรวจมือ', proofPayload: payload, status: 'pending', verifiedVia: 'manual_queue' }) }, updateTransforms: [stamp('createdAt')] }
+      ]);
+    } catch (e2) {
+      if (e2.code === 'already-exists') return [{ status: 'rejected', message: 'สลิปนี้ส่งให้แอดมินตรวจแล้ว ไม่ต้องส่งซ้ำ' }];
+      throw e2;
+    }
+    later(discord(fs, fetchFn, { title: '⚠️ ระบบตรวจสลิปล่ม · สลิปรออนุมัติมือ', description: `${user.name || user.email} แจ้งเติม ฿${money(amount)} ตรวจยอดเข้าบัญชีแล้วอนุมัติในหน้าเติมเงิน` }));
+    return [{ status: 'queued', message: 'ระบบตรวจสลิปอัตโนมัติขัดข้อง ส่งสลิปให้แอดมินตรวจแล้ว เครดิตเข้าเมื่อแอดมินอนุมัติ (ดูสถานะในรายการเติมเงิน) ไม่ต้องส่งซ้ำ' }];
+  }
   if (!check.ok) return [{ status: 'rejected', message: check.message }];
 
   const promos = (await fs.query('', 'topup_promos')).map(d => ({ id: d.id, ...d.data }));
@@ -274,7 +296,7 @@ function validateBuy(d) {
   return '';
 }
 
-async function buyOnce({ user, d, fs, now }) {
+async function buyOnce({ user, d, fs, now, combo = 0, override = 0 }) {
   const tx = await fs.begin();
   let committed = false;
   try {
@@ -282,6 +304,8 @@ async function buyOnce({ user, d, fs, now }) {
     if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
     if (!product) return [{ error: 'ไม่พบสินค้านี้' }, 404];
     product.id = d.productId;
+    if (num(product.hideAt) > 0 && now >= num(product.hideAt) && !(override > 0)) return [{ error: 'สินค้านี้ปิดขายแล้ว' }, 409];
+    if (num(product.dropAt) > now && !(override > 0)) return [{ error: `ยังไม่เปิดขาย (เปิด ${new Date(num(product.dropAt) + 7 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')} เวลาไทย)` }, 409];
     const cat = product.category ? await fs.get(`categories/${product.category}`, tx) : null;
     const isService = product.productType === 'service' || cat?.kind === 'service' || String(product.category || '').startsWith('service');
     const qty = d.quantity;
@@ -289,7 +313,7 @@ async function buyOnce({ user, d, fs, now }) {
     if (qty < minQty) return [{ error: `สั่งขั้นต่ำ ${minQty}` }, 400];
     const modes = Array.isArray(product.farmModes) ? product.farmModes : [];
     const mode = modes.find(m => m.key === d.farmMode) || (modes.length ? modes[0] : null);
-    const rate = mode ? num(mode.price) : isService ? (num(product.serviceRate) || num(product.price)) : num(product.price);
+    const rate = override > 0 ? override : mode ? num(mode.price) : isService ? (num(product.serviceRate) || num(product.price)) : num(product.price);
     if (!(rate > 0)) return [{ error: 'สินค้านี้ยังไม่ได้ตั้งราคา' }, 400];
     const self = isService && mode?.key === 'self';
     if (isService) {
@@ -303,7 +327,7 @@ async function buyOnce({ user, d, fs, now }) {
     if (d.promoCode) {
       code = String(d.promoCode);
       const promo = await fs.get(`promo_codes/${code}`, tx);
-      const r = evaluatePromo(promo, product, subtotal);
+      const r = evaluatePromo(promo, product, subtotal, user.uid, now);
       if (!r.ok) return [{ error: r.message }, 400];
       if (num(promo.maxPerUser) > 0) {
         const mine = (await fs.query('', 'orders', [['userId', 'EQUAL', user.uid], ['promoCode', 'EQUAL', code]], { tx })).filter(o => o.data.status !== 'cancelled');
@@ -311,16 +335,23 @@ async function buyOnce({ user, d, fs, now }) {
       }
       discount = r2(r.discount);
     }
-    const rank = rankOf(profile, await fs.get('system/settings')), rankDiscount = rank ? Math.round((subtotal - discount) * rank.discount) / 100 : 0;
-    const amount = r2(subtotal - discount - rankDiscount);
+    const rank = rankOf(profile, await fs.get('system/settings')), rankDiscount = rank && !(override > 0) ? Math.round((subtotal - discount) * rank.discount) / 100 : 0;
+    const comboDiscount = combo > 0 ? Math.round((subtotal - discount) * combo) / 100 : 0; // set by /cart only: ID + service in one cart (mirrored in js/cart.js)
+    const amount = r2(subtotal - discount - rankDiscount - comboDiscount);
     if (d.expectedAmount != null && Math.abs(num(d.expectedAmount) - amount) > 0.01) return [{ error: `ราคาเปลี่ยนเป็น ฿${money(amount)} กรุณาตรวจสอบอีกครั้ง` }, 409];
     const balance = r2(num(profile?.walletBalance));
     if (balance < amount) return [{ error: `เครดิตไม่พอ (คงเหลือ ฿${money(balance)})` }, 400];
 
-    let items = [];
+    let items = [], bundle = null;
     if (!isService) {
       items = await fs.query(`products/${d.productId}`, 'stock_items', [['status', 'EQUAL', 'available']], { limit: qty, tx });
       if (items.length < qty) return [{ error: items.length ? `ไอดีเหลือ ${items.length} ชิ้น` : 'สินค้าหมด' }, 409];
+      if (product.bundleAmmoId && num(product.bundleAmmo) > 0) { // bundle: the IDs come with about N กอง of ammo from another product, taken in the same transaction
+        const want = num(product.bundleAmmo) * qty, rows = (await fs.query(`products/${product.bundleAmmoId}`, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 400, tx })).filter(r => num(r.data.ammo) > 0);
+        const m = matchAmmo(rows.map(r => num(r.data.ammo)), want);
+        if (!m || Math.abs(m.total - want) > want * 0.1) return [{ error: 'ไก่กระสุนในแพ็กนี้เหลือไม่พอ ลองใหม่ภายหลังหรือติดต่อแอดมิน' }, 409];
+        bundle = { id: product.bundleAmmoId, rows: m.idx.map(i => rows[i]), total: m.total };
+      }
     } else if (num(product.stock) < qty) return [{ error: num(product.stock) > 0 ? `รับงานได้อีก ${num(product.stock)}` : 'คิวเต็มชั่วคราว' }, 409];
 
     const oid = randomId();
@@ -328,19 +359,20 @@ async function buyOnce({ user, d, fs, now }) {
     const unit = product.serviceUnit || cat?.unit || (isService ? 'กอง' : 'ไอดี');
     const packages = (Array.isArray(product.packages) ? product.packages : []).map(k => ({ qty: Math.floor(num(k.qty)), bonus: Math.floor(num(k.bonus)) })).filter(k => k.qty > 0).sort((a, b) => a.qty - b.qty);
     const bonusQty = isService ? packages.reduce((b, k) => (qty >= k.qty ? k.bonus : b), 0) : 0;
-    const accounts = items.map(it => ({ username: String(it.data.username || ''), password: String(it.data.password || ''), stockItemId: it.id }));
+    const accounts = [...items.map(it => ({ username: String(it.data.username || ''), password: String(it.data.password || ''), stockItemId: it.id })), ...(bundle ? bundle.rows.map(it => ({ username: String(it.data.username || ''), password: String(it.data.password || ''), stockItemId: it.id, ammo: num(it.data.ammo) })) : [])];
     const username = profile?.username || user.name || user.email.split('@')[0];
     const nowIso = new Date(now).toISOString();
     const order = {
       orderNumber, orderId: orderNumber, productId: d.productId,
       productName: mode && modes.length ? `${product.name} (${mode.label})` : String(product.name || ''),
       productType: isService ? 'service' : 'account', quantity: qty, bonusQty, receiveQty: qty + bonusQty, unit,
-      unitPrice: rate, subtotal, discount, promoCode: code, ...(rankDiscount ? { rankDiscount, rank: rank.name } : {}), amount, finalPrice: amount,
+      unitPrice: rate, subtotal, discount, promoCode: code, ...(rankDiscount ? { rankDiscount, rank: rank.name } : {}), ...(comboDiscount ? { comboDiscount } : {}), ...(isService ? {} : { pwRemindAt: now + 864e5, pwReminded: false }), amount, finalPrice: amount,
       paymentMethod: 'wallet', paymentProof: 'เครดิตในบัญชี', userEmail: user.email, userId: user.uid,
       ...(isService ? { buyerFacebook: str(d.buyerFacebook) } : str(d.buyerEmail) ? { buyerEmail: str(d.buyerEmail) } : {}),
       ...(self ? { buyerContact: str(d.buyerContact), playTime: str(d.playTime) } : {}),
       ...(isService && !self ? { gameEmail: str(d.gameEmail), gamePassword: String(d.gamePassword || '').slice(0, 200), buyerContact: str(d.gameEmail) } : {}),
       ...(modes.length ? { farmMode: mode.key } : {}),
+      ...(bundle ? { bundleAmmo: bundle.total } : {}),
       ...(isService ? { status: 'processing', queueStatus: 'waiting' } : { status: 'completed', accountsDelivered: accounts, accountDelivered: accounts[0] })
     };
     const writes = [
@@ -350,6 +382,9 @@ async function buyOnce({ user, d, fs, now }) {
       { update: { name: fs.name(`orders/${oid}`), fields: fs.fields(order) }, updateTransforms: [stamp('createdAt'), stamp(isService ? 'paidAt' : 'completedAt')], currentDocument: { exists: false } },
       { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, before: balance, after: r2(balance - amount), delta: -amount, note: `ซื้อ ${order.productName} (${orderNumber})`, by: 'system' }) }, updateTransforms: [stamp('at')] }
     ];
+    if (bundle) writes.push(
+      { update: { name: fs.name(`products/${bundle.id}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -bundle.total), stamp('updatedAt')], currentDocument: { exists: true } },
+      ...bundle.rows.map(it => ({ update: { name: fs.name(it.path), fields: fs.fields({ status: 'sold', orderId: oid }) }, updateMask: { fieldPaths: ['status', 'orderId'] }, updateTransforms: [stamp('soldAt')], currentDocument: { exists: true } })));
     if (isService) writes.push({ update: { name: fs.name(`queue/${oid}`), fields: fs.fields({ orderNumber, productId: d.productId, productName: String(product.name || ''), unit, quantity: qty, nameMask: maskName(username).slice(0, 8), uid: user.uid, status: 'waiting' }) }, updateTransforms: [stamp('createdAt')] });
     else {
       writes.push({ update: { name: fs.name('stats/public') }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('orders', 1), inc('sales', amount)] });
@@ -365,12 +400,12 @@ async function buyOnce({ user, d, fs, now }) {
   }
 }
 
-export async function routeBuy({ user, data, fs, fetchFn, now, later }) {
+export async function routeBuy({ user, data, fs, fetchFn, now, later, combo = 0 }) {
   const bad = validateBuy(data);
   if (bad) return [{ error: bad }, 400];
   let out;
   for (let i = 0; i < 3; i++) {
-    try { out = await buyOnce({ user, d: data, fs, now }); break; }
+    try { out = await buyOnce({ user, d: data, fs, now, combo }); break; }
     catch (e) { if (e.code === 'conflict' && i < 2) continue; if (e.code === 'conflict') return [{ error: 'มีคนกำลังซื้อสินค้านี้พร้อมกัน กรุณาลองอีกครั้ง' }, 409]; throw e; }
   }
   const [body, status] = out;
@@ -514,9 +549,17 @@ async function routeCart({ user, data, fs, fetchFn, now, later }) {
   const need = r2(items.reduce((a, it) => a + num(it.expectedAmount), 0));
   const balance = r2(num((await fs.get(`users/${user.uid}`))?.walletBalance));
   if (balance < need) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(need)} (คงเหลือ ฿${money(balance)})` }, 400];
+  // ID + service in the same cart: the admin's comboPct (%) comes off every line
+  const shop = await fs.get('system/settings'), kinds = new Set();
+  const comboPct = Math.min(50, Math.max(0, num(shop?.comboPct)));
+  if (comboPct > 0) for (const it of items) {
+    const p = await fs.get(`products/${it.productId}`), cat = p?.category ? await fs.get(`categories/${p.category}`) : null;
+    if (p && !p.isAmmo) kinds.add(p.productType === 'service' || cat?.kind === 'service' || String(p.category || '').startsWith('service') ? 'service' : 'id');
+  }
+  const combo = kinds.size === 2 ? comboPct : 0;
   const results = [];
   for (const [index, it] of items.entries()) {
-    const [body, status] = await routeBuy({ user, data: { ...it, promoCode: null }, fs, fetchFn, now, later });
+    const [body, status] = await routeBuy({ user, data: { ...it, promoCode: null }, fs, fetchFn, now, later, combo });
     results.push(status ? { index, error: body.error || 'สั่งซื้อไม่สำเร็จ' } : { index, ok: true, order: body.order });
   }
   return [{ results }];
@@ -699,6 +742,73 @@ async function routeAdminRent({ user, data, fs, now }) {
 }
 
 /** Cron: every few minutes lock the IDs whose rental time is up and tell the admin to change the passwords. */
+/** Daily: "people who bought X also bought Y". Pairs of products bought by the same customer, top 3 per product (seen at least twice), written to system/related for the product page. */
+export async function sweepRelated(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  const mine = new Map(); // shortcut: reads up to 1000 completed orders, not the whole history; page through them (or keep a counter doc) once the shop has more
+  for (const o of await fs.query('', 'orders', [['status', 'EQUAL', 'completed']], { limit: 1000 })) {
+    const d = o.data; if (!d.userId || !d.productId || d.paymentMethod === 'prize' || d.isAmmo) continue;
+    if (!mine.has(d.userId)) mine.set(d.userId, new Set());
+    mine.get(d.userId).add(String(d.productId));
+  }
+  const co = {};
+  for (const set of mine.values()) { const ids = [...set].slice(0, 20); for (const a of ids) for (const b of ids) if (a !== b) ((co[a] ||= {})[b] = (co[a][b] || 0) + 1); }
+  const map = {};
+  for (const [a, row] of Object.entries(co)) { const top = Object.entries(row).filter(x => x[1] >= 2).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]); if (top.length) map[a] = top; }
+  await fs.commit([{ update: { name: fs.name('system/related'), fields: fs.fields({ map, at: now }) } }]);
+  return Object.keys(map).length;
+}
+
+/** Daily (cron, first run after 00:00 Thailand time): ammo products whose `stock` differs from the real sum of available + reserved IDs -> Discord. Only reports, never fixes. */
+export async function sweepStock(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  const bad = [];
+  for (const p of (await fs.query('', 'products')).filter(x => x.data.isAmmo === true)) {
+    const rows = [...await fs.query(`products/${p.id}`, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 5000 }), ...await fs.query(`products/${p.id}`, 'stock_items', [['status', 'EQUAL', 'reserved']], { limit: 1000 })];
+    const real = rows.reduce((t, r) => t + num(r.data.ammo), 0);
+    if (real !== num(p.data.stock)) bad.push(`• ${p.data.name}: ตัวเลขบนสินค้า ${num(p.data.stock)} กอง แต่ไอดีจริง ${real} กอง`);
+  }
+  if (bad.length) await discord(fs, fetchFn, { title: '⚠️ สต็อกไก่กระสุนไม่ตรงกัน', description: bad.join('\n') + '\nเปิดหลังบ้าน › สต็อก ของสินค้านั้นเพื่อให้ระบบปรับให้ตรง' });
+  return bad.length;
+}
+/** Back-in-stock: pushes everyone in stock_watch whose product has stock again, then removes the row (one ping per request). Runs on the 5-minute cron. */
+export async function sweepRestock(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  const watches = (await fs.query('', 'stock_watch', [], { limit: 500 })), seen = new Map();
+  let n = 0;
+  for (const w of watches) {
+    const pid = String(w.data.productId || '');
+    if (!seen.has(pid)) seen.set(pid, await fs.get(`products/${pid}`));
+    const p = seen.get(pid);
+    if (!p || p.active === false || num(p.stock) <= 0 || num(p.dropAt) > now) continue; // a timed drop is announced when it opens, not when the stock is loaded
+    await pushTo(fs, fetchFn, w.data.uid, { title: p.dropAt ? 'เปิดขายแล้ว 🔥' : 'มีของแล้ว 🎉', body: `${str(p.name, 80)} กลับมาพร้อมขาย`, url: `/front/product.html?id=${encodeURIComponent(pid)}`, tag: `restock-${pid}` }, now);
+    await fs.commit([{ delete: fs.name(w.path) }]); n++;
+  }
+  return n;
+}
+/** Timed sale: products with salePrice + saleFrom/saleTo get `price` swapped while the window is open (basePrice keeps the real one). Runs on the 5-minute cron. */
+export async function sweepSales(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  let n = 0;
+  for (const p of await fs.query('', 'products')) {
+    const d = p.data, live = num(d.salePrice) > 0 && num(d.salePrice) < num(d.basePrice || d.price) && (!num(d.saleFrom) || now >= num(d.saleFrom)) && (!num(d.saleTo) || now <= num(d.saleTo));
+    if (live && d.saleOn !== true) {
+      await fs.commit([{ update: { name: fs.name(`products/${p.id}`), fields: fs.fields({ basePrice: num(d.price), price: num(d.salePrice), saleOn: true }) }, updateMask: { fieldPaths: ['basePrice', 'price', 'saleOn'] }, currentDocument: { exists: true } }]); n++;
+      for (const w of (await fs.query('', 'price_watch', [['productId', 'EQUAL', p.id]])).slice(0, 500)) // people who asked to hear about a price drop
+        await pushTo(fs, fetchFn, w.data.uid, { title: 'ลดราคาแล้ว 🔔', body: `${str(d.name, 80)} เหลือ ฿${money(num(d.salePrice))} (ปกติ ฿${money(num(d.price))})`, url: `/front/product.html?id=${encodeURIComponent(p.id)}`, tag: `sale-${p.id}` }, now);
+    }
+    else if (!live && d.saleOn === true) await fs.commit([{ update: { name: fs.name(`products/${p.id}`), fields: fs.fields({ price: num(d.basePrice) || num(d.price), saleOn: false }) }, updateMask: { fieldPaths: ['price', 'saleOn'] }, currentDocument: { exists: true } }]), n++;
+  }
+  return n;
+}
 export async function sweepRentals(env, { fetchFn = fetch, now = Date.now() } = {}) {
   const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
   if (!sa.project_id) return 0;
@@ -982,8 +1092,13 @@ const routePushKey = async ({ fs }) => [{ key: (await vapidKeys(fs)).pub }];
 export async function routePushQueue({ user, data, fs, fetchFn, now }) {
   if (!user.admin && !user.perms.includes('orders')) return [{ error: 'ไม่มีสิทธิ์' }, 403];
   const id = String(data.orderId || ''), ev = data.event;
-  if (!/^[\w-]{1,64}$/.test(id) || !['start', 'done'].includes(ev)) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
+  if (!/^[\w-]{1,64}$/.test(id) || !['start', 'done', 'paid'].includes(ev)) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
   const o = await fs.get(`orders/${id}`);
+  if (ev === 'paid') { // slip / angpao order approved by hand: tell the buyer once
+    if (!o || !o.userId || !['processing', 'completed'].includes(o.status)) return [{ ok: true, skipped: 'state' }];
+    try { await fs.commit([{ update: { name: fs.name(`notify_log/q_paid_${id}`), fields: fs.fields({ by: user.uid }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } }]); } catch (e) { if (e.code === 'already-exists' || e.code === 'conflict') return [{ ok: true, skipped: 'dup' }]; throw e; }
+    return [{ ok: true, sent: await pushTo(fs, fetchFn, o.userId, { title: 'ยืนยันการชำระเงินแล้ว ✓', body: `${str(o.productName, 80)} ${o.status === 'completed' ? 'ส่งมอบแล้ว ดูไอดีได้ที่ออเดอร์ของฉัน' : 'เข้าคิวเรียบร้อย'}`, url: '/front/account.html#orders', tag: `paid-${id}` }, now) }];
+  }
   if (!o || o.productType !== 'service' || o.queueStatus !== (ev === 'start' ? 'working' : 'done')) return [{ ok: true, skipped: 'state' }];
   const once = async (key) => { try { await fs.commit([{ update: { name: fs.name(`notify_log/${key}`), fields: fs.fields({ by: user.uid }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } }]); return true; } catch (e) { if (e.code === 'already-exists' || e.code === 'conflict') return false; throw e; } };
   const what = `${str(o.productName, 80)} ${num(o.receiveQty) || num(o.quantity)} ${str(o.unit, 10)}`.trim(), url = '/front/account.html#orders';
@@ -1039,6 +1154,7 @@ export function pickPrize(prizes, rnd = secureRandom) {
 }
 const boxId = (d) => (typeof d.boxId === 'string' && /^[\w-]{1,128}$/.test(d.boxId) ? d.boxId : '');
 
+const RARITY_RANK = { common: 0, rare: 1, epic: 2, legendary: 3 };
 export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
   const tx = await fs.begin();
   let committed = false;
@@ -1048,16 +1164,23 @@ export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
     if (!box || box.active === false) return [{ error: 'ไม่พบกล่องนี้ หรือปิดให้เล่นชั่วคราว' }, 404];
     const price = r2(num(box.price));
     if (!(price > 0)) return [{ error: 'กล่องนี้ยังไม่ได้ตั้งราคา' }, 400];
+    // a gift ticket opens a box for free: one ticket per call, counted down in this same transaction
+    const giftCode = /^[\w-]{10,40}$/.test(String(d.giftCode || '')) ? String(d.giftCode) : '', gift = giftCode ? await fs.get(`box_gifts/${giftCode}`, tx) : null;
+    if (giftCode && (!gift || gift.status !== 'open' || num(gift.left) < 1 || gift.boxId !== d.boxId || num(gift.expiresAt) < now)) return [{ error: 'ตั๋วของขวัญนี้ใช้ไม่ได้แล้ว (ใช้ครบ หมดอายุ หรือถูกยกเลิก)' }, 409];
+    const charge = gift ? 0 : price;
     if (d.expectedPrice != null && Math.abs(num(d.expectedPrice) - price) > 0.01) return [{ error: `ราคากล่องเปลี่ยนเป็น ฿${money(price)} กรุณาตรวจสอบอีกครั้ง` }, 409];
     const balance = r2(num(profile?.walletBalance));
-    if (balance < price) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(price)} (คงเหลือ ฿${money(balance)})` }, 400];
+    if (balance < charge) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(price)} (คงเหลือ ฿${money(balance)})` }, 400];
     const prizes = normalizePrizes(box.prizes);
     if (!prizes.length) return [{ error: 'กล่องนี้ยังไม่ได้ตั้งของรางวัล' }, 400];
+    // pity: after `pityEvery - 1` opens without a prize of rarity pityRarity or better, the next open is drawn only from those (if any can be handed over)
+    const pityEvery = Math.floor(num(box.pityEvery)), pityMin = RARITY_RANK[box.pityRarity] ?? 2, pityPath = `box_pity/${user.uid}_${d.boxId}`;
+    const miss = pityEvery > 1 ? num((await fs.get(pityPath, tx))?.miss) : 0, guaranteed = pityEvery > 1 && miss >= pityEvery - 1 && prizes.some(p => (RARITY_RANK[p.rarity] ?? 0) >= pityMin);
 
     // draw; skip what cannot be delivered right now
     const products = new Map();
     const productOf = async (pid) => { if (!products.has(pid)) products.set(pid, await fs.get(`products/${pid}`, tx)); return products.get(pid); };
-    let pool = prizes, prize = null, product = null, item = null;
+    let pool = guaranteed ? prizes.filter(p => (RARITY_RANK[p.rarity] ?? 0) >= pityMin) : prizes, prize = null, product = null, item = null, relaxed = false;
     while (pool.length && !prize) {
       const c = pickPrize(pool, rnd);
       let ok = true;
@@ -1071,12 +1194,13 @@ export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
         if (ok) product = pr;
       }
       if (ok) prize = c; else pool = pool.filter(x => x !== c);
+      if (!pool.length && !prize && guaranteed && !relaxed) { relaxed = true; pool = prizes; } // nothing good can be handed over right now: fall back to the normal draw
     }
     if (!prize) return [{ error: 'ของรางวัลในกล่องนี้หมดชั่วคราว กรุณาลองใหม่ภายหลัง' }, 409];
 
     const openId = randomId();
     const username = profile?.username || user.name || user.email.split('@')[0];
-    const afterPay = r2(balance - price);
+    const afterPay = r2(balance - charge);
     const finalBalance = prize.kind === 'credit' ? r2(afterPay + prize.amount) : afterPay;
     const boxName = str(box.name, 120);
     const label = prize.label || (prize.kind === 'credit' ? '' : str(product?.name, 80));
@@ -1084,7 +1208,8 @@ export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
       { update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ walletBalance: finalBalance }) }, updateMask: { fieldPaths: ['walletBalance'] }, currentDocument: { exists: true } },
       { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid: user.uid, before: balance, after: afterPay, delta: -price, note: `เปิดกล่องสุ่ม ${boxName}`, by: 'system' }) }, updateTransforms: [stamp('at')] }
     ];
-    const open = { uid: user.uid, userEmail: user.email, boxId: d.boxId, boxName, price, prizeId: prize.id, prizeLabel: label, kind: prize.kind, rarity: prize.rarity, status: 'delivered', balanceAfter: finalBalance };
+    if (gift) { writes.pop(); writes.push({ update: { name: fs.name(`box_gifts/${giftCode}`), fields: fs.fields({ left: num(gift.left) - 1, status: num(gift.left) - 1 > 0 ? 'open' : 'used' }) }, updateMask: { fieldPaths: ['left', 'status'] }, updateTransforms: [stamp('lastUsedAt')], currentDocument: { exists: true } }); } // free open: no debit, count the ticket down
+    const open = { uid: user.uid, userEmail: user.email, boxId: d.boxId, boxName, price, ...(gift ? { giftCode } : {}), prizeId: prize.id, prizeLabel: label, kind: prize.kind, rarity: prize.rarity, status: 'delivered', balanceAfter: finalBalance };
     const out = { id: prize.id, label, kind: prize.kind, rarity: prize.rarity, needsClaim: false };
 
     if (prize.kind === 'credit') {
@@ -1110,6 +1235,7 @@ export async function boxOpenOnce({ user, d, fs, now, rnd = secureRandom }) {
       writes.push({ update: { name: fs.name(`products/${prize.productId}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('stock', -prize.qty), stamp('updatedAt')], currentDocument: { exists: true } }); // capacity is held for this win
     }
     writes.push({ update: { name: fs.name(`box_opens/${openId}`), fields: fs.fields(open) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } });
+    if (pityEvery > 1) { const hit = (RARITY_RANK[prize.rarity] ?? 0) >= pityMin; writes.push({ update: { name: fs.name(pityPath), fields: fs.fields({ uid: user.uid, boxId: d.boxId, miss: hit ? 0 : miss + 1 }) } }); out.pity = { miss: hit ? 0 : miss + 1, every: pityEvery }; }
     if (prize.rarity !== 'common') writes.push({ update: { name: fs.name(`recent_wins/${openId}`), fields: fs.fields({ boxName, prizeLabel: label, rarity: prize.rarity, buyerMask: maskName(username) }) }, updateTransforms: [stamp('createdAt')] });
     await fs.commit(writes, tx);
     committed = true;
@@ -1173,6 +1299,59 @@ export async function boxClaimOnce({ user, d, fs, now }) {
   } finally { if (!committed) await fs.rollback(tx); }
 }
 
+/** POST /box/gift { boxId, count }: pay for 1-10 opens now, get a code the receiver redeems with /box/open { giftCode }. 90 days; the sender can cancel for a refund. */
+async function routeBoxGift({ user, data, fs, now }) {
+  const id = boxId(data), count = Math.floor(num(data.count));
+  if (!id || !(count >= 1 && count <= 10)) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
+  return retry(async () => {
+    const tx = await fs.begin(); let committed = false;
+    try {
+      const [profile, box] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`boxes/${id}`, tx)]);
+      if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+      if (!box || box.active === false || !(num(box.price) > 0)) return [{ error: 'ไม่พบกล่องนี้ หรือปิดให้เล่นชั่วคราว' }, 404];
+      const price = r2(num(box.price)), total = r2(price * count), balance = r2(num(profile?.walletBalance));
+      if (balance < total) return [{ error: `เครดิตไม่พอ ต้องใช้ ฿${money(total)} (คงเหลือ ฿${money(balance)})` }, 400];
+      const code = randomId(), username = profile?.username || user.name || user.email.split('@')[0];
+      await fs.commit([
+        ...walletWrites(fs, user.uid, balance, balance - total, `ซื้อตั๋วของขวัญกล่อง ${str(box.name, 80)} ×${count}`),
+        { update: { name: fs.name(`box_gifts/${code}`), fields: fs.fields({ fromUid: user.uid, fromName: maskName(username), boxId: id, boxName: str(box.name, 120), count, left: count, price, status: 'open', expiresAt: now + 90 * 864e5 }) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } }
+      ], tx);
+      committed = true;
+      return [{ ok: true, code, balance: r2(balance - total) }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+/** POST /box/gift/cancel { code }: the sender takes back the unused tickets as credit. */
+async function routeBoxGiftCancel({ user, data, fs }) {
+  const code = String(data.code || '');
+  if (!/^[\w-]{10,40}$/.test(code)) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
+  return retry(async () => {
+    const tx = await fs.begin(); let committed = false;
+    try {
+      const g = await fs.get(`box_gifts/${code}`, tx);
+      if (!g || g.fromUid !== user.uid) return [{ error: 'ไม่พบตั๋วของขวัญนี้' }, 404];
+      if (g.status !== 'open' || num(g.left) < 1) return [{ error: 'ตั๋วนี้ใช้ครบหรือยกเลิกไปแล้ว' }, 409];
+      const profile = await fs.get(`users/${user.uid}`, tx), balance = r2(num(profile?.walletBalance)), refund = r2(num(g.price) * num(g.left));
+      await fs.commit([...walletWrites(fs, user.uid, balance, balance + refund, `คืนตั๋วของขวัญที่ไม่ได้ใช้ ${g.boxName}`),
+        { update: { name: fs.name(`box_gifts/${code}`), fields: fs.fields({ status: 'cancelled', left: 0 }) }, updateMask: { fieldPaths: ['status', 'left'] }, currentDocument: { exists: true } }], tx);
+      committed = true;
+      return [{ ok: true, refund }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+
+/** POST /admin/winback { uid, type, value, days }: a one-use personal coupon for one customer (promo_codes.onlyUid), pushed to their phone if they allowed it. */
+async function routeAdminWinback({ user, data, fs, fetchFn, now }) {
+  if (!user.admin && !user.perms.includes('promos')) return [{ error: 'ไม่มีสิทธิ์' }, 403];
+  const uid = String(data.uid || ''), type = data.type === 'fixed' ? 'fixed' : 'percent', value = num(data.value), days = Math.floor(num(data.days));
+  if (!/^[\w-]{2,128}$/.test(uid) || !(value > 0) || (type === 'percent' && value > 90) || (type === 'fixed' && value > 10000) || !(days >= 1 && days <= 90)) return [{ error: 'ข้อมูลไม่ถูกต้อง' }, 400];
+  if (!(await fs.get(`users/${uid}`))) return [{ error: 'ไม่พบผู้ใช้' }, 404];
+  const code = 'BACK-' + randomId().slice(0, 6).toUpperCase(), until = now + days * 864e5;
+  await fs.commit([{ update: { name: fs.name(`promo_codes/${code}`), fields: fs.fields({ type, value, active: true, appliesTo: 'all', maxTotalUses: 1, maxPerUser: 1, usedCount: 0, onlyUid: uid, expiresAt: until, note: 'win-back', createdBy: user.email || user.uid }) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } }]);
+  const sent = await pushTo(fs, fetchFn, uid, { title: 'โค้ดส่วนลดเฉพาะคุณ 🎁', body: `ใช้โค้ด ${code} ลด ${type === 'percent' ? value + '%' : '฿' + money(value)} ภายใน ${days} วัน`, url: '/front/category.html', tag: `back-${code}` }, now);
+  return [{ ok: true, code, sent, until }];
+}
+
 async function routeBoxClaim({ user, data, fs, fetchFn, now, later }) {
   if (typeof data.openId !== 'string' || !/^[\w-]{1,64}$/.test(data.openId)) return [{ error: 'ไม่พบรางวัลนี้' }, 400];
   const out = await retry(() => boxClaimOnce({ user, d: data, fs, now }));
@@ -1219,6 +1398,20 @@ export function matchAmmo(ammos, target, maxIds = AMMO_MAX_IDS) {
   return { idx: idx.reverse(), total: best };
 }
 
+/** Price per กอง for qty กอง: the list price minus the single best discount that applies (no stacking). Mirrored in js/ammo.js.
+ *  Discounts: the flat one (ammoDiscType 'fixed' = ฿ off per กอง | 'percent', ammoDiscValue, optional window ammoDiscFrom..ammoDiscTo in ms)
+ *  and ammoTiers [{ min, type, value }] (applies from min กอง up, optional window ammoTiersFrom..ammoTiersTo). A cut that would make it free is ignored. */
+export function ammoRateOf(p, qty = 0, now = Date.now()) {
+  const rate = num(p.ammoRate);
+  const cut = (type, v) => type === 'percent' ? rate * (1 - Math.min(v, 99) / 100) : rate - v;
+  const c = [];
+  const live = (!num(p.ammoDiscFrom) || now >= p.ammoDiscFrom) && (!num(p.ammoDiscTo) || now <= p.ammoDiscTo);
+  if (live && num(p.ammoDiscValue) > 0) c.push(cut(p.ammoDiscType, num(p.ammoDiscValue)));
+  const tierLive = (!num(p.ammoTiersFrom) || now >= p.ammoTiersFrom) && (!num(p.ammoTiersTo) || now <= p.ammoTiersTo);
+  for (const t of tierLive && Array.isArray(p.ammoTiers) ? p.ammoTiers : []) if (qty >= num(t.min) && num(t.value) > 0) c.push(cut(t.type, num(t.value)));
+  return Math.min(rate, ...c.filter(x => x > 0));
+}
+
 const ipKey = (ip) => 'ip_' + String(ip || 'unknown').replace(/[^\w.:-]/g, '').replace(/[.:]/g, '_').slice(0, 60);
 async function guestThrottle(fs, ip, kind, gapMs, now) {
   const path = `slip_attempts/${ipKey(ip)}_${kind}`;
@@ -1228,6 +1421,14 @@ async function guestThrottle(fs, ip, kind, gapMs, now) {
   return true;
 }
 
+/** Closed by the admin switch, or inside the daily window ammoCloseFrom..ammoCloseTo ('HH:MM', Thailand time, may cross midnight). Mirrored in js/ammo.js. */
+export function ammoClosedNow(shop, now) {
+  if (shop?.ammoClosed === true) return true;
+  const f = /^(\d\d):(\d\d)$/.exec(shop?.ammoCloseFrom || ''), t = /^(\d\d):(\d\d)$/.exec(shop?.ammoCloseTo || '');
+  if (!f || !t) return false;
+  const m = Math.floor(((now + 7 * 3600e3) % 864e5) / 6e4), a = +f[1] * 60 + +f[2], b = +t[1] * 60 + +t[2];
+  return a === b ? false : a < b ? m >= a && m < b : m >= a || m < b;
+}
 async function ammoQuoteOnce({ user, d, fs, now, owner }) {
   const tx = await fs.begin();
   let committed = false;
@@ -1236,35 +1437,54 @@ async function ammoQuoteOnce({ user, d, fs, now, owner }) {
     if (!product || product.isAmmo !== true || product.active === false) return [{ error: 'ไม่พบสินค้านี้' }, 404];
     if (!user && product.requireLogin !== false) return [{ error: 'สินค้านี้ต้องเข้าสู่ระบบก่อนซื้อ' }, 401];
     if (user) { const prof = await fs.get(`users/${user.uid}`, tx); if (prof?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403]; }
-    const rate = num(product.ammoRate), min = Math.max(1, Math.floor(num(product.ammoMin)) || 1);
-    if (!(rate > 0)) return [{ error: 'สินค้านี้ยังไม่ได้ตั้งราคา' }, 400];
+    const shop = await fs.get('system/settings', tx); // admin switch: new quotes stop, quotes already made can still be paid
+    if (ammoClosedNow(shop, now)) return [{ error: str(shop.ammoClosedMsg, 300) || (shop.ammoCloseFrom && shop.ammoClosed !== true ? `ปิดรับออเดอร์ไก่กระสุนช่วง ${shop.ammoCloseFrom}–${shop.ammoCloseTo} น.` : 'ปิดรับออเดอร์ไก่กระสุนชั่วคราว'), code: 'closed' }, 503];
+    const rate0 = num(product.ammoRate), min = Math.max(1, Math.floor(num(product.ammoMin)) || 1);
+    if (!(rate0 > 0)) return [{ error: 'สินค้านี้ยังไม่ได้ตั้งราคา' }, 400];
     if (d.target < min) return [{ error: `สั่งขั้นต่ำ ${min} กอง` }, 400];
     const parent = `products/${d.productId}`;
-    const rows = [...await fs.query(parent, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 400, tx }),
-      ...await fs.query(parent, 'stock_items', [['status', 'EQUAL', 'reserved']], { limit: 200, tx })]
+    const rows = [...await fs.query(parent, 'stock_items', [['status', 'EQUAL', 'available']], { limit: 2000, tx }),
+      ...await fs.query(parent, 'stock_items', [['status', 'EQUAL', 'reserved']], { limit: 500, tx })]
       .filter(r => num(r.data.ammo) > 0 && (r.data.status === 'available' || num(r.data.reservedUntil) < now || r.data.reservedBy === owner));
-    const m = matchAmmo(rows.map(r => r.data.ammo), d.target);
+    // matchAmmo needs ~ ids x total bytes: with a big shelf, match on an even spread (big to small) of at most `cap` IDs
+    const S = Math.min(rows.reduce((t, r) => t + num(r.data.ammo), 0), d.target + Math.max(0, ...rows.map(r => num(r.data.ammo))));
+    const cap = Math.max(50, Math.floor(4e7 / (S + 1)));
+    const pool = rows.length > cap ? (() => { const s = [...rows].sort((a, b) => num(b.data.ammo) - num(a.data.ammo)); return Array.from({ length: cap }, (_, i) => s[Math.floor(i * s.length / cap)]); })() : rows;
+    const m = matchAmmo(pool.map(r => r.data.ammo), d.target, Math.min(100, Math.max(1, Math.floor(num(product.ammoMaxIds)) || AMMO_MAX_IDS)));
     if (!m) return [{ error: rows.length ? 'จับคู่ไอดีไม่ได้ กรุณาลองจำนวนอื่น' : 'สินค้าหมด' }, 409];
-    const picked = m.idx.map(i => rows[i]);
-    const amount = r2(m.total * rate), qid = randomId(), until = now + AMMO_HOLD_MS;
+    const picked = m.idx.map(i => pool[i]);
+    let rate = ammoRateOf(product, m.total, now), amount = r2(m.total * rate), promoCode = '', promoDiscount = 0, promoMsg = '';
+    if (d.promoCode) { // a coupon never stacks with the ammo discounts: the cheaper of the two is used (shortcut: usedCount is raised at delivery, so the quota can overshoot by a few)
+      const pc = user && /^[A-Z0-9_-]{2,40}$/.test(d.promoCode) ? await fs.get(`promo_codes/${d.promoCode}`, tx) : null;
+      const listSub = r2(m.total * num(product.ammoRate)), ev = evaluatePromo(pc, { ...product, id: d.productId }, listSub, user?.uid || '', now);
+      if (!user) promoMsg = 'โค้ดส่วนลดใช้ได้เฉพาะสมาชิกที่เข้าสู่ระบบ';
+      else if (!ev.ok) promoMsg = ev.message;
+      else if (num(pc.maxPerUser) > 0 && (await fs.query('', 'orders', [['userId', 'EQUAL', user.uid], ['promoCode', 'EQUAL', d.promoCode]], { tx })).filter(o => o.data.status !== 'cancelled').length >= num(pc.maxPerUser)) promoMsg = 'คุณใช้โค้ดนี้ครบสิทธิ์แล้ว';
+      else {
+        const withCode = r2(listSub - ev.discount);
+        if (withCode < amount) { amount = withCode; rate = amount / m.total; promoCode = d.promoCode; promoDiscount = r2(listSub - withCode); }
+        else promoMsg = 'ส่วนลดไก่กระสุนถูกกว่าโค้ดนี้ จึงใช้ส่วนลดเดิมให้';
+      }
+    }
+    const qid = randomId(), until = now + AMMO_HOLD_MS;
     // one hold per buyer: IDs this buyer held for an older quote go back on the shelf
     const freed = rows.filter(r => r.data.status === 'reserved' && r.data.reservedBy === owner && !picked.includes(r));
     const writes = [
       ...freed.map(r => ({ update: { name: fs.name(r.path), fields: fs.fields({ status: 'available', reservedUntil: 0, reservedBy: '', quoteId: '' }) }, updateMask: { fieldPaths: ['status', 'reservedUntil', 'reservedBy', 'quoteId'] }, currentDocument: { exists: true } })),
       ...picked.map(r => ({ update: { name: fs.name(r.path), fields: fs.fields({ status: 'reserved', reservedUntil: until, reservedBy: owner, quoteId: qid }) }, updateMask: { fieldPaths: ['status', 'reservedUntil', 'reservedBy', 'quoteId'] }, currentDocument: { exists: true } })),
-      { update: { name: fs.name(`ammo_quotes/${qid}`), fields: fs.fields({ productId: d.productId, productName: str(product.name, 120), paths: picked.map(r => r.path), ammo: picked.map(r => num(r.data.ammo)), target: d.target, ammoTotal: m.total, rate, amount, owner, uid: user?.uid || '', expiresAt: until, status: 'open' }) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } }
+      { update: { name: fs.name(`ammo_quotes/${qid}`), fields: fs.fields({ productId: d.productId, productName: str(product.name, 120), paths: picked.map(r => r.path), ammo: picked.map(r => num(r.data.ammo)), target: d.target, ammoTotal: m.total, rate, listRate: num(product.ammoRate), amount, ...(promoCode ? { promoCode, promoDiscount } : {}), owner, uid: user?.uid || '', expiresAt: until, status: 'open' }) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } }
     ];
     await fs.commit(writes, tx);
     committed = true;
-    return [{ quoteId: qid, target: d.target, ammoTotal: m.total, ids: picked.length, ammo: picked.map(r => num(r.data.ammo)), rate, amount, expiresAt: until }];
+    return [{ quoteId: qid, target: d.target, ammoTotal: m.total, ids: picked.length, ammo: picked.map(r => num(r.data.ammo)), rate, listRate: num(product.ammoRate), amount, expiresAt: until, ...(promoCode ? { promo: { code: promoCode, discount: promoDiscount } } : {}), ...(promoMsg ? { promoMsg } : {}) }];
   } finally { if (!committed) await fs.rollback(tx); }
 }
 async function routeAmmoQuote({ user, data, fs, now, ip }) {
   const target = Number(data.target);
   if (typeof data.productId !== 'string' || !/^[\w-]{1,128}$/.test(data.productId)) return [{ error: 'ไม่พบสินค้า' }, 400];
   if (!Number.isInteger(target) || target < 1 || target > AMMO_MAX_TARGET) return [{ error: 'จำนวนกองไม่ถูกต้อง' }, 400];
-  if (!user && !(await guestThrottle(fs, ip, 'aq', 4000, now))) return [{ error: 'ทำรายการถี่เกินไป รอสักครู่แล้วลองใหม่' }, 429];
-  return retry(() => ammoQuoteOnce({ user, d: { productId: data.productId, target }, fs, now, owner: user ? `u_${user.uid}` : ipKey(ip) }));
+  if (!(await guestThrottle(fs, user ? 'u_' + user.uid : ip, 'aq', user ? 1500 : 4000, now))) return [{ error: 'ทำรายการถี่เกินไป รอสักครู่แล้วลองใหม่' }, 429];
+  return retry(() => ammoQuoteOnce({ user, d: { productId: data.productId, target, promoCode: str(data.promoCode, 40).toUpperCase() }, fs, now, owner: user ? `u_${user.uid}` : ipKey(ip) }));
 }
 
 /** Deliver a paid quote in one transaction. paid = { via, ref, amount } ; for 'wallet' the balance is charged here. */
@@ -1276,6 +1496,7 @@ async function ammoDeliverOnce({ user, qid, fs, now, paid }) {
     if (!q || q.status !== 'open') return [{ error: 'รายการนี้ชำระไปแล้วหรือไม่มีอยู่' }, 409];
     if (q.uid && q.uid !== (user?.uid || '')) return [{ error: 'ไม่พบรายการ' }, 404];
     const items = await Promise.all(q.paths.map(p => fs.get(p, tx)));
+    const prod = await fs.get(`products/${q.productId}`, tx);
     // still ours: reserved by this quote, or freed again and nobody took it
     if (items.some(it => !it || !(it.status === 'available' || (it.status === 'reserved' && (it.quoteId === qid || num(it.reservedUntil) < now))))) return [{ error: 'ไอดีบางตัวถูกซื้อไปแล้ว กรุณาขอราคาใหม่', code: 'stale' }, 409];
     const prof = user ? await fs.get(`users/${user.uid}`, tx) : null;
@@ -1290,7 +1511,7 @@ async function ammoDeliverOnce({ user, qid, fs, now, paid }) {
     const accounts = items.map((it, i) => ({ username: String(it.username || ''), password: String(it.password || ''), ammo: num(it.ammo), stockItemId: q.paths[i].split('/').pop() }));
     const order = {
       orderNumber, orderId: orderNumber, productId: q.productId, productName: `${q.productName} (${q.ammoTotal} กอง)`, productType: 'account', isAmmo: true,
-      quantity: accounts.length, unit: 'ไอดี', ammoTarget: q.target, ammoTotal: q.ammoTotal, unitPrice: q.rate, subtotal: q.amount, discount: 0, promoCode: null, amount: q.amount, finalPrice: q.amount,
+      quantity: accounts.length, unit: 'ไอดี', ammoTarget: q.target, ammoTotal: q.ammoTotal, unitPrice: q.rate, listUnitPrice: num(q.listRate) || q.rate, subtotal: r2(q.amount + num(q.promoDiscount)), discount: num(q.promoDiscount), promoCode: q.promoCode || null, amount: q.amount, finalPrice: q.amount,
       paymentMethod: paid.via === 'wallet' ? 'wallet' : paid.via, paymentProof: paid.ref || 'เครดิตในบัญชี', userEmail: user?.email || '', userId: user?.uid || '', guest: !user,
       status: 'completed', accountsDelivered: accounts, accountDelivered: accounts[0], ...(paid.extra ? { paidExtra: paid.extra } : {})
     };
@@ -1303,11 +1524,13 @@ async function ammoDeliverOnce({ user, qid, fs, now, paid }) {
       { update: { name: fs.name('stats/public') }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('orders', 1), inc('sales', q.amount)] },
       { update: { name: fs.name(`recent_orders/${oid}`), fields: fs.fields({ productName: order.productName.slice(0, 120), productId: q.productId, amount: q.amount, buyerMask: maskName(buyer), kind: 'account' }) }, updateTransforms: [stamp('createdAt')] }
     );
+    if (q.promoCode) writes.push({ update: { name: fs.name(`promo_codes/${q.promoCode}`) }, updateMask: { fieldPaths: [] }, updateTransforms: [inc('usedCount', 1)] });
     if (user) writes.push({ update: { name: fs.name(`users/${user.uid}`), fields: fs.fields({ hasBought: true }) }, updateMask: { fieldPaths: ['hasBought'] } });
     if (paid.lock) writes.unshift(paid.lock); // slip / voucher reference: used once, in the same commit
     await fs.commit(writes, tx);
     committed = true;
-    return [{ status: 'completed', orderId: oid, orderNumber, ammoTotal: q.ammoTotal, amount: q.amount, accounts: accounts.map(({ stockItemId, ...a }) => a) }];
+    const low = num(prod?.ammoLowStock), before = num(prod?.stock); // _low: asks the route for a Discord alert when stock falls under the product's limit
+    return [{ status: 'completed', orderId: oid, orderNumber, ammoTotal: q.ammoTotal, amount: q.amount, accounts: accounts.map(({ stockItemId, ...a }) => a), ...(low > 0 && before >= low && before - q.ammoTotal < low ? { _low: { left: before - q.ammoTotal, limit: low } } : {}) }];
   } finally { if (!committed) await fs.rollback(tx); }
 }
 
@@ -1323,6 +1546,7 @@ async function routeAmmoPay({ user, data, fs, env, fetchFn, now, later, ip }) {
   const done = (out) => {
     const [b, st] = out;
     if (!st) later(discord(fs, fetchFn, { title: '✅ ขายไอดีไก่กระสุนอัตโนมัติ', fields: [{ name: 'ออเดอร์', value: b.orderNumber, inline: true }, { name: 'ยอด', value: `฿${money(b.amount)}`, inline: true }, { name: 'สินค้า', value: `${q.productName} ${b.ammoTotal} กอง (สั่ง ${q.target})` }, { name: 'ผู้ซื้อ', value: who }] }));
+    if (!st && b._low) { later(discord(fs, fetchFn, { title: '📉 ไก่กระสุนใกล้หมด', fields: [{ name: 'สินค้า', value: q.productName }, { name: 'คงเหลือ', value: `${b._low.left} กอง (เตือนเมื่อต่ำกว่า ${b._low.limit})` }] })); delete b._low; }
     return out;
   };
   if (method === 'wallet') return done(await retry(() => ammoDeliverOnce({ user, qid, fs, now, paid: { via: 'wallet' } })));
@@ -1385,14 +1609,90 @@ async function routeAmmoPay({ user, data, fs, env, fetchFn, now, later, ip }) {
   return done([{ ...out[0], extra, extraTo: extra > 0 ? (user ? 'credit' : 'shop') : '' }]);
 }
 
-const GUEST_OK = new Set(['/ammo/quote', '/ammo/pay']);
+/** POST /ammo/extend { quoteId }: +5 min on a live hold, once per quote, only for the buyer who made it. */
+async function routeAmmoExtend({ user, data, fs, now, ip }) {
+  const qid = String(data.quoteId || '');
+  if (!/^\w{10,40}$/.test(qid)) return [{ error: 'ไม่พบรายการ' }, 400];
+  const owner = user ? `u_${user.uid}` : ipKey(ip);
+  return retry(async () => {
+    const tx = await fs.begin(); let committed = false;
+    try {
+      const q = await fs.get(`ammo_quotes/${qid}`, tx);
+      if (!q || q.status !== 'open' || q.owner !== owner) return [{ error: 'ไม่พบรายการ' }, 404];
+      if (q.extended === true) return [{ error: 'ต่อเวลาไปแล้วครั้งหนึ่ง' }, 409];
+      if (num(q.expiresAt) <= now) return [{ error: 'หมดเวลากันไอดีแล้ว กรุณาหาไอดีใหม่', code: 'stale' }, 409];
+      const until = num(q.expiresAt) + 5 * 60e3;
+      const items = await Promise.all(q.paths.map(p => fs.get(p, tx)));
+      if (items.some(it => !it || it.status !== 'reserved' || it.quoteId !== qid)) return [{ error: 'ไอดีบางตัวไม่ได้ถูกกันไว้แล้ว กรุณาหาไอดีใหม่', code: 'stale' }, 409];
+      await fs.commit([
+        ...q.paths.map(p => ({ update: { name: fs.name(p), fields: fs.fields({ reservedUntil: until }) }, updateMask: { fieldPaths: ['reservedUntil'] }, currentDocument: { exists: true } })),
+        { update: { name: fs.name(`ammo_quotes/${qid}`), fields: fs.fields({ expiresAt: until, extended: true }) }, updateMask: { fieldPaths: ['expiresAt', 'extended'] } }
+      ], tx);
+      committed = true;
+      return [{ expiresAt: until }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+
+// ---------- Ammo claims (เคลมไอดีเสีย) ----------
+//   POST /ammo/claim  { orderId, reason }            member, own completed ammo order, within AMMO_CLAIM_MS, once  -> ammo_claims/{orderId} 'open'
+//   POST /admin/claim { orderId, action, note }      action 'refund' (full order amount back as credit) | 'reject'
+// Order doc gets claimStatus / claimNote so the customer sees the answer in "ออเดอร์ของฉัน".
+const AMMO_CLAIM_MS = 24 * 3600e3;
+async function routeAmmoClaim({ user, data, fs, now, later, fetchFn }) {
+  const id = String(data.orderId || ''), reason = str(data.reason, 300);
+  if (!/^[\w-]{10,60}$/.test(id)) return [{ error: 'ไม่พบออเดอร์' }, 400];
+  if (reason.length < 5) return [{ error: 'กรุณาอธิบายปัญหาอย่างน้อย 5 ตัวอักษร' }, 400];
+  return retry(async () => {
+    const tx = await fs.begin(); let committed = false;
+    try {
+      const o = await fs.get(`orders/${id}`, tx);
+      if (!o || o.userId !== user.uid || o.isAmmo !== true || o.status !== 'completed') return [{ error: 'ไม่พบออเดอร์ไก่กระสุนนี้' }, 404];
+      if (o.claimStatus) return [{ error: 'ออเดอร์นี้แจ้งเคลมไปแล้ว' }, 409];
+      if (now - Date.parse(o.createdAt) > AMMO_CLAIM_MS) return [{ error: 'เลยเวลาแจ้งเคลม (24 ชั่วโมงหลังซื้อ)' }, 400];
+      await fs.commit([
+        { update: { name: fs.name(`ammo_claims/${id}`), fields: fs.fields({ orderId: id, orderNumber: str(o.orderNumber, 40), uid: user.uid, email: user.email, productName: str(o.productName, 120), amount: r2(num(o.amount)), reason, status: 'open' }) }, updateTransforms: [stamp('createdAt')], currentDocument: { exists: false } },
+        { update: { name: fs.name(`orders/${id}`), fields: fs.fields({ claimStatus: 'open' }) }, updateMask: { fieldPaths: ['claimStatus'] }, currentDocument: { exists: true } }
+      ], tx);
+      committed = true;
+      later(discord(fs, fetchFn, { title: '🛠️ ลูกค้าแจ้งเคลมไอดีไก่กระสุน', fields: [{ name: 'ออเดอร์', value: str(o.orderNumber, 40), inline: true }, { name: 'ยอด', value: `฿${money(o.amount)}`, inline: true }, { name: 'ปัญหา', value: reason }] }));
+      return [{ ok: true }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+async function routeAdminClaim({ user, data, fs, fetchFn, now }) {
+  if (!user.admin && !user.perms.includes('orders') && !user.perms.includes('pay')) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
+  const id = String(data.orderId || ''), note = str(data.note, 200);
+  if (!/^[\w-]{10,60}$/.test(id) || !['refund', 'reject'].includes(data.action)) return [{ error: 'คำสั่งไม่ถูกต้อง' }, 400];
+  return retry(async () => {
+    const tx = await fs.begin(); let committed = false;
+    try {
+      const c = await fs.get(`ammo_claims/${id}`, tx);
+      if (!c || c.status !== 'open') return [{ error: 'ไม่พบคำขอเคลมที่รอตรวจ' }, 409];
+      const status = data.action === 'refund' ? 'refunded' : 'rejected', writes = [];
+      if (status === 'refunded') {
+        const prof = await fs.get(`users/${c.uid}`, tx), bal = r2(num(prof?.walletBalance));
+        writes.push(...walletWrites(fs, c.uid, bal, bal + num(c.amount), `คืนเงินเคลมไอดี ${c.productName} (${c.orderNumber})`));
+      }
+      writes.push(
+        { update: { name: fs.name(`ammo_claims/${id}`), fields: fs.fields({ status, note, by: user.email || user.uid }) }, updateMask: { fieldPaths: ['status', 'note', 'by'] }, updateTransforms: [stamp('doneAt')], currentDocument: { exists: true } },
+        { update: { name: fs.name(`orders/${id}`), fields: fs.fields({ claimStatus: status, claimNote: note }) }, updateMask: { fieldPaths: ['claimStatus', 'claimNote'] }, currentDocument: { exists: true } });
+      await fs.commit(writes, tx);
+      committed = true;
+      pushTo(fs, fetchFn, c.uid, { title: status === 'refunded' ? 'เคลมสำเร็จ คืนเครดิตแล้ว' : 'ผลการเคลมไอดี', body: status === 'refunded' ? `คืน ฿${money(c.amount)} เข้าเครดิตแล้ว` : `เคลมไม่ผ่าน${note ? ': ' + note : ''}`, url: '/front/account.html#orders', tag: `claim-${id}` }, now).catch(() => {});
+      return [{ ok: true, status }];
+    } finally { if (!committed) await fs.rollback(tx); }
+  });
+}
+
+const GUEST_OK = new Set(['/ammo/quote', '/ammo/pay', '/ammo/extend']);
 export async function handle(request, env, { fetchFn = fetch, now = Date.now(), ctx = null } = {}) {
   const cors = { 'access-control-allow-origin': env.ALLOWED_ORIGIN || '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-expose-headers': 'x-astraphex-worker', 'x-astraphex-worker': WORKER_VERSION, vary: 'origin' };
   const reply = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', ...cors } });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply({ error: 'method not allowed' }, 405);
   const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
-  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/redeem': routeVaultRedeem, '/push/key': routePushKey, '/push/test': routePushTest, '/push/queue': routePushQueue, '/vault/team': routeVaultTeam, '/vault/team/mark': routeVaultMark, '/vault/invite': routeVaultInvite, '/vault/join': routeVaultJoin, '/ammo/quote': routeAmmoQuote, '/ammo/pay': routeAmmoPay };
+  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/gift': routeBoxGift, '/box/gift/cancel': routeBoxGiftCancel, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/redeem': routeVaultRedeem, '/push/key': routePushKey, '/push/test': routePushTest, '/push/queue': routePushQueue, '/vault/team': routeVaultTeam, '/vault/team/mark': routeVaultMark, '/vault/invite': routeVaultInvite, '/vault/join': routeVaultJoin, '/ammo/quote': routeAmmoQuote, '/ammo/pay': routeAmmoPay, '/ammo/extend': routeAmmoExtend, '/ammo/claim': routeAmmoClaim, '/admin/claim': routeAdminClaim, '/admin/winback': routeAdminWinback, '/auction/bid': routeAuctionBid };
   const route = routes[path];
   if (!route) return reply({ error: 'not found' }, 404);
   const pending = [];
@@ -1402,8 +1702,11 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
     const token = (request.headers.get('authorization') || '').replace(/^Bearer /, '');
     // ammo bundles marked "no login needed" can be quoted and paid without a token (the route checks the product)
     const user = !token && GUEST_OK.has(path) ? null : await verifyIdToken(token, sa.project_id, fetchFn, now);
-    const data = await request.json().catch(() => ({}));
+    const raw = await request.text();
+    if (raw.length > 262144) return reply({ error: 'ข้อมูลใหญ่เกินไป' }, 413);
+    const data = (() => { try { return JSON.parse(raw); } catch { return {}; } })();
     const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+    if (CLOSED_ROUTES.has(path) && !user?.admin) { const shop = await fs.get('system/settings'); if (shopClosedNow(shop, now)) return reply({ error: str(shop.shopClosedMsg, 300) || 'ร้านปิดชั่วคราว กลับมาเปิดเร็ว ๆ นี้' }, 503); }
     const ip = request.headers.get('cf-connecting-ip') || '';
     const [body, status = 200] = await route({ user, data: data || {}, fs, env, sa, fetchFn, now, later, ip });
     await Promise.all(pending);
@@ -1416,8 +1719,102 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
   }
 }
 
+/** Shop-wide pause (admin switch in settings): buying, renting, loot boxes and new ammo quotes stop; top-ups, payments already made and claims keep working. Mirrored in js/shell.js. */
+const CLOSED_ROUTES = new Set(['/auction/bid', '/buy', '/cart', '/rent', '/rent/extend', '/box/open', '/box/gift', '/ammo/quote']);
+export const shopClosedNow = (shop, now) => shop?.shopClosed === true && !(num(shop.shopReopenAt) > 0 && now >= num(shop.shopReopenAt));
+
+
+// ---------- Auctions ----------
+// auctions/{id}: { name, image, productId, startPrice, minStep, endsAt, status open|settling|sold|failed|ended, topBid, topUid, topName, bidCount }
+// A bid takes the money at once (the previous leader is refunded in the same transaction). When the time is up the cron refunds the winner and
+// buys the ID for the winning price through buyOnce(); if that fails (no stock) the refund simply stays, so nobody pays for nothing.
+const AUCTION_SNIPE_MS = 120e3;
+async function auctionBidOnce({ user, d, fs, now }) {
+  const tx = await fs.begin(); let committed = false;
+  try {
+    const a = await fs.get(`auctions/${d.auctionId}`, tx);
+    if (!a || a.status !== 'open' || now >= num(a.endsAt)) return [{ error: 'การประมูลนี้ปิดแล้ว' }, 409];
+    const amount = r2(num(d.amount)), min = a.topUid ? r2(num(a.topBid) + Math.max(1, num(a.minStep))) : r2(num(a.startPrice));
+    if (!(amount >= min)) return [{ error: `ต้องเสนออย่างน้อย ฿${money(min)}` }, 400];
+    if (amount > 1e6) return [{ error: 'ราคาสูงเกินไป' }, 400];
+    const [profile, product] = await Promise.all([fs.get(`users/${user.uid}`, tx), fs.get(`products/${a.productId}`, tx)]);
+    if (profile?.status === 'suspended') return [{ error: 'บัญชีนี้ถูกระงับการใช้งาน' }, 403];
+    if (!product || product.active === false || num(product.stock) < 1) return [{ error: 'ไอดีของการประมูลนี้หมดสต็อก ติดต่อแอดมิน' }, 409];
+    const self = a.topUid === user.uid, balance = r2(num(profile?.walletBalance)), back = self ? num(a.topBid) : 0;
+    if (r2(balance + back) < amount) return [{ error: `เครดิตไม่พอ ต้องมี ฿${money(amount)} (คงเหลือ ฿${money(balance)})` }, 400];
+    const writes = [];
+    if (a.topUid && !self) { const prev = await fs.get(`users/${a.topUid}`, tx); writes.push(...walletWrites(fs, a.topUid, num(prev?.walletBalance), num(prev?.walletBalance) + num(a.topBid), `คืนเครดิตประมูล ${a.name} (มีคนให้ราคาสูงกว่า)`)); }
+    writes.push(...walletWrites(fs, user.uid, balance, balance + back - amount, `ประมูล ${a.name} ฿${money(amount)}`));
+    const endsAt = num(a.endsAt) - now < AUCTION_SNIPE_MS ? now + AUCTION_SNIPE_MS : num(a.endsAt); // a last-second bid gives everyone 2 more minutes
+    writes.push({ update: { name: fs.name(`auctions/${d.auctionId}`), fields: fs.fields({ topBid: amount, topUid: user.uid, topName: maskName(profile?.username || user.name || 'user'), bidCount: num(a.bidCount) + 1, endsAt }) }, updateMask: { fieldPaths: ['topBid', 'topUid', 'topName', 'bidCount', 'endsAt'] }, currentDocument: { exists: true } });
+    await fs.commit(writes, tx); committed = true;
+    return [{ ok: true, topBid: amount, endsAt, balance: r2(balance + back - amount), outbid: a.topUid && !self ? a.topUid : '', name: a.name }];
+  } finally { if (!committed) await fs.rollback(tx); }
+}
+async function routeAuctionBid({ user, data, fs, fetchFn, now, later }) {
+  if (typeof data.auctionId !== 'string' || !/^[\w-]{1,64}$/.test(data.auctionId) || !Number.isFinite(Number(data.amount))) return [{ error: 'คำขอไม่ถูกต้อง' }, 400];
+  const out = await retry(() => auctionBidOnce({ user, d: data, fs, now }));
+  const [body, status] = out;
+  if (!status && body.outbid) later(pushTo(fs, fetchFn, body.outbid, { title: 'มีคนให้ราคาสูงกว่าคุณ', body: `${str(body.name, 80)} ตอนนี้ ฿${money(body.topBid)} · เครดิตคืนแล้ว`, url: '/front/auction.html', tag: `auc-${data.auctionId}` }, now));
+  if (!status) delete body.outbid;
+  return out;
+}
+/** Cron: closes auctions whose time is up. */
+export async function sweepAuctions(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  let n = 0;
+  for (const row of await fs.query('', 'auctions', [['status', 'EQUAL', 'open']], { limit: 50 })) {
+    const a = row.data; if (num(a.endsAt) > now) continue;
+    const id = row.id, setStatus = (f) => fs.commit([{ update: { name: fs.name(`auctions/${id}`), fields: fs.fields(f) }, updateMask: { fieldPaths: Object.keys(f) }, currentDocument: { exists: true } }]);
+    if (!a.topUid) { await setStatus({ status: 'ended' }); n++; continue; }
+    // claim the auction and give the winner the money back in one step, so a retry can never refund twice
+    const claimed = await retry(async () => {
+      const tx = await fs.begin(); let committed = false;
+      try {
+        const cur = await fs.get(`auctions/${id}`, tx); if (!cur || cur.status !== 'open') return [{ skip: true }];
+        const prof = await fs.get(`users/${cur.topUid}`, tx), bal = num(prof?.walletBalance);
+        await fs.commit([...walletWrites(fs, cur.topUid, bal, bal + num(cur.topBid), `คืนเครดิตประมูล ${cur.name} เพื่อชำระซื้อ`), { update: { name: fs.name(`auctions/${id}`), fields: fs.fields({ status: 'settling' }) }, updateMask: { fieldPaths: ['status'] }, currentDocument: { exists: true } }], tx);
+        committed = true; return [{ prof }];
+      } finally { if (!committed) await fs.rollback(tx); }
+    });
+    if (claimed[0].skip || !claimed[0].prof) continue;
+    const prof = claimed[0].prof; let res = [{ error: 'ไม่สำเร็จ' }, 500];
+    try { res = await buyOnce({ user: { uid: a.topUid, email: prof.email || '', name: prof.username || '' }, d: { productId: a.productId, quantity: 1, buyerEmail: prof.email || '', expectedAmount: num(a.topBid) }, fs, now, override: num(a.topBid) }); } catch (e) { console.warn('auction buy:', e); }
+    const ok = !res[1];
+    await setStatus(ok ? { status: 'sold', orderId: String(res[0].order?.orderId || res[0].order?.id || '') } : { status: 'failed' });
+    await pushTo(fs, fetchFn, a.topUid, ok ? { title: 'คุณชนะประมูล! 🏆', body: `${str(a.name, 80)} ฿${money(num(a.topBid))} · ดูไอดีที่เมนูออเดอร์`, url: '/front/account.html#orders', tag: `auc-${id}` } : { title: 'ประมูลซื้อไม่สำเร็จ', body: `${str(a.name, 80)}: ${str(res[0].error, 120)} · คืนเครดิตแล้ว`, url: '/front/auction.html', tag: `auc-${id}` }, now);
+    if (!ok) await discord(fs, fetchFn, { title: '⚠️ ประมูลปิดแล้วแต่ส่งมอบไม่ได้', description: `${a.name} · ผู้ชนะ ${a.topName} ฿${money(num(a.topBid))}\n${res[0].error || ''} (คืนเครดิตให้ผู้ชนะแล้ว)` });
+    n++;
+  }
+  return n;
+}
+
+/** One reminder, 24 h after an ID is delivered: change the password. Runs on the 5-minute cron. */
+export async function sweepPwRemind(env, { fetchFn = fetch, now = Date.now() } = {}) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
+  if (!sa.project_id) return 0;
+  const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  let n = 0;
+  for (const o of await fs.query('', 'orders', [['pwReminded', 'EQUAL', false]], { limit: 200 })) {
+    if (num(o.data.pwRemindAt) > now) continue;
+    await fs.commit([{ update: { name: fs.name(o.path), fields: fs.fields({ pwReminded: true }) }, updateMask: { fieldPaths: ['pwReminded'] }, currentDocument: { exists: true } }]);
+    if (o.data.status === 'completed' && o.data.userId) await pushTo(fs, fetchFn, o.data.userId, { title: 'อย่าลืมเปลี่ยนรหัสไอดี 🔐', body: `ไอดีที่ซื้อ (${str(o.data.productName, 60)}) เปลี่ยนรหัสผ่านเกมวันนี้เพื่อความปลอดภัย`, url: '/front/account.html#orders', tag: `pw-${o.id}` }, now);
+    n++;
+  }
+  return n;
+}
+
 export default {
   fetch: (request, env, ctx) => handle(request, env, { ctx }),
   // Cron Trigger (Worker > Settings > Triggers > Cron: */5 * * * *) closes rentals whose time is up
-  scheduled: (event, env, ctx) => ctx.waitUntil(sweepRentals(env).catch((e) => console.warn('sweep:', e)))
+  scheduled: (event, env, ctx) => {
+    ctx.waitUntil(sweepRentals(env).catch((e) => console.warn('sweep:', e)));
+    ctx.waitUntil(sweepSales(env).catch((e) => console.warn('sale sweep:', e)));
+    ctx.waitUntil(sweepRestock(env).catch((e) => console.warn('restock sweep:', e)));
+    ctx.waitUntil(sweepAuctions(env).catch((e) => console.warn('auction sweep:', e)));
+    ctx.waitUntil(sweepPwRemind(env).catch((e) => console.warn('pw remind:', e)));
+    if (Math.floor(((Date.now() + 7 * 3600e3) % 864e5) / 6e4) < 5) { ctx.waitUntil(sweepStock(env).catch((e) => console.warn('stock check:', e))); ctx.waitUntil(sweepRelated(env).catch((e) => console.warn('related:', e))); } // Thailand 00:00-00:04: one of the 5-minute runs
+  }
 };

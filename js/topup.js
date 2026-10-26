@@ -114,6 +114,7 @@ async function verifySlip(file) {
     if (!payload) { toast('อ่าน QR บนสลิปไม่ได้ กรุณาใช้รูปสลิปที่เห็น QR ชัดเจน (ไม่ครอป ไม่เบลอ)', 'error'); return; }
     const r = await callWorker('/', { amount, payload });
     if (r.status === 'completed') { pp.reset(); toast(`เติมเครดิตสำเร็จ +${money(r.credit)}`, 'success'); return; }
+    if (r.status === 'queued') { pp.reset(); toast(r.message, 'info'); return; }
     toast(r.message || 'ตรวจสลิปไม่ผ่าน', 'error');
   } catch (e) { console.warn('slip:', e); toast(e.message || 'ตรวจสลิปไม่ได้ในตอนนี้ กรุณาลองใหม่อีกครั้ง', 'error'); }
 }
@@ -155,3 +156,14 @@ if (preset >= MIN) $('amount-input').value = preset;
 switchTopupPaymentTab('promptpay');
 onAmount();
 Object.assign(window, { setAmount, switchTopupPaymentTab, executeTopup });
+
+// A held ammo quote waits for this top-up (js/ammo.js saves it in sessionStorage 'ammo-resume'): link back to it.
+try {
+  const r = JSON.parse(sessionStorage.getItem('ammo-resume') || 'null');
+  if (r?.quote?.expiresAt > Date.now() && /^[\w\-./?=&%]+$/.test(r.url || '')) {
+    const bar = document.createElement('a');
+    bar.href = r.url; bar.className = 'block rounded-2xl bg-gallery p-4 text-sm mb-4 text-appleBlue font-medium';
+    bar.textContent = `เติมเสร็จแล้ว กลับไปซื้อไก่กระสุนต่อ (ไอดีที่หาไว้ ${r.quote.ammoTotal} กอง ฿${r.quote.amount} ยังถูกกันไว้จนถึง ${new Date(r.quote.expiresAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}) ›`;
+    document.querySelector('main')?.prepend(bar);
+  }
+} catch { /* ignore */ }

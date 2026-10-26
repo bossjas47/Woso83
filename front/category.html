@@ -42,11 +42,13 @@
     <nav class="text-sm text-slate mb-3" aria-label="breadcrumb"><a href="../home.html" class="hover:text-ink">หน้าหลัก</a> <span class="text-steel">›</span> <span class="text-ink">สินค้าทั้งหมด</span></nav>
     <div class="flex flex-wrap items-baseline gap-3 mb-4">
       <h1 class="text-3xl sm:text-[40px] font-heading font-semibold leading-tight">สินค้าทั้งหมด</h1>
+      <button type="button" onclick="openPicker()" class="apple-explore-pill px-4 py-1.5 text-[13px]">✨ ช่วยเลือกไอดี</button>
       <span id="catalog-count-label" class="text-xs font-medium text-slate bg-mist border border-hairline px-3 py-1 rounded-full">กำลังโหลด…</span>
     </div>
     <div id="filter-bar" class="mb-6"></div>
     <button id="category-back" type="button" onclick="clearSearchAndFilters()" class="hidden mb-5 text-appleBlue text-[15px] hover:underline">‹ หมวดหมู่ทั้งหมด</button>
     <div id="category-cards" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    <p id="cat-desc-note" class="hidden text-slate text-[15px] leading-relaxed whitespace-pre-line mb-4"></p>
     <div id="product-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"></div>
     <div id="empty-state" class="hidden soft-card py-16 px-6 text-center"></div>
   </main>

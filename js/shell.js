@@ -16,10 +16,10 @@ const rankLine = () => { const i = rankOf(lastProfile, lastST); return i < 0 ? '
  * Pages only need <header id="site-header"></header> and <footer id="site-footer"></footer>.
  */
 const page = (location.pathname.split('/').pop() || 'index').replace(/\.html$/, '') + '.html'; // same with or without .html (Vercel cleanUrls)
-const ACTIVE = { 'home.html': 'home', 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more', 'box.html': 'shop', 'rentals.html': 'more', 'wallet.html': 'more', 'cart.html': 'more', 'vault.html': 'more' }[page] || '';
+const ACTIVE = { 'home.html': 'home', 'index.html': 'home', '': 'home', 'category.html': 'shop', 'product.html': 'shop', 'topup.html': 'topup', 'account.html': 'more', 'queue.html': 'more', 'auction.html': 'more', 'box.html': 'shop', 'rentals.html': 'more', 'wallet.html': 'more', 'cart.html': 'more', 'vault.html': 'more' }[page] || '';
 const L = {
   home: ROOT + 'home.html', shop: ROOT + 'front/category.html', topup: ROOT + 'front/topup.html',
-  account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', box: ROOT + 'front/box.html', orders: ROOT + 'front/account.html#orders',
+  account: ROOT + 'front/account.html', queue: ROOT + 'front/queue.html', auction: ROOT + 'front/auction.html', box: ROOT + 'front/box.html', orders: ROOT + 'front/account.html#orders',
   cart: ROOT + 'front/cart.html', vault: ROOT + 'front/vault.html', login: ROOT + 'front/login.html?mode=login', register: ROOT + 'front/login.html?mode=register'
 };
 const LOGO = ROOT + 'assets/logo-icon-96.png';
@@ -27,6 +27,21 @@ const LOGO = ROOT + 'assets/logo-icon-96.png';
 let user = null;
 let balance = null;
 let settings = {};
+
+/** Shop paused by the admin (same rule as shopClosedNow() in worker/slip-worker.js): an orange line under the header on every page. */
+function renderClosed() {
+  let bar = document.getElementById('closed-bar');
+  const off = settings.shopClosed === true && !(Number(settings.shopReopenAt) > 0 && Date.now() >= Number(settings.shopReopenAt));
+  if (!off) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'closed-bar'; bar.setAttribute('role', 'status');
+    bar.className = 'text-center text-[13px] py-2 px-4'; bar.style.cssText = 'background:#fff3e6;color:#b64400';
+    const header = document.getElementById('site-header');
+    (header?.parentNode || document.body).insertBefore(bar, header?.nextSibling || document.body.firstChild);
+  }
+  const back = Number(settings.shopReopenAt) > 0 ? ` · เปิดอีกครั้ง ${new Date(Number(settings.shopReopenAt)).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}` : '';
+  bar.textContent = (String(settings.shopClosedMsg || '').trim() || 'ร้านปิดชั่วคราว') + back;
+}
 
 function renderAnnouncement() {
   let bar = document.getElementById('announce-bar');
@@ -105,6 +120,7 @@ function renderFooter() {
           <li><a class="hover:text-ink" href="${L.shop}">สินค้าทั้งหมด</a></li>
           <li><a class="hover:text-ink" href="${L.topup}">เติมเงิน</a></li>
           <li><a class="hover:text-ink" href="${L.queue}">คิวงานบริการ</a></li>
+          <li><a class="hover:text-ink" href="${L.auction}">ประมูลไอดี</a></li>
           <li><a class="hover:text-ink" href="${L.orders}">ออเดอร์ของฉัน</a></li>
         </ul>
       </div>
@@ -165,6 +181,7 @@ function renderMoreSheet() {
       ${row(L.account, ICONS.user, 'บัญชี')}
       ${row(L.orders, ICONS.orders, 'ออเดอร์ของฉัน')}
       ${row(L.queue, ICONS.queue, 'คิวงาน')}
+      ${row(L.auction, ICONS.bolt, 'ประมูลไอดี')}
       <button type="button" onclick="toggleTheme()" class="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-mist transition text-[16px] font-medium text-ink">${icon(ICONS.moon, 'w-6 h-6 text-slate', 2)}<span class="flex-1 text-left">สลับโหมดสว่าง / มืด</span></button>
     </div>
     <div class="mt-4 pt-4 border-t border-hairline">
@@ -237,7 +254,7 @@ function init() {
   renderMoreSheet();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(); });
   onSettings((s) => {
-    settings = s || {}; renderAnnouncement(); renderFooter(); renderMoreSheet();
+    settings = s || {}; renderClosed(); renderAnnouncement(); renderFooter(); renderMoreSheet();
     // festival code is only downloaded while a festival is on (or was on, so it can switch itself off)
     if (settings.festival?.on || festivalLoaded) { festivalLoaded = true; import('./festival.js').then(m => m.applyFestival(settings.festival, ACTIVE === 'home')).catch(e => console.warn('festival:', e)); }
   });

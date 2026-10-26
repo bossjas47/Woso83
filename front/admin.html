@@ -345,7 +345,7 @@
     </header>
 
     <!-- Sub-navigation Bar (5 Sections) -->
-    <div class="border-b border-hairline bg-mist py-2.5">
+    <div class="border-b border-hairline bg-mist py-2.5" style="position:sticky;top:44px;z-index:30">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto">
         <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">สรุปภาพรวม</button>
         <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="px-4 py-1.5 rounded-button text-xs transition-all text-slate hover:text-ink flex items-center shrink-0">สินค้า &amp; สต็อก</button>
@@ -372,6 +372,14 @@
         <div class="grid lg:grid-cols-2 gap-4">
           <div class="apple-card p-4 sm:p-5"><p class="text-sm font-semibold">สินค้าขายดี 30 วัน</p><div id="dash-top" class="mt-3 space-y-2 text-xs"></div></div>
           <div class="apple-card p-4 sm:p-5"><p class="text-sm font-semibold">ต้องจัดการ</p><div id="dash-todo" class="mt-3 space-y-2 text-xs"></div></div>
+        </div>
+        <div id="dash-reviews" class="hidden apple-card p-4 sm:p-5">
+          <p class="text-sm font-semibold">รีวิวรออนุมัติ</p>
+          <div id="dash-reviews-body" class="mt-3 space-y-2 text-xs"></div>
+        </div>
+        <div id="dash-ammo" class="hidden apple-card p-4 sm:p-5">
+          <div class="flex items-center justify-between"><p class="text-sm font-semibold">ไก่กระสุน</p><p class="text-[11px] text-slate">ขายได้ · คงเหลือ · ส่วนลดที่ให้ไป (ทั้งหมด)</p></div>
+          <div id="dash-ammo-body" class="mt-3 space-y-3 text-xs"></div>
         </div>
       </section>
 
@@ -448,6 +456,26 @@
           </div>
         </div>
 
+        <div id="profit-card" class="apple-card p-5 space-y-3">
+          <div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-sm mr-auto">ประวัติขาย &amp; กำไรต่อสินค้า <span class="text-slate font-normal text-xs">· กำไรคำนวณเมื่อใส่ต้นทุนในฟอร์มสินค้า</span></p>
+            <button type="button" onclick="exportProductsCsv()" class="apple-explore-pill px-3 py-1 text-xs">ส่งออก CSV</button>
+            <label class="apple-explore-pill px-3 py-1 text-xs cursor-pointer">นำเข้า CSV<input type="file" accept=".csv,text/csv" class="hidden" onchange="importProductsCsv(this)"></label></div>
+          <div id="profit-list" class="space-y-1.5 text-xs"></div>
+          <p class="text-[10px] text-steel">CSV แก้ได้: ชื่อ, ราคา, ต้นทุน, แท็ก (คั่นด้วย |), สเปก (คั่นด้วย |) ของสินค้าที่มี id อยู่แล้วเท่านั้น · สินค้าที่กำลังลดราคา/กระสุน/บริการ/เช่า ข้ามช่องราคา</p>
+        </div>
+
+        <div id="auction-admin" class="apple-card p-5 space-y-3">
+          <p class="font-semibold text-sm">ประมูลไอดี <span class="text-slate font-normal text-xs">· ลูกค้าเห็นที่หน้า "ประมูลไอดี" · ผู้ชนะได้ไอดีหนึ่งตัวจากสต็อกของสินค้าที่เลือกตอนปิด</span></p>
+          <form onsubmit="return createAuction(event)" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs items-end">
+            <label class="col-span-2">สินค้า<select id="auc-product" class="w-full apple-input px-2 py-2 mt-1"></select></label>
+            <label>ราคาเริ่ม ฿<input id="auc-start" type="number" min="1" step="1" required class="w-full apple-input px-2 py-2 mt-1 font-mono"></label>
+            <label>เพิ่มครั้งละ ฿<input id="auc-step" type="number" min="1" step="1" value="10" required class="w-full apple-input px-2 py-2 mt-1 font-mono"></label>
+            <label>นาน (ชม.)<input id="auc-hours" type="number" min="1" max="168" value="24" required class="w-full apple-input px-2 py-2 mt-1 font-mono"></label>
+            <button type="submit" class="apple-explore-pill px-4 py-2 col-span-2 sm:col-span-5">เริ่มประมูล</button>
+          </form>
+          <div id="auction-admin-list" class="space-y-1.5 text-xs"></div>
+        </div>
+
       </section>
 
       <!-- SECTION: CATEGORIES -->
@@ -477,6 +505,23 @@
             <div class="sm:col-span-2">
               <label class="block text-[11px] text-slate mb-1" for="cat-order">ลำดับแสดง</label>
               <input id="cat-order" type="number" step="1" placeholder="เช่น 50" class="w-full apple-input px-3 py-2 text-xs font-mono" />
+            </div>
+            <div class="sm:col-span-6">
+              <label class="block text-[11px] text-slate mb-1" for="cat-badge">ป้ายบนการ์ด (สั้น ๆ ไม่บังคับ เช่น ใหม่, ลดราคา)</label>
+              <input id="cat-badge" type="text" maxlength="16" class="w-full apple-input px-3.5 py-2 text-xs" />
+            </div>
+            <label class="sm:col-span-6 flex items-center gap-2 text-xs pb-2"><input id="cat-hidden" type="checkbox" class="w-4 h-4"> ซ่อนหมวดนี้จากหน้าร้านชั่วคราว (การ์ดและตัวกรองหาย · สินค้าข้างในยังค้นหาเจอ)</label>
+            <div class="sm:col-span-6">
+              <label class="block text-[11px] text-slate mb-1" for="cat-show-from">แสดงหมวดตั้งแต่ (เว้นว่าง = ทันที)</label>
+              <input id="cat-show-from" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs" />
+            </div>
+            <div class="sm:col-span-6">
+              <label class="block text-[11px] text-slate mb-1" for="cat-show-to">แสดงหมวดถึง (เว้นว่าง = ไม่หมดอายุ · นอกช่วงนี้หมวดจะถูกซ่อนเอง)</label>
+              <input id="cat-show-to" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs" />
+            </div>
+            <div class="sm:col-span-12">
+              <label class="block text-[11px] text-slate mb-1" for="cat-desc">คำอธิบายหมวดหมู่ (แสดงบนการ์ดหมวดหมู่ในหน้าร้าน ไม่บังคับ)</label>
+              <textarea id="cat-desc" rows="3" maxlength="300" placeholder="เช่น ไอดีเลเวล 30+ พร้อมเล่น ส่งทันทีหลังชำระเงิน" class="w-full apple-input px-3.5 py-2 text-xs"></textarea>
             </div>
             <div id="cat-service-fields" class="hidden sm:col-span-12 grid sm:grid-cols-2 gap-3">
               <div>
@@ -529,6 +574,10 @@
               <option value="processing">กำลังดำเนินการ</option><option value="completed">ส่งมอบสำเร็จ</option><option value="cancelled">ยกเลิก</option>
             </select>
           </div>
+          <div class="flex items-center gap-1.5 text-xs">
+            <input id="csv-from" type="date" aria-label="ตั้งแต่วันที่" class="apple-input px-2 py-1.5 text-xs"><span class="text-slate">–</span><input id="csv-to" type="date" aria-label="ถึงวันที่" class="apple-input px-2 py-1.5 text-xs">
+            <button type="button" onclick="exportOrdersCsv()" class="apple-explore-pill px-3 py-1.5 text-xs whitespace-nowrap">ดาวน์โหลด CSV</button>
+          </div>
           <button onclick="refreshOrders()" class="text-xs font-medium text-appleBlue hover:underline">รีเฟรช</button>
         </div>
         <div id="order-chips" class="ord-chips"></div>
@@ -572,6 +621,16 @@
           <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ยอดเงินคงค้างรวม</span><span id="metric-user-balance" class="text-2xl font-display font-semibold text-pricingBlue">฿0</span></div>
           <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ผู้ดูแลระบบ</span><span id="metric-user-admins" class="text-2xl font-display font-semibold">0</span></div>
           <div class="apple-card p-5"><span class="text-xs text-slate block mb-1">ถูกระงับ</span><span id="metric-user-suspended" class="text-2xl font-display font-semibold text-launchOrange">0</span></div>
+        </div>
+        <div class="apple-card p-5 space-y-3" id="winback-card">
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <p class="font-semibold text-ink text-sm mr-auto">ลูกค้าหาย <span class="text-slate font-normal">(ซื้อ ≥ 2 ครั้ง แต่หายไปนาน)</span></p>
+            <label class="text-slate">หายเกิน <input id="wb-days" type="number" min="1" max="365" value="30" oninput="renderWinback()" class="w-16 apple-input px-2 py-1 font-mono"> วัน</label>
+            <label class="text-slate">ลด <input id="wb-value" type="number" min="1" value="10" class="w-16 apple-input px-2 py-1 font-mono"></label>
+            <select id="wb-type" class="apple-input px-2 py-1"><option value="percent">%</option><option value="fixed">฿</option></select>
+            <label class="text-slate">ใช้ได้ <input id="wb-valid" type="number" min="1" max="90" value="7" class="w-14 apple-input px-2 py-1 font-mono"> วัน</label>
+          </div>
+          <div id="winback-list" class="space-y-1.5 text-xs"></div>
         </div>
         <div class="apple-card p-4 sm:px-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
           <input id="user-search" type="search" oninput="renderAdminUsers()" placeholder="ค้นหาชื่อผู้ใช้ อีเมล Facebook หรือ UID…" class="flex-1 min-w-0 apple-input-rounded px-4 py-2 text-xs">
@@ -711,6 +770,23 @@
       <section id="admin-sec-settings" class="hidden">
         <form id="settings-form" onsubmit="handleSaveSettings(event)" class="max-w-3xl mx-auto space-y-6">
           <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">ปิดรับออเดอร์ไก่กระสุนชั่วคราว</h3>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-ammo-closed" type="checkbox"> ปิดรับออเดอร์ไก่กระสุน (ลูกค้าที่หาไอดีไว้แล้วยังจ่ายต่อได้ภายใน 15 นาที)</label>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-ammo-closed-msg">ข้อความถึงลูกค้า</label><input id="setting-ammo-closed-msg" type="text" maxlength="300" placeholder="เช่น ปรับปรุงสต็อก เปิดรับอีกครั้งพรุ่งนี้ 10:00" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-ammo-close-from">ปิดอัตโนมัติทุกวัน ตั้งแต่ (เวลาไทย)</label><input id="setting-ammo-close-from" type="time" class="w-full apple-input px-3 py-2 text-xs"></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="setting-ammo-close-to">ถึง (เว้นว่างทั้งคู่ = ไม่ปิดตามเวลา)</label><input id="setting-ammo-close-to" type="time" class="w-full apple-input px-3 py-2 text-xs"></div>
+            </div>
+            <p class="text-[10px] text-steel">อย่าลืมกด "บันทึก" ที่ปุ่มบันทึกการตั้งค่าด้านล่างสุดของหน้านี้</p>
+          </div>
+          <div class="apple-card p-6 space-y-4">
+            <h3 class="font-display font-semibold text-base">ปิดร้านชั่วคราว &amp; ส่วนลดซื้อคู่</h3>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-shop-closed" type="checkbox"> ปิดร้าน (หยุดซื้อ/เช่า/สุ่มกล่อง/ใบเสนอราคากระสุน · เติมเงินยังใช้ได้ · แอดมินยังทดสอบได้)</label>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-shop-closed-msg">ข้อความที่ลูกค้าเห็น</label><input id="setting-shop-closed-msg" type="text" maxlength="300" placeholder="เช่น ร้านพักชั่วคราว กลับมาเปิดพรุ่งนี้ 10:00" class="w-full apple-input px-3.5 py-2"></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-shop-reopen">เปิดร้านอัตโนมัติเมื่อถึงเวลา (ไม่บังคับ)</label><input id="setting-shop-reopen" type="datetime-local" class="w-full apple-input px-3.5 py-2"></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="setting-combo-pct">ซื้อไอดี + บริการในตะกร้าเดียวกัน ลดทุกรายการ (%, 0 = ปิด, สูงสุด 50)</label><input id="setting-combo-pct" type="number" min="0" max="50" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+          </div>
+          <div class="apple-card p-6 space-y-4">
             <h3 class="font-display font-semibold text-base">แถบประกาศด้านบน</h3>
             <label class="flex items-center gap-2 text-sm"><input id="setting-announce-on" type="checkbox"> แสดงแถบประกาศทุกหน้า</label>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-announce-text">ข้อความประกาศ</label><input id="setting-announce-text" type="text" maxlength="300" placeholder="เช่น เติมเงินวันนี้รับโบนัส 10%" class="w-full apple-input px-3.5 py-2 text-xs"></div>
@@ -809,6 +885,16 @@
             <div class="flex items-center justify-between gap-3 pt-2 border-t border-hairline"><span class="text-xs text-slate">รหัส PIN สำหรับเปิดหน้าหลังบ้าน</span><button type="button" onclick="promptResetPin()" class="apple-explore-pill px-4 py-2 text-xs text-launchOrange">เปลี่ยนรหัส PIN</button></div>
           </div>
 
+          <div class="apple-card p-6 space-y-3">
+            <h3 class="font-display font-semibold text-base">ประวัติการแก้ไข (50 รายการล่าสุด)</h3>
+            <button type="button" onclick="loadAudit()" class="apple-explore-pill px-4 py-2 text-xs">โหลดประวัติ</button>
+            <div id="audit-list" class="space-y-2 text-xs"></div>
+          </div>
+          <div class="apple-card p-6 space-y-3">
+            <h3 class="font-display font-semibold text-base">ส่งออกข้อมูลสำรอง</h3>
+            <p class="text-xs text-slate">ดาวน์โหลดหมวดหมู่ การตั้งค่า สินค้า และสต็อกทั้งหมด (รวมรหัสผ่านไอดี) เป็นไฟล์ JSON ทำจากเครื่องแอดมินเท่านั้น</p>
+            <button type="button" onclick="exportBackup()" class="apple-explore-pill px-4 py-2 text-xs">ดาวน์โหลดไฟล์สำรอง</button>
+          </div>
           <button type="submit" class="w-full apple-pricing-pill py-3 text-sm">บันทึกการตั้งค่าทั้งหมด</button>
         </form>
       </section>
@@ -1197,6 +1283,21 @@
             <div class="grid grid-cols-2 gap-3">
               <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-rate">ราคาต่อกอง (฿):</label><input id="prod-ammo-rate" type="number" min="0" step="0.01" placeholder="2" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
               <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-min">สั่งขั้นต่ำ (กอง):</label><input id="prod-ammo-min" type="number" min="1" step="1" placeholder="10" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-disc-type">ส่วนลดต่อกอง:</label><select id="prod-ammo-disc-type" class="w-full apple-input px-3 py-1.5 text-xs"><option value="fixed">ลดเป็นบาท (฿ ต่อกอง)</option><option value="percent">ลดเป็นเปอร์เซ็นต์ (%)</option></select></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-disc">ค่าส่วนลด (เว้นว่าง = ไม่ลด):</label><input id="prod-ammo-disc" type="number" min="0" step="0.01" placeholder="เช่น 0.5 หรือ 10" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-disc-from">ส่วนลดเริ่ม (เว้นว่าง = ทันที):</label><input id="prod-ammo-disc-from" type="datetime-local" class="w-full apple-input px-3 py-1.5 text-xs"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-disc-to">ส่วนลดสิ้นสุด (เว้นว่าง = ไม่หมดอายุ):</label><input id="prod-ammo-disc-to" type="datetime-local" class="w-full apple-input px-3 py-1.5 text-xs"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-tiers-from">ขั้นจำนวนกองเริ่ม (เว้นว่าง = ทันที):</label><input id="prod-ammo-tiers-from" type="datetime-local" class="w-full apple-input px-3 py-1.5 text-xs"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-tiers-to">ขั้นจำนวนกองสิ้นสุด (เว้นว่าง = ไม่หมดอายุ):</label><input id="prod-ammo-tiers-to" type="datetime-local" class="w-full apple-input px-3 py-1.5 text-xs"></div>
+            </div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-tiers">ส่วนลดตามจำนวนกอง (บรรทัดละขั้น: <span class="font-mono">จำนวนกองขั้นต่ำ ค่าลด</span> เติม % ถ้าลดเป็นเปอร์เซ็นต์):</label><textarea id="prod-ammo-tiers" rows="3" placeholder="500 0.1&#10;1000 0.2&#10;2000 15%" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></textarea>
+              <p class="text-[10px] text-steel mt-1">ระบบเลือกส่วนลดที่ถูกที่สุดเพียงอย่างเดียว ไม่ซ้อนกัน · ส่วนลดบาท/% และขั้นจำนวนกอง ตั้งช่วงเวลาแยกกันได้</p></div>
+            <p id="ammo-preview" class="text-[11px] text-slate rounded-xl bg-gallery px-3 py-2 leading-relaxed"></p>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-maxids">ไอดีสูงสุดต่อออเดอร์ (เว้นว่าง = 25, สูงสุด 100):</label><input id="prod-ammo-maxids" type="number" min="1" max="100" step="1" placeholder="25" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-low">เตือน Discord เมื่อเหลือต่ำกว่า (กอง):</label><input id="prod-ammo-low" type="number" min="0" step="1" placeholder="เช่น 500 (เว้นว่าง = ไม่เตือน)" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
             </div>
             <label class="flex items-center gap-2 text-xs"><input id="prod-ammo-login" type="checkbox" class="w-4 h-4" checked> ต้องเข้าสู่ระบบก่อนซื้อ (ไม่ติ๊ก = ซื้อได้เลย จ่ายด้วยสลิป/ซองอั่งเปา ไอดีเก็บในเครื่องลูกค้า)</label>
             <p class="text-[10px] text-steel">เติมสต็อกด้วยปุ่ม "สต็อก" บรรทัดละไอดี: <span class="font-mono">อีเมล|รหัสผ่าน|จำนวนกอง</span> · ราคาที่ลูกค้าจ่าย = กองที่ได้จริง × ราคาต่อกอง (ลูกค้าเห็นก่อนกดจ่าย)</p>
@@ -1215,6 +1316,27 @@
               <span class="text-[10px] text-steel">เลือกชั่วโมงตรงกับแพ็ก = ราคาแพ็ก, ชั่วโมงอื่น = ชั่วโมง × ราคา/ชั่วโมง. ว่างราคา/ชั่วโมงได้ ถ้าขายเป็นแพ็กอย่างเดียว</span></div>
             <p class="text-[10px] text-steel">เพิ่มไอดีให้เช่าด้วยปุ่ม "สต็อก" เหมือนไอดีขาย · ลูกค้าเห็นรหัสเฉพาะช่วงที่เช่าอยู่</p>
           </div>
+        </div>
+
+        <div id="promo-config-box" class="space-y-3 p-4 rounded-2xl bg-mist">
+          <p class="text-xs font-semibold">ลดราคาตามเวลา (Flash sale) · แพ็กรวมไก่กระสุน</p>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-sale-price">ราคาช่วงโปร (฿):</label><input id="prod-sale-price" type="number" min="0" step="0.01" placeholder="เว้นว่าง = ไม่มีโปร" class="w-full apple-input px-3 py-2 text-xs"></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-sale-from">เริ่ม:</label><input id="prod-sale-from" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs"></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-sale-to">สิ้นสุด:</label><input id="prod-sale-to" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs"></div>
+          </div>
+          <p class="text-[10px] text-steel">ระบบสลับราคาให้เองทุก 5 นาที (ตอนโปรอยู่ ช่อง "ราคา" ด้านบนคือราคาปกติที่จะกลับไปใช้หลังโปรจบ)</p>
+          <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-drop-at">เปิดขายตามเวลา (Flash drop) — ก่อนถึงเวลาซื้อไม่ได้ มีนับถอยหลัง และแจ้งคนที่กด "แจ้งเมื่อเปิดขาย":</label><input id="prod-drop-at" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs"></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-cost">ต้นทุนต่อหน่วย ฿ (ต่อไอดี / ต่อกอง / ต่อหน่วยบริการ — ใช้คำนวณกำไรในหลังบ้าน):</label><input id="prod-cost" type="number" min="0" step="0.01" class="w-full apple-input px-3 py-2 text-xs font-mono"></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-hide-at">ปิดขายอัตโนมัติเมื่อถึงเวลา:</label><input id="prod-hide-at" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs"></div>
+          </div>
+          <label class="flex items-center gap-2 text-xs"><input id="prod-unlisted" type="checkbox"> ซ่อนจากหน้าร้าน — เข้าได้เฉพาะคนที่มีลิงก์สินค้า (สำหรับ VIP / ขายก่อนเปิดทั่วไป)</label>
+          <div id="bundle-fields" class="grid grid-cols-2 gap-3">
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-bundle-id">แถมไก่กระสุนจากสินค้า:</label><select id="prod-bundle-id" class="w-full apple-input px-3 py-2 text-xs"></select></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-bundle-n">กองต่อ 1 ไอดี (โดยประมาณ ±10%):</label><input id="prod-bundle-n" type="number" min="1" step="1" class="w-full apple-input px-3 py-2 text-xs"></div>
+          </div>
+          <p class="text-[10px] text-steel">แพ็กรวม: ตั้งราคาสินค้านี้เป็นราคารวม ซื้อแล้วได้ไอดีนี้ + ไก่กระสุนที่ตัดจากสต็อกของสินค้าไก่กระสุนที่เลือก</p>
         </div>
 
         <div class="space-y-3 p-4 rounded-2xl bg-mist">
@@ -1300,12 +1422,21 @@
         <input type="hidden" id="box-edit-id">
         <div><label class="block text-slate mb-1" for="box-name">ชื่อกล่อง</label><input id="box-name" type="text" maxlength="60" required placeholder="เช่น กล่องสุ่มไอดี T5" class="w-full apple-input px-3.5 py-2"></div>
         <div><label class="block text-slate mb-1" for="box-desc">คำอธิบายสั้น ๆ (แสดงใต้ชื่อกล่อง)</label><input id="box-desc" type="text" maxlength="120" class="w-full apple-input px-3.5 py-2"></div>
-        <div><label class="block text-slate mb-1" for="box-image">รูปกล่อง (ลิงก์รูป เว้นว่างได้)</label><input id="box-image" type="text" placeholder="https://..." class="w-full apple-input px-3.5 py-2"></div>
+        <div><label class="block text-slate mb-1" for="box-image">รูปกล่อง (อัปโหลดไฟล์ หรือวางลิงก์ · เว้นว่าง = ใช้ไอคอนกล่อง)</label>
+          <div class="flex items-center gap-3">
+            <img id="box-image-preview" alt="" class="hidden w-16 h-16 rounded-2xl object-cover bg-mist shrink-0">
+            <div class="flex-1 space-y-2"><input id="box-image" type="text" placeholder="https://..." oninput="boxImagePreview()" class="w-full apple-input px-3.5 py-2.5">
+              <div class="flex gap-2"><label class="apple-explore-pill px-3 py-1 cursor-pointer">เลือกรูปจากเครื่อง<input id="box-image-file" type="file" accept="image/*" class="hidden" onchange="boxImageUpload(this)"></label><button type="button" onclick="boxImageClear()" class="apple-explore-pill px-3 py-1">ลบรูป</button></div></div>
+          </div></div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="block text-slate mb-1" for="box-price">ราคาต่อ 1 ครั้ง (เครดิต ฿)</label><input id="box-price" type="number" min="1" step="0.01" required class="w-full apple-input px-3.5 py-2 font-mono"></div>
           <div><label class="block text-slate mb-1" for="box-order">ลำดับแสดง (เลขน้อยขึ้นก่อน)</label><input id="box-order" type="number" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
         </div>
         <div><label class="block text-slate mb-1" for="box-category">หมวดหมู่ (เว้นว่าง = แสดงเป็นสินค้าเดี่ยว ไม่อยู่ในหมวดไหน)</label><select id="box-category" class="w-full apple-input px-3.5 py-2"></select></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-slate mb-1" for="box-pity">การันตี: ครบกี่ครั้งต้องได้ของดี (0 = ปิด)</label><input id="box-pity" type="number" min="0" max="500" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
+          <div><label class="block text-slate mb-1" for="box-pity-rarity">ระดับที่การันตี (หรือดีกว่า)</label><select id="box-pity-rarity" class="w-full apple-input px-3.5 py-2"><option value="rare">หายาก</option><option value="epic">เอพิค</option><option value="legendary">ตำนาน</option></select></div>
+        </div>
         <div class="flex flex-wrap gap-x-6 gap-y-2">
           <label class="flex items-center gap-2"><input id="box-active" type="checkbox" checked> เปิดให้ลูกค้าเล่น</label>
           <label class="flex items-center gap-2"><input id="box-show-odds" type="checkbox" checked> แสดงโอกาสสุ่ม (%) ให้ลูกค้าเห็น</label>
@@ -1315,6 +1446,8 @@
           <p class="text-slate">น้ำหนักคือสัดส่วนความถี่ เช่น 50 / 30 / 5 (ไม่ต้องรวมเป็น 100) · ช่อง % ด้านขวาคำนวณให้</p>
           <div id="prize-rows" class="space-y-2"></div>
           <div id="box-ev" class="rounded-xl bg-mist px-3 py-2 text-slate"></div>
+          <button type="button" onclick="simulateBox()" class="apple-explore-pill px-3 py-1">จำลองเปิด 10,000 กล่อง ดูกำไร</button>
+          <div id="box-sim" class="hidden rounded-xl bg-mist px-3 py-2 text-slate leading-relaxed"></div>
         </div>
         <div class="flex justify-end gap-2 pt-3 border-t border-hairline"><button type="button" onclick="closeBoxModal()" class="apple-explore-pill px-5 py-2">ยกเลิก</button><button type="submit" class="apple-pricing-pill px-6 py-2">บันทึกกล่อง</button></div>
       </form>
@@ -1327,7 +1460,8 @@
       <button type="button" onclick="closeModal('user-modal')" aria-label="ปิด" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-mist text-slate">✕</button>
       <p class="text-[11px] text-slate font-mono" id="um-uid"></p>
       <h3 id="um-title" class="text-xl font-display font-semibold mb-4">ผู้ใช้</h3>
-      <div class="bg-mist p-1 rounded-full grid grid-cols-3 text-xs mb-5">
+      <div class="bg-mist p-1 rounded-full grid grid-cols-4 text-xs mb-5">
+        <button type="button" id="um-tab-overview" onclick="userModalTab('overview')" class="py-2 rounded-full">ภาพรวม</button>
         <button type="button" id="um-tab-info" onclick="userModalTab('info')" class="py-2 rounded-full">ข้อมูลบัญชี</button>
         <button type="button" id="um-tab-wallet" onclick="userModalTab('wallet')" class="py-2 rounded-full">ยอดเงิน</button>
         <button type="button" id="um-tab-history" onclick="userModalTab('history')" class="py-2 rounded-full">ประวัติ</button>
@@ -1366,6 +1500,7 @@
         <div class="flex justify-end pt-3 border-t border-hairline"><button type="submit" id="um-wsave" class="apple-pricing-pill px-6 py-2">ปรับยอดเงิน</button></div>
         <div><p class="font-semibold mb-2">ประวัติการปรับยอดโดยแอดมิน</p><div id="um-wallet-logs" class="divide-y divide-hairline"></div></div>
       </form>
+      <div id="um-pane-overview" class="hidden space-y-4 text-xs"><div id="um-overview" class="space-y-3"></div></div>
       <div id="um-pane-history" class="hidden space-y-5 text-xs">
         <div><p class="font-semibold mb-2">ประวัติการเติมเงิน</p><div id="um-topups" class="divide-y divide-hairline"></div></div>
         <div><p class="font-semibold mb-2">ประวัติการสั่งซื้อ / คิวงาน</p><div id="um-orders" class="divide-y divide-hairline"></div></div>

@@ -13,7 +13,9 @@ const form = { facebook: '' };            // typed buyer details survive re-rend
 const root = () => document.getElementById('cart-root');
 const key = (it) => `${it.productId}|${it.farmMode || ''}`;
 
-const lineTotal = (base) => Math.round((base - rankDiscount(base, prof || window.__wallet?.profile, getSettings())) * 100) / 100; // rank discount, same as the Worker
+let comboPct = 0; // % off every line while the cart holds both an ID and a service (set in render(); same rule as routeCart in the Worker)
+const lineTotal = (base) => Math.round((base - rankDiscount(base, prof || window.__wallet?.profile, getSettings()) - (comboPct > 0 ? Math.round(base * comboPct) / 100 : 0)) * 100) / 100; // rank + combo discount, same as the Worker
+const comboOn = () => { const l = items.map(it => info(it)).filter(d => d && !d.out && !d.p.isAmmo); return l.some(d => d.srv) && l.some(d => !d.srv) ? Math.min(50, Math.max(0, num(getSettings().comboPct))) : 0; };
 function info(it) {
   const p = PRODUCTS[it.productId];
   if (!p) return null;
@@ -26,6 +28,7 @@ const live = () => items.map((it, i) => ({ it, i, d: info(it) })).filter(x => x.
 
 function render() {
   const el = root(); if (!el || !ready) return;
+  comboPct = 0; comboPct = comboOn(); // two passes: kinds are read without the discount first
   if (!user) { el.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">เข้าสู่ระบบเพื่อใช้ตะกร้า</p><a href="login.html?mode=login&next=cart.html" class="apple-pricing-pill px-6 py-2.5 text-[15px] mt-4">เข้าสู่ระบบ</a></div>'; return; }
   if (!items.length) { el.innerHTML = '<div class="soft-card py-12 px-6 text-center"><p class="font-semibold">ตะกร้าว่าง</p><p class="text-slate text-sm mt-1">ตะกร้ายังว่าง เลือกของแล้วกด "เพิ่มลงตะกร้า" ได้เลย</p><a href="category.html" class="apple-explore-pill px-6 py-2.5 text-[15px] mt-4 bg-gallery">ดูสินค้า</a></div>'; return; }
   const lines = live(), total = Math.round(lines.reduce((a, x) => a + x.d.total, 0) * 100) / 100;
@@ -44,7 +47,7 @@ function render() {
         : `<div class="grid gap-2 mt-3"><input data-k="${esc(key(it))}" data-f="email" value="${esc(f.email || '')}" maxlength="200" placeholder="อีเมลบัญชีเกม" autocomplete="off" class="apple-input px-4 py-2.5 text-sm"><input data-k="${esc(key(it))}" data-f="password" type="password" value="${esc(f.password || '')}" maxlength="200" placeholder="รหัสผ่านบัญชีเกม" autocomplete="off" class="apple-input px-4 py-2.5 text-sm"></div>`) : ''}
     </article>`;
   }).join('') + (anySrv ? `<div class="soft-card p-4"><label class="block text-sm font-medium mb-1.5">ชื่อหรือลิงก์ Facebook (สำหรับนัดงานบริการ)</label><input id="cart-facebook" value="${esc(form.facebook)}" maxlength="200" class="w-full apple-input px-4 py-3" placeholder="เช่น Somchai Gamer"></div>` : '')
-  + `<div class="soft-card p-5 space-y-3"><div class="flex justify-between text-[15px]"><span class="text-slate">รวม ${lines.length} รายการ</span><span class="text-2xl font-heading font-semibold">${baht(total)}</span></div>
+  + `<div class="soft-card p-5 space-y-3"><div class="flex justify-between text-[15px]"><span class="text-slate">รวม ${lines.length} รายการ${comboPct ? ` · ซื้อคู่ลด ${comboPct}%` : ''}</span><span class="text-2xl font-heading font-semibold">${baht(total)}</span></div>
       <div class="flex justify-between text-sm"><span class="text-slate">เครดิตของคุณ</span><span>${balance === null ? '…' : baht(balance)}${short ? ' <a href="topup.html" class="text-appleBlue ml-1">เติมเงิน ›</a>' : ''}</span></div>
       <button id="cart-pay" onclick="cartPay()" ${paying || !lines.length || short || !workerBase() ? 'disabled' : ''} class="w-full apple-pricing-pill h-12 text-[16px] font-semibold">${paying ? 'กำลังชำระเงิน…' : !workerBase() ? 'ร้านยังไม่เปิดชำระด้วยเครดิต' : lines.length ? `ชำระด้วยเครดิต ${baht(total)}` : 'ไม่มีสินค้าที่ชำระได้'}</button>
       <p class="text-xs text-slate">ชำระด้วยเครดิตเท่านั้น รายการที่ซื้อไม่สำเร็จ (เช่น สินค้าหมด) จะไม่ถูกตัดเงินและยังอยู่ในตะกร้า</p></div>`;

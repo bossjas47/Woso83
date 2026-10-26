@@ -3,6 +3,7 @@ import "./popup.js";
 import { collection, doc, limit, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { esc, num, money, timeAgo, onSettings, icon, ICONS, imgAttrs } from "./ui.js";
 import { mountCatalog, cardFor, stockOf, priceOf } from "./catalog.js";
+import { ammoRateOf, ammoListRate } from "./ammo-rate.js";
 import { productUrl } from "./card.js";
 import { orderThumb, PRODUCT_IMAGES } from "./orders-ui.js";
 import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
@@ -19,6 +20,22 @@ function onProducts(S) {
   document.getElementById('featured-section').classList.toggle('hidden', !featured.length);
   document.getElementById('featured-grid').innerHTML = featured.slice(0, 6).map(cardFor).join('');
   renderSpotlight();
+  renderAmmoPrice(S.products);
+}
+
+/** Live ammo price: rate now (after discount), strike-through list rate, stock in กอง. */
+function renderAmmoPrice(products) {
+  const am = products.filter(p => p.isAmmo === true), p = am.find(x => stockOf(x) > 0) || am[0];
+  const sec = document.getElementById('ammo-price-section'); sec.classList.toggle('hidden', !p);
+  if (!p) return;
+  const list = ammoListRate(p), now = ammoRateOf(p, 0), cut = now < list, st = stockOf(p);
+  document.getElementById('ammo-price-card').href = productUrl(p.id);
+  document.getElementById('ammo-price-card').innerHTML = `<div class="flex items-center justify-between gap-4 flex-wrap">
+    <div><p class="text-launchOrange text-sm font-semibold">ราคาวันนี้${cut ? ' · <span class="text-red-500">ลดอยู่</span>' : ''}</p>
+      <p class="text-xl sm:text-2xl font-heading font-semibold">${esc(p.name)}</p>
+      <p class="text-sm text-slate mt-1">${st > 0 ? `เหลือ ${st.toLocaleString('th-TH')} กอง` : 'สินค้าหมดชั่วคราว'}${(p.ammoTiers || []).length ? ' · ซื้อเยอะลดเพิ่ม' : ''}</p></div>
+    <div class="text-right"><p class="text-3xl sm:text-4xl font-heading font-semibold">฿${money(now)}<span class="text-sm text-slate font-normal"> /กอง</span></p>
+      ${cut ? `<p class="text-sm text-slate" style="text-decoration:line-through">฿${money(list)}</p>` : ''}</div></div>`;
 }
 
 // ---------- Spotlight: hand-picked products at the top (back office › ตั้งค่า › สินค้าแนะนำสุดพิเศษ) ----------

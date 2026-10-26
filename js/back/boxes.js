@@ -1,6 +1,6 @@
 import { db } from "../../firebase-config.js";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { esc, num, money, toast, openModal, closeModal, fmtDate } from "../ui.js";
+import { esc, num, money, toast, openModal, closeModal, fmtDate, compressImage } from "../ui.js";
 import { isServiceProduct } from "../categories.js";
 
 /**
@@ -152,13 +152,45 @@ export function openBoxModal(id = null) {
   $('box-edit-id').value = b?.id || '';
   $('box-name').value = b?.name || ''; $('box-desc').value = b?.desc || ''; $('box-image').value = b?.image || '';
   $('box-price').value = b?.price ?? ''; $('box-order').value = b?.order ?? '';
+  $('box-pity').value = b?.pityEvery || 0; $('box-pity-rarity').value = b?.pityRarity || 'epic';
   $('box-active').checked = b ? b.active !== false : true;
   $('box-show-odds').checked = b ? b.showOdds !== false : true;
   $('box-category').innerHTML = document.getElementById('prod-category')?.innerHTML || '<option value="">— ไม่มีหมวดหมู่ —</option>';
   $('box-category').value = [...$('box-category').options].some(o => o.value === b?.category) ? b.category : '';
   $('prize-rows').innerHTML = '';
   (b?.prizes?.length ? b.prizes : [{ kind: 'credit', amount: 5, weight: 60, rarity: 'common' }, { kind: 'credit', amount: 50, weight: 5, rarity: 'rare' }]).forEach(p => addPrizeRow(p));
+  boxImagePreview();
+  $('box-sim').classList.add('hidden');
   openModal('box-form-modal');
+}
+export function boxImagePreview() {
+  const v = $('box-image').value.trim(), im = $('box-image-preview');
+  im.classList.toggle('hidden', !v); if (v) im.src = v;
+}
+export async function boxImageUpload(input) {
+  const f = input.files?.[0]; if (!f) return;
+  try { $('box-image').value = await compressImage(f, 800, 0.85, 160000); boxImagePreview(); }
+  catch (e) { toast(e.message || 'อัปโหลดรูปไม่สำเร็จ', 'error'); }
+  input.value = '';
+}
+export function boxImageClear() { $('box-image').value = ''; boxImagePreview(); }
+
+/** Monte-Carlo: 10,000 opens with the form's weights -> money in vs prize value out, plus a 100-box swing range. */
+export function simulateBox() {
+  const rows = readRows().filter(p => p.weight > 0), price = num($('box-price').value), out = $('box-sim');
+  out.classList.remove('hidden');
+  if (!rows.length || !(price > 0)) { out.textContent = 'ใส่ราคากล่องและของรางวัลก่อน'; return; }
+  const total = rows.reduce((a, p) => a + p.weight, 0), vals = rows.map(prizeValue), cnt = {};
+  const draw = () => { let r = Math.random() * total, i = 0; while (i < rows.length - 1 && (r -= rows[i].weight) >= 0) i++; return i; };
+  let pay = 0; const N = 10000;
+  for (let k = 0; k < N; k++) { const i = draw(); pay += vals[i]; cnt[rows[i].rarity] = (cnt[rows[i].rarity] || 0) + 1; }
+  const batches = []; for (let b = 0; b < 1000; b++) { let g = 0; for (let k = 0; k < 100; k++) g += price - vals[draw()]; batches.push(g); }
+  batches.sort((a, b) => a - b);
+  const take = N * price, profit = take - pay, R = { legendary: 'ตำนาน', epic: 'เอพิค', rare: 'หายาก', common: 'ทั่วไป' };
+  out.innerHTML = `รับ ฿${money(take, 0)} · จ่ายของรางวัล ≈ ฿${money(pay, 0)} · <b class="${profit >= 0 ? 'text-ink' : 'text-red-500'}">${profit >= 0 ? 'กำไร' : 'ขาดทุน'} ฿${money(Math.abs(profit), 0)} (${(profit / take * 100).toFixed(1)}%)</b><br>`
+    + `ทุก 100 กล่อง กำไรมักอยู่ระหว่าง ฿${money(batches[50], 0)} ถึง ฿${money(batches[950], 0)} (90% ของรอบ)<br>`
+    + Object.keys(R).filter(k => cnt[k]).map(k => `${R[k]} ${(cnt[k] / N * 100).toFixed(1)}%`).join(' · ')
+    + '<br><span class="text-[10px]">มูลค่าไอดี/งานคิดตามราคาขายในร้าน</span>';
 }
 export const closeBoxModal = () => closeModal('box-form-modal');
 
@@ -179,7 +211,7 @@ export async function handleSaveBox(e) {
   const payload = {
     name: $('box-name').value.trim(), desc: $('box-desc').value.trim(), image: $('box-image').value.trim(),
     price: Math.round(num($('box-price').value) * 100) / 100, order: Math.floor(num($('box-order').value)),
-    category: $('box-category').value, active: $('box-active').checked, showOdds: $('box-show-odds').checked, prizes: clean,
+    pityEvery: Math.max(0, Math.min(500, Math.floor(num($('box-pity').value)))), pityRarity: $('box-pity-rarity').value, category: $('box-category').value, active: $('box-active').checked, showOdds: $('box-show-odds').checked, prizes: clean,
     updatedAt: serverTimestamp(), ...(editId ? {} : { createdAt: serverTimestamp() })
   };
   if (!(payload.price > 0)) return toast('ใส่ราคากล่อง', 'error');
@@ -201,4 +233,4 @@ document.addEventListener('click', (e) => {
   if (del) { del.closest('.prize-row').remove(); refreshRows(); }
 });
 
-Object.assign(window, { startBoxWatch, getBoxOpens, renderAdminBoxes, openBoxModal, closeBoxModal, handleSaveBox, deleteBox, addPrizeRow: () => addPrizeRow() });
+Object.assign(window, { boxImagePreview, boxImageUpload, boxImageClear, simulateBox, startBoxWatch, getBoxOpens, renderAdminBoxes, openBoxModal, closeBoxModal, handleSaveBox, deleteBox, addPrizeRow: () => addPrizeRow() });

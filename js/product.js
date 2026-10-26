@@ -1,15 +1,15 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, serverTimestamp, limit, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
 import { esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, workerBase, callWorker, readSlipQr, fixImageUrl, sizedImage } from "./ui.js";
-import { deliveryBadge, productCardHtml, isRentProduct } from "./card.js";
+import { deliveryBadge, productCardHtml, isRentProduct, saleLeftHtml, dropLeftHtml, hiddenFromShop } from "./card.js";
 import { mountPromptPay, promptpayReady } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
 import { rankDiscount, rankOf, RANKS } from "./rank.js";
 import { orderCardHtml } from "./orders-ui.js";
 import { addToCart } from "./cart-store.js";
-import { mountPushCard } from "./push.js";
+import { mountPushCard, enablePush, pushOnHere } from "./push.js";
 import { readProducts, writeProducts } from "./products-cache.js";
 
 /**
@@ -45,12 +45,58 @@ async function load() {
   render();
   allProducts = readProducts() || [];
   renderRelated();
+  loadReviews();
+  mountWatch(); onAuthStateChanged(auth, () => mountWatch()); priceChart();
   pp = mountPromptPay($('panel-pay-promptpay'), { getAmount: () => finalPrice(), idPrefix: 'pp' });
   switchProductPaymentTab(defaultMethod(), true);
   if (new URLSearchParams(location.search).get('action') === 'buy') setTimeout(scrollToCheckoutForm, 300);
   // the rest of the shop (related items) comes after the page is already showing
-  try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })); writeProducts(allProducts); renderRelated(); }
+  try { ALSO = (await getDoc(doc(db, 'system', 'related'))).data()?.map?.[P.id] || []; } catch { /* no related data yet */ }
+  try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })).filter(p => !hiddenFromShop(p)); writeProducts(allProducts); renderRelated(); }
   catch (e) { console.warn('products:', e); }
+}
+
+/** "แจ้งเมื่อลดราคา": a toggle (price_watch/{uid}_{product}); the Worker pushes the watchers when a timed sale starts. */
+async function mountWatch() {
+  const box = $('price-watch-box'), u = auth.currentUser;
+  if (!box || !P) return;
+  const gone = !isSrv() && (num(P.stock) <= 0 || num(P.dropAt) > Date.now()); // sold out or not open yet: ask to hear when it is back, instead of when it gets cheaper
+  if (P.isAmmo || (P.saleOn && !gone) || !u) { box.innerHTML = ''; return; }
+  const ref = doc(db, gone ? 'stock_watch' : 'price_watch', `${u.uid}_${P.id}`);
+  let on = false; try { on = (await getDoc(ref)).exists(); } catch { /* rules / offline: show as off */ }
+  box.innerHTML = `<button type="button" class="text-[14px] text-appleBlue hover:underline">${on ? (gone ? '🔔 รอแจ้งเมื่อมีของ · กดเพื่อยกเลิก' : '🔔 กำลังติดตามราคา · กดเพื่อเลิกติดตาม') : (gone ? (num(P.dropAt) > Date.now() ? '🔔 แจ้งฉันเมื่อเปิดขาย' : '🔔 แจ้งฉันเมื่อมีของ') : '🔔 แจ้งฉันเมื่อสินค้านี้ลดราคา')}</button>`;
+  box.firstChild.onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      if (on) await deleteDoc(ref);
+      else { if (!(await pushOnHere())) await enablePush(); await setDoc(ref, { uid: u.uid, productId: P.id, createdAt: serverTimestamp() }); toast('ติดตามแล้ว จะแจ้งเตือนเมื่อลดราคา', 'success'); }
+    } catch (err) { toast(err.message || 'ทำรายการไม่สำเร็จ', 'error'); }
+    mountWatch();
+  };
+}
+
+/** Step chart of the list price from product.priceHist (written by the admin form on every price change). Needs at least one change to show. */
+function priceChart() {
+  const box = $('price-hist'), h = (Array.isArray(P?.priceHist) ? P.priceHist : []).filter(x => num(x.p) > 0 && num(x.t) > 0);
+  if (!box || h.length < 2) return;
+  const now = Date.now(), pts = [...h.map(x => [num(x.t), num(x.p)]), [now, num(P.price)]], t0 = pts[0][0], span = Math.max(now - t0, 1);
+  const lo = Math.min(...pts.map(x => x[1])), hi = Math.max(...pts.map(x => x[1])), W = 280, H = 56;
+  const X = (t) => ((t - t0) / span * (W - 8) + 4).toFixed(1), Y = (p) => (hi === lo ? H / 2 : H - 6 - (p - lo) / (hi - lo) * (H - 12)).toFixed(1);
+  const d = pts.map((x, i) => `${i ? `L${X(x[0])},${Y(pts[i - 1][1])} ` : 'M'}${i ? 'L' : ''}${X(x[0])},${Y(x[1])}`).join(' ');
+  box.innerHTML = `<p class="text-xs text-slate mb-1">ราคาย้อนหลัง ${Math.max(1, Math.round(span / 864e5))} วัน · ต่ำสุด ฿${money(lo)} · สูงสุด ฿${money(hi)}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟราคา" style="width:100%;max-width:320px;height:auto"><path d="${d}" fill="none" stroke="#0071e3" stroke-width="2" stroke-linejoin="round"/></svg>`;
+}
+
+/** Approved reviews: average + the latest few. Silent when there are none. */
+async function loadReviews() {
+  try {
+    const rows = (await getDocs(query(collection(db, 'reviews'), where('productId', '==', P.id), where('status', '==', 'shown'), limit(50)))).docs.map(d => d.data());
+    if (!rows.length) return;
+    rows.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    const avg = rows.reduce((t, r) => t + num(r.stars), 0) / rows.length, star = (n) => `<span style="color:#f5a623">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
+    const box = $('product-reviews'); box.classList.remove('hidden');
+    box.innerHTML = `<p class="text-sm"><b>${star(Math.round(avg))} ${avg.toFixed(1)}</b> <span class="text-slate">· ${rows.length} รีวิวจากผู้ซื้อจริง</span></p>`
+      + rows.filter(r => r.text).slice(0, 4).map(r => `<p class="text-sm text-slate rounded-xl bg-mist px-3 py-2">${star(num(r.stars))} <b class="text-ink">${esc(r.name)}</b><br>${esc(r.text)}</p>`).join('');
+  } catch (e) { console.warn('reviews:', e); }
 }
 
 function render() {
@@ -70,6 +116,7 @@ function render() {
   const stock = Math.max(0, Math.floor(num(P.stock)));
   $('product-stock-line').innerHTML = stock <= 0 ? `<span class="text-launchOrange font-medium">${srv ? 'คิวเต็มชั่วคราว' : isRent() ? 'ไม่มีไอดีว่างให้เช่า' : 'สินค้าหมด'}</span>`
     : isRent() ? `<span class="text-emerald-600 font-medium">ว่างให้เช่า ${stock} ไอดี</span>` : srv ? `<span class="text-emerald-600 font-medium">รับงานได้อีก ${stock} ${esc(unit)}</span>` : `<span class="${stock <= 3 ? 'text-launchOrange' : 'text-emerald-600'} font-medium">คงเหลือ ${stock} ไอดี</span>`;
+  if (!srv && dropLeftHtml(P)) $('product-stock-line').innerHTML = `<span class="font-medium">ยังไม่เปิดขาย</span> ${dropLeftHtml(P)}`;
   $('product-desc-paragraph').textContent = P.desc || '';
   $('product-full-desc').textContent = P.desc || '-';
   const koen = String(P.koen || '').trim();
@@ -113,8 +160,11 @@ function renderBadges() {
   $('product-badges').innerHTML = deliveryBadge(isSrv(), !!workerBase(), isRent()) + (P.featured ? `<span class="badge badge-featured">${icon(ICONS.star, 'w-3.5 h-3.5', 2)}แนะนำ</span>` : '');
 }
 
+let ALSO = []; // product ids other customers bought together with this one (system/related, rebuilt daily by the Worker)
 function renderRelated() {
-  const others = allProducts.filter(p => p.id !== P.id).sort((a, b) => (b.category === P.category) - (a.category === P.category)).slice(0, 4);
+  const rank = (p) => { const i = ALSO.indexOf(p.id); return i < 0 ? 99 : i; };
+  const others = allProducts.filter(p => p.id !== P.id).sort((a, b) => rank(a) - rank(b) || (b.category === P.category) - (a.category === P.category)).slice(0, 4);
+  const h = document.querySelector('#related-products-grid')?.parentElement.querySelector('h2'); if (h) h.textContent = others.some(p => ALSO.includes(p.id)) ? 'คนที่ซื้อสินค้านี้ซื้อคู่กับ' : 'ของที่น่าโดนต่อ';
   $('related-products-grid').innerHTML = others.map(p => {
     const srv = isServiceProduct(p, CATS);
     return productCardHtml({ p, isService: srv, unit: unitOf(p, CATS), min: minQtyOf(p, CATS), price: num(p.price) || num(p.serviceRate), stock: Math.floor(num(p.stock)), koen: String(p.koen || '').trim() && p.koen !== '-' ? (p.koenLabel ? `${p.koenLabel}: ${p.koen}` : String(p.koen)) : '', categoryName: categoryOf(CATS, p.category)?.name, fallback: FALLBACK, instant: !!workerBase() });
@@ -216,6 +266,10 @@ function recalc() {
   const fin = finalPrice();
   $('product-unit-price').textContent = baht(unitRate());
   $('product-unit-suffix').textContent = `/ ${unit}`;
+  const sale = P.saleOn === true && num(P.basePrice) > num(P.price);
+  $('product-sale-note')?.remove();
+  if (sale) $('product-unit-suffix').parentElement.insertAdjacentHTML('beforeend', `<span id="product-sale-note" class="block text-sm text-launchOrange"><s class="text-steel">${baht(P.basePrice)}</s> โปรลดราคา${num(P.saleTo) ? ` ถึง ${new Date(P.saleTo).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}` : ''} ${saleLeftHtml(P)}</span>`);
+  if (P.bundleAmmoId && num(P.bundleAmmo) > 0) { $('product-bundle-note')?.remove(); $('product-desc-paragraph').insertAdjacentHTML('beforebegin', `<p id="product-bundle-note" class="mt-3 text-sm rounded-2xl bg-mist px-4 py-2.5">แพ็กรวม: ได้ไอดี + <b>ไก่กระสุน ~${num(P.bundleAmmo).toLocaleString('th-TH')} กอง</b> ต่อ 1 ไอดี ส่งมอบพร้อมกัน</p>`); }
   $('calc-qty-label').textContent = qty;
   $('calc-unit-label').textContent = unit;
   $('calc-subtotal').textContent = baht(sub);
@@ -250,11 +304,11 @@ function updateWalletPanel() {
 function updateButton() {
   const btn = $('btn-confirm-product-order');
   if (submitting) return;
-  const out = num(P?.stock) <= 0;
+  const closed = num(P?.hideAt) > 0 && Date.now() >= num(P.hideAt), wait = !isSrv() && num(P?.dropAt) > Date.now(), out = num(P?.stock) <= 0 || wait || closed;
   const fin = baht(finalPrice());
   $('btn-add-cart').disabled = out;
   btn.disabled = out || (method === 'wallet' && (!workerBase() || (user && balance !== null && balance < finalPrice())));
-  btn.textContent = out ? (isSrv() ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด') : method === 'wallet' ? `ชำระด้วยเครดิต ${fin}` : method === 'angpao' ? `ชำระด้วยซองอั่งเปา ${fin}` : `แจ้งชำระเงิน ${fin}`;
+  btn.textContent = out ? (closed ? 'ปิดขายแล้ว' : wait ? 'ยังไม่เปิดขาย' : isSrv() ? 'คิวเต็มชั่วคราว' : 'สินค้าหมด') : method === 'wallet' ? `ชำระด้วยเครดิต ${fin}` : method === 'angpao' ? `ชำระด้วยซองอั่งเปา ${fin}` : `แจ้งชำระเงิน ${fin}`;
 }
 
 // ---------- Rent (เช่าไอดี) ----------

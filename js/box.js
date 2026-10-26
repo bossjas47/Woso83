@@ -1,5 +1,5 @@
 import { db, auth } from "../firebase-config.js";
-import { collection, doc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDoc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { esc, num, money, toast, callWorker, openModal, closeModal, onSettings, timeAgo, tsDate } from "./ui.js";
 import { GAMES, playGame, sfx, confetti, icon } from "./minigame.js";
@@ -22,8 +22,12 @@ const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const clamp = (n) => Math.min(MAX_COUNT, Math.max(MIN_COUNT, Math.round(Number(n)) || MIN_COUNT));
 
+const GIFT_CODE = new URLSearchParams(location.search).get('gift') || '';
+let GIFT = null, MYGIFTS = [], unsubGifts = null; // GIFT = the ticket opened from a ?gift= link, MYGIFTS = tickets I sent
+const giftLeft = (g) => (g && g.status === 'open' && num(g.left) > 0 && num(g.expiresAt) > Date.now() ? num(g.left) : 0);
+const giftUrl = (g) => `${location.origin}${location.pathname}?id=${encodeURIComponent(g.boxId)}&gift=${encodeURIComponent(g.id)}`;
 const WON = {}; // prizes won in this visit, so the claim form works before the history snapshot arrives
-let BOXES = [], OPENS = [], uid = '', balance = null, busy = false, game = 'reel', count = 1, skipAnim = false, runId = 0, lastN = 1, claimSelf = false, dirtyBoxes = false, unsubUser = null, unsubOpens = null, skipCurrent = null;
+let PITY = {}, unsubPity = null, BOXES = [], OPENS = [], uid = '', balance = null, busy = false, game = 'reel', count = 1, skipAnim = false, runId = 0, lastN = 1, claimSelf = false, dirtyBoxes = false, unsubUser = null, unsubOpens = null, skipCurrent = null;
 const g0 = read('bx-game'); if (GAMES.some(x => x.id === g0)) game = g0;
 const a0 = read('bx-skip-anim'); skipAnim = a0 === null ? !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches : a0 === '1';
 
@@ -62,6 +66,7 @@ function buyPanel(b) {
     <label class="bx-check"><input type="checkbox" class="bx-cb" id="bx-skipanim"><span>ข้ามอนิเมชั่น (สุ่มเลย ไม่ต้องเล่นมินิเกม)</span></label>
     <p class="bx-sum" id="bx-sum"></p>
     <button type="button" class="bx-open" data-buy="${esc(b.id)}"></button>
+    ${uid ? `<button type="button" class="bx-giftbtn" data-giftsend="${esc(b.id)}">🎁 ส่งเป็นของขวัญให้เพื่อน</button>` : ''}
   </div>`;
 }
 /** Update the buy panel in place (never re-render it: that would drop focus in the number box and reload the image). */
@@ -75,6 +80,10 @@ function refreshBuy() {
   const cb = $('bx-skipanim'); if (cb) { cb.checked = skipAnim; cb.disabled = busy; }
   root.querySelector('.bx-games')?.classList.toggle('is-off', skipAnim);
   const lines = [];
+  if (num(b.pityEvery) > 1) {
+    const ev = num(b.pityEvery), miss = Math.min(num(PITY[b.id]), ev - 1), name = RARITY[b.pityRarity]?.[0] || RARITY.epic[0];
+    lines.push(`<span class="block text-[11px] mb-1">${miss >= ev - 1 ? `🎯 ครั้งนี้การันตี <b>${name}</b> ขึ้นไป` : `อีก <b>${ev - 1 - miss}</b> ครั้ง การันตี <b>${name}</b> ขึ้นไป`}</span><span class="block" style="height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden"><i style="display:block;height:100%;width:${Math.round(miss / (ev - 1) * 100)}%;background:#f5a623"></i></span>`);
+  }
   if (count > 1) lines.push(`${count} กล่อง × ฿${money(b.price, 0)} = <b>฿${money(total, 0)}</b>`);
   if (uid && balance !== null && balance < total) lines.push(`ต้องเติมอีก <b>฿${money(total - balance, 0)}</b> · <a href="topup.html" class="text-appleBlue">เติมเงิน</a>`);
   $('bx-sum').innerHTML = lines.join('<br>');
@@ -90,7 +99,7 @@ function renderBoxes() {
   if (b) {
     document.title = `${b.name} — Nugget Hub`;
     const others = list.filter(x => x.id !== b.id);
-    wrap.innerHTML = `<section class="bx-hero">
+    wrap.innerHTML = `${GIFT && GIFT.boxId === b.id && giftLeft(GIFT) ? `<div class="bx-gift"><span>🎁 <b>${esc(GIFT.fromName || 'เพื่อน')}</b> ส่งตั๋วเปิดกล่อง <b>${esc(GIFT.boxName)}</b> ให้คุณ ${giftLeft(GIFT)} ใบ</span><button type="button" class="bx-pill" data-giftopen="${esc(GIFT.id)}">เปิดเลย</button></div>` : ''}<section class="bx-hero">
         <div class="bx-hero-art">${artHtml(b)}</div>
         <div class="bx-hero-info">
           <p class="bx-kicker">กล่องสุ่ม · ${(b.prizes || []).length} รางวัล</p>
@@ -236,14 +245,40 @@ function closeStage() {
   $('bx-arena').innerHTML = ''; document.body.style.overflow = '';
 }
 
+async function sendGift(id) {
+  const b = BOXES.find(x => x.id === id), n = clamp(count); if (!b || busy) return;
+  if (balance !== null && balance < num(b.price) * n) return toast('ยอดเงินไม่พอ กรุณาเติมเงินก่อน', 'error');
+  if (!confirm(`ซื้อตั๋วของขวัญ ${b.name} ${n} ใบ ราคา ฿${money(num(b.price) * n, 0)}?\nส่งลิงก์ให้เพื่อนกดเปิดเองได้ ถ้าไม่มีใครรับ ยกเลิกเพื่อคืนเครดิตได้`)) return;
+  try {
+    const r = await callWorker('/box/gift', { boxId: id, count: n });
+    if (typeof r.balance === 'number') { balance = r.balance; renderBalance(); refreshBuy(); }
+    const link = giftUrl({ boxId: id, id: r.code });
+    try { await navigator.clipboard.writeText(link); toast('ซื้อตั๋วแล้ว คัดลอกลิงก์ให้แล้ว ส่งให้เพื่อนได้เลย', 'success'); } catch { prompt('คัดลอกลิงก์ของขวัญนี้ส่งให้เพื่อน', link); }
+  } catch (e) { toast(e.message || 'ซื้อตั๋วไม่สำเร็จ', 'error'); }
+}
+async function cancelGift(code) {
+  if (!confirm('ยกเลิกตั๋วใบที่ยังไม่ได้ใช้ และคืนเครดิต?')) return;
+  try { const r = await callWorker('/box/gift/cancel', { code }); toast(`คืนเครดิต ฿${money(r.refund, 0)} แล้ว`, 'success'); } catch (e) { toast(e.message || 'ยกเลิกไม่สำเร็จ', 'error'); }
+}
+function renderGifts() {
+  const el = $('box-gifts'); if (!el) return;
+  const mine = MYGIFTS.filter(g => giftLeft(g)).sort((a, b) => num(b.expiresAt) - num(a.expiresAt));
+  el.innerHTML = mine.length ? `<p class="text-sm text-slate mb-2">ตั๋วของขวัญที่ฉันส่งและยังไม่มีใครใช้</p>` + mine.map(g => `<div class="bx-hist-row"><span class="bx-hist-ic">🎁</span><div class="min-w-0 flex-1"><p class="font-medium truncate">${esc(g.boxName)} · เหลือ ${giftLeft(g)}/${num(g.count)} ใบ</p><p class="text-xs text-slate">หมดอายุ ${new Date(num(g.expiresAt)).toLocaleDateString('th-TH', { dateStyle: 'medium' })}</p></div><button type="button" class="bx-pill" data-giftcopy="${esc(g.id)}">คัดลอกลิงก์</button> <button type="button" class="bx-pill" style="background:#86868b" data-giftcancel="${esc(g.id)}">ยกเลิก</button></div>`).join('') : '';
+}
+async function loadGift() {
+  if (!GIFT_CODE || !uid || !/^[\w-]{10,40}$/.test(GIFT_CODE)) return;
+  try { const s = await getDoc(doc(db, 'box_gifts', GIFT_CODE)); GIFT = s.exists() ? { ...s.data(), id: s.id } : null; } catch { GIFT = null; }
+  if (GIFT && !giftLeft(GIFT)) toast('ตั๋วของขวัญใบนี้ใช้ครบ หมดอายุ หรือถูกยกเลิกแล้ว', 'info');
+  if (!busy) renderBoxes();
+}
 function setCount(n) { count = clamp(n); refreshBuy(); }
 
-async function openBox(id, n = count) {
+async function openBox(id, n = count, giftCode = '') {
   if (busy) return;
   const b = BOXES.find(x => x.id === id); if (!b) return;
   if (!uid) { location.href = 'login.html?mode=login&next=' + encodeURIComponent(location.pathname + location.search); return; } // keep ?id= so the person lands back on this box
   n = clamp(n);
-  if (balance !== null && balance < num(b.price) * n) { toast('ยอดเงินไม่พอ กรุณาเติมเงินก่อน', 'error'); return; }
+  if (!giftCode && balance !== null && balance < num(b.price) * n) { toast('ยอดเงินไม่พอ กรุณาเติมเงินก่อน', 'error'); return; }
   busy = true; lastN = n; refreshBuy();
   const my = ++runId, alive = () => my === runId, anim = !skipAnim;
   openStage(`${b.name}${n > 1 ? ` · ${n} กล่อง` : ''}${anim ? ` · ${GAMES.find(g => g.id === game)?.label || ''}` : ''}`);
@@ -255,7 +290,7 @@ async function openBox(id, n = count) {
     for (; at < n; at++) {
       progress();
       let res;
-      try { res = await callWorker('/box/open', { boxId: id }); } catch (e) { err = e; break; }
+      try { res = await callWorker('/box/open', giftCode ? { boxId: id, giftCode } : { boxId: id }); } catch (e) { err = e; break; }
       if (typeof res?.balance === 'number') { balance = res.balance; renderBalance(); }
       const p = res?.prize;
       if (!p) { err = new Error('ไม่พบผลรางวัล'); break; }
@@ -314,7 +349,11 @@ async function submitClaim(e) {
 
 // ---------- events ----------
 document.addEventListener('click', (e) => {
-  const t = e.target.closest?.('[data-buy],[data-game],[data-claim],[data-rv],[data-qty],[data-qset],#bx-skip,#bx-close,#bx-mute,#claim-close'); if (!t) return;
+  const t = e.target.closest?.('[data-giftopen],[data-giftsend],[data-giftcopy],[data-giftcancel],[data-buy],[data-game],[data-claim],[data-rv],[data-qty],[data-qset],#bx-skip,#bx-close,#bx-mute,#claim-close'); if (!t) return;
+  if (t.dataset.giftopen) return openBox(curBox()?.id, Math.min(10, giftLeft(GIFT)), t.dataset.giftopen);
+  if (t.dataset.giftsend) return sendGift(t.dataset.giftsend);
+  if (t.dataset.giftcopy) { const g = MYGIFTS.find(x => x.id === t.dataset.giftcopy); if (g) navigator.clipboard?.writeText(giftUrl(g)).then(() => toast('คัดลอกลิงก์ของขวัญแล้ว ส่งให้เพื่อนได้เลย', 'success'), () => prompt('คัดลอกลิงก์นี้', giftUrl(g))); return; }
+  if (t.dataset.giftcancel) return cancelGift(t.dataset.giftcancel);
   if (t.dataset.buy) return openBox(t.dataset.buy);
   if (t.dataset.qty) return setCount(count + Number(t.dataset.qty));
   if (t.dataset.qset) return setCount(Number(t.dataset.qset));
@@ -352,10 +391,13 @@ onSnapshot(query(collection(db, 'recent_wins'), orderBy('createdAt', 'desc'), li
 onSettings(() => {});
 
 onAuthStateChanged(auth, (user) => {
-  unsubUser?.(); unsubOpens?.(); unsubUser = unsubOpens = null; OPENS = []; balance = null;
+  unsubUser?.(); unsubOpens?.(); unsubGifts?.(); unsubPity?.(); unsubUser = unsubOpens = unsubGifts = unsubPity = null; PITY = {}; OPENS = []; MYGIFTS = []; balance = null;
   uid = user?.uid || '';
   if (user) {
     unsubUser = onSnapshot(doc(db, 'users', uid), (s) => { balance = num(s.data()?.walletBalance ?? 0); renderBalance(); refreshBuy(); }, () => {});
+    unsubGifts = onSnapshot(query(collection(db, 'box_gifts'), where('fromUid', '==', uid)), (s) => { MYGIFTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderGifts(); }, () => {});
+    loadGift();
+    unsubPity = onSnapshot(query(collection(db, 'box_pity'), where('uid', '==', uid)), (s) => { PITY = Object.fromEntries(s.docs.map(d => [d.data().boxId, num(d.data().miss)])); if (!busy) refreshBuy(); }, () => {});
     unsubOpens = onSnapshot(query(collection(db, 'box_opens'), where('uid', '==', uid)), (s) => {
       OPENS = s.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => (tsDate(b.createdAt)?.getTime() || 0) - (tsDate(a.createdAt)?.getTime() || 0)); renderHistory();
     }, () => {});

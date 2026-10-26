@@ -27,6 +27,8 @@ export async function loadCategories() {
   catch (e) { console.warn('Categories:', e); return []; }
 }
 
+/** Shown in the shop: not switched off by hand and inside its optional showFrom..showTo window (ms). */
+export const catVisible = (c, now = Date.now()) => c.hidden !== true && (!Number(c.showFrom) || now >= c.showFrom) && (!Number(c.showTo) || now <= c.showTo);
 export const categoryOf = (cats, id) => (cats || []).find(c => c.id === id);
 /** The product's category id, or NONE when it has none / it was deleted. */
 export const catIdOf = (p, cats) => (p?.category && categoryOf(cats, p.category) ? p.category : NONE);
@@ -55,8 +57,8 @@ export function categoryCardsHtml(cats, products) {
       ? `<img ${imgAttrs(c.image, 400, 300)} alt="" class="w-full h-full object-cover">`
       : `<span class="text-5xl font-heading font-semibold text-steel">${escCat([...String(c.name).replace(/^[\u0E40-\u0E44]/, '')][0] || '?')}</span>`;
     return `<button type="button" data-cat="${escCat(c.id)}" onclick="filterCategory(${escCat(JSON.stringify(c.id))})" class="text-left apple-card p-3 hover:bg-mist transition active:scale-[0.98]">
-      <span class="flex items-center justify-center overflow-hidden rounded-2xl bg-mist aspect-[16/7]">${img}</span>
+      <span class="relative flex items-center justify-center overflow-hidden rounded-2xl bg-mist aspect-[16/7]">${img}${c.badge ? `<span class="absolute top-2 left-2 bg-launchOrange text-gallery text-xs font-semibold px-2.5 py-1 rounded-full">${escCat(c.badge)}</span>` : ''}</span>
       <span class="block px-2 pt-3 pb-1.5"><span class="block text-lg font-heading font-semibold">${escCat(c.name)}</span>
-      <span class="block text-sm text-slate mt-0.5">${c.n} รายการ <span class="text-appleBlue">›</span></span></span></button>`;
+      ${c.desc ? `<span class="block text-sm text-slate mt-1 line-clamp-2">${escCat(c.desc)}</span>` : ''}<span class="block text-sm text-slate mt-0.5">${c.n} รายการ <span class="text-appleBlue">›</span></span></span></button>`;
   }).join('');
 }

@@ -30,6 +30,27 @@ service cloud.firestore {
     }
     // Ammo-bundle quotes (ไก่กระสุน): written by the Worker only; admins read them to sort out paid-but-undelivered guests.
     match /ammo_quotes/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /audit_logs/{id} { allow read: if isAdmin(); allow create: if signedIn() && (isAdmin() || hasPerm('products') || hasPerm('promos') || hasPerm('boxes')); allow update, delete: if false; }
+    match /ammo_claims/{id} { allow read: if isAdmin(); allow write: if false; }
+
+    // Reviews: id = order id (one per order). Buyer files it as 'pending' for their own completed order; admin shows / hides / deletes.
+    match /reviews/{id} {
+      allow read: if resource.data.status == 'shown' || isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn() && notSuspended()
+        && request.resource.data.keys().hasOnly(['orderId', 'productId', 'uid', 'name', 'stars', 'text', 'status', 'createdAt'])
+        && request.resource.data.orderId == id && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending' && request.resource.data.createdAt == request.time
+        && request.resource.data.stars is int && request.resource.data.stars >= 1 && request.resource.data.stars <= 5
+        && request.resource.data.text is string && request.resource.data.text.size() <= 200
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40
+        && get(docAt('orders/' + id)).data.userId == request.auth.uid
+        && get(docAt('orders/' + id)).data.status == 'completed'
+        && get(docAt('orders/' + id)).data.productId == request.resource.data.productId;
+      allow update: if isAdmin() && staffKeys(['status']) && request.resource.data.status in ['shown', 'hidden', 'pending'];
+      allow delete: if isAdmin();
+    }
+    // Auctions: bids go through the Worker only (it moves the money); the admin creates and removes them.
+    match /auctions/{id} { allow read: if true; allow create: if can('products') && request.resource.data.status == 'open' && request.resource.data.bidCount == 0; allow delete: if can('products') && resource.data.bidCount == 0; allow update: if false; }
     match /categories/{catId} { allow read: if true; allow write: if can('products'); }
     // Codes can be looked up by exact name but not listed.
     match /promo_codes/{code} { allow get: if true; allow list, write: if can('promos'); }
@@ -237,6 +258,7 @@ service cloud.firestore {
     // Loot boxes (กล่องสุ่ม): the admin defines the boxes and prizes, everyone can read them (odds are shown to players).
     // Every open (price, draw, prize, wallet change) is written only by the Worker; a player reads their own opens, the admin reads all.
     match /boxes/{id} { allow read: if true; allow write: if can('boxes'); }
+    match /box_pity/{id} { allow read: if signedIn() && resource.data.uid == request.auth.uid; allow write: if false; } // pity counter, Worker only
     match /box_opens/{id} {
       allow read: if can('boxes') || (signedIn() && resource.data.uid == request.auth.uid);
       allow write: if false;
@@ -276,9 +298,31 @@ service cloud.firestore {
     // Web Push subscriptions: the owner saves / removes their own device; the Worker reads them to send
     match /push_subs/{id} {
       allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      // id = hash of the device endpoint (unguessable); a shared device can switch owner, so update is allowed to any signed-in user for their own uid
       allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['uid', 'endpoint', 'p256dh', 'auth', 'createdAt'])
         && request.resource.data.endpoint is string && request.resource.data.endpoint.size() < 1000 && request.resource.data.endpoint.matches('https://.*');
+    }
+
+    // Price-drop watch: id = uid_productId; the Worker pushes the watchers when a timed sale starts.
+    match /price_watch/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && notSuspended() && request.resource.data.keys().hasOnly(['uid', 'productId', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid && request.resource.data.productId is string && request.resource.data.productId.size() <= 128
+        && id == request.auth.uid + '_' + request.resource.data.productId && request.resource.data.createdAt == request.time;
+    }
+    // Back-in-stock watch: id = uid_productId; the Worker pushes the watchers once the product has stock again, then deletes the row.
+    match /stock_watch/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && notSuspended() && request.resource.data.keys().hasOnly(['uid', 'productId', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid && request.resource.data.productId is string && request.resource.data.productId.size() <= 128
+        && id == request.auth.uid + '_' + request.resource.data.productId && request.resource.data.createdAt == request.time;
+    }
+    // Gift tickets for loot boxes: made and redeemed by the Worker only. Anyone signed in may open one by its (unguessable) code to see what it is.
+    match /box_gifts/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin() || can('boxes') || (signedIn() && resource.data.fromUid == request.auth.uid); // a sender lists their own tickets
+      allow write: if false;
     }
 
     match /{document=**} { allow read, write: if false; }

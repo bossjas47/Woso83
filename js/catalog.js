@@ -2,8 +2,8 @@ import { db } from "../firebase-config.js";
 import { readProducts, writeProducts } from "./products-cache.js";
 import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { ROOT, esc, icon, ICONS, onSettings, workerBase } from "./ui.js";
-import { productCardHtml, productSkeletonHtml } from "./card.js";
-import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE } from "./categories.js";
+import { productCardHtml, productSkeletonHtml, levelOf, hiddenFromShop } from "./card.js";
+import { watchCategories, categoryCardsHtml, catVisible, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE } from "./categories.js";
 
 /**
  * Catalog shared by the home page and the category page: one compact filter bar (search + a single
@@ -12,7 +12,7 @@ import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProdu
  */
 export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 
-const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', settings: {} };
+const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', tag: '', lvl: 0, settings: {} };
 let opts = { urlSync: false, onProducts: null };
 
 export const priceOf = (p) => { const v = Number(p?.price); if (v > 0) return v; const r = Number(p?.serviceRate); return r > 0 ? r : 0; };
@@ -71,7 +71,7 @@ function fillCategorySelect() {
   if (!sel) return;
   const count = (id) => S.products.filter(p => (id === NONE ? catIdOf(p, S.cats) === NONE : p.category === id)).length;
   const groups = ['account', 'service'].map(kind => {
-    const items = S.cats.filter(c => c.kind === kind);
+    const items = S.cats.filter(c => c.kind === kind && (catVisible(c) || c.id === S.cat));
     return items.length ? `<optgroup label="${esc(KIND_LABEL[kind])}">${items.map(c => `<option value="${esc(c.id)}">${esc(c.name)} (${count(c.id)})</option>`).join('')}</optgroup>` : '';
   }).join('');
   sel.innerHTML = `<option value="all">ทุกหมวดหมู่ (${S.products.length})</option>${groups}`;
@@ -118,6 +118,18 @@ function writeUrl() {
   history.replaceState({}, '', url);
 }
 
+/** Quick filters under the filter bar: the most used tags, and level steps when any product writes "Level: n" in its specs. */
+function renderTagRow() {
+  const bar = document.getElementById('filter-bar'); if (!bar) return;
+  let row = document.getElementById('tag-row');
+  if (!row) { bar.insertAdjacentHTML('afterend', '<div id="tag-row" class="flex gap-2 overflow-x-auto pb-2 mb-4 empty:hidden"></div>'); row = document.getElementById('tag-row'); }
+  const count = {}; for (const p of S.products) for (const t of p.tags || []) { const k = String(t).trim(); if (k) count[k] = (count[k] || 0) + 1; }
+  const tags = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]), hasLvl = S.products.some(p => levelOf(p) > 0);
+  const chip = (on, label, fn, t = '') => `<button type="button" data-t="${esc(t)}" onclick="${fn}" class="shrink-0 px-3.5 py-1.5 rounded-full text-[13px] border ${on ? 'bg-ink text-gallery border-ink' : 'bg-mist text-slate border-hairline'}">${label}</button>`;
+  const html = (hasLvl ? [20, 40, 60].map(n => chip(S.lvl === n, `Lv ${n}+`, `setLevel(${n})`)).join('') : '') + tags.map(t => chip(S.tag === t, '#' + esc(t), 'setTag(this.dataset.t)', t)).join('');
+  if (row.dataset.sig !== html) { row.dataset.sig = html; row.innerHTML = html; }
+}
+
 export function render() {
   const grid = document.getElementById('product-grid');
   const empty = document.getElementById('empty-state');
@@ -126,6 +138,7 @@ export function render() {
   const countEl = document.getElementById('catalog-count-label');
   if (!grid) return;
   syncControls();
+  renderTagRow();
   if (!S.loaded) { grid.innerHTML = productSkeletonHtml(6); return; }
 
   const showEmpty = (title, desc, withClear) => {
@@ -138,9 +151,11 @@ export function render() {
   };
   empty?.classList.add('hidden');
 
-  const browsing = S.cat === 'all' && !S.q.trim() && S.budget === 'all' && S.sort === 'default' && S.cats.length > 0;
-  if (cardsEl) { cardsEl.classList.toggle('hidden', !browsing); if (browsing) cardsEl.innerHTML = categoryCardsHtml(S.cats, S.products); }
+  const browsing = S.cat === 'all' && !S.tag && !S.lvl && !S.q.trim() && S.budget === 'all' && S.sort === 'default' && S.cats.length > 0;
+  if (cardsEl) { cardsEl.classList.toggle('hidden', !browsing); if (browsing) cardsEl.innerHTML = categoryCardsHtml(S.cats.filter(c => catVisible(c)), S.products); }
   backEl?.classList.toggle('hidden', browsing || S.cats.length === 0);
+  const note = document.getElementById('cat-desc-note'), curCat = categoryOf(S.cats, S.cat);
+  if (note) { note.textContent = curCat?.desc || ''; note.classList.toggle('hidden', browsing || !curCat?.desc); }
 
   if (S.failed) { if (countEl) countEl.textContent = 'โหลดไม่สำเร็จ'; showEmpty('โหลดรายการสินค้าไม่สำเร็จ', 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้', false); return; }
   if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเติมสต๊อก เดี๋ยวของมา แวะมาใหม่นะ', false); return; }
@@ -156,6 +171,8 @@ export function render() {
   const list = S.products.filter(p => {
     if (S.cat !== 'all' && (S.cat === NONE ? catIdOf(p, S.cats) !== NONE : p.category !== S.cat)) return false;
     if (q && !String(p.name || '').toLowerCase().includes(q) && !(p.tags || []).some(t => String(t).toLowerCase().includes(q)) && !String(p.desc || '').toLowerCase().includes(q)) return false;
+    if (S.tag && !(p.tags || []).some(t => String(t).toLowerCase() === S.tag.toLowerCase())) return false;
+    if (S.lvl && levelOf(p) < S.lvl) return false;
     const st = stockOf(p), pr = priceOf(p);
     if (S.budget === 'instock') return st > 0;
     if (S.budget === 'under200') return st > 0 && pr <= 200;
@@ -178,8 +195,10 @@ export function render() {
 // ---------- actions (inline handlers) ----------
 function filterCategory(id) { S.cat = id || 'all'; writeUrl(); render(); document.getElementById('catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 function clearFilter(key) { if (key === 'cat') S.cat = 'all'; if (key === 'budget') S.budget = 'all'; if (key === 'sort') S.sort = 'default'; if (key === 'q') S.q = ''; writeUrl(); render(); }
-function clearSearchAndFilters() { S.cat = 'all'; S.q = ''; S.budget = 'all'; S.sort = 'default'; writeUrl(); closeFilterPanel(); render(); }
+function clearSearchAndFilters() { S.cat = 'all'; S.q = ''; S.budget = 'all'; S.sort = 'default'; S.tag = ''; S.lvl = 0; writeUrl(); closeFilterPanel(); render(); }
 function closeFilterPanel() { document.getElementById('filter-panel')?.classList.add('hidden'); document.getElementById('filter-toggle')?.setAttribute('aria-expanded', 'false'); }
+window.setTag = (t) => { S.tag = S.tag === t ? '' : t; render(); };
+window.setLevel = (n) => { S.lvl = S.lvl === n ? 0 : n; render(); };
 Object.assign(window, { filterCategory, clearFilter, clearSearchAndFilters, closeFilterPanel });
 
 function merge() {
@@ -234,7 +253,7 @@ export function mountCatalog(options = {}) {
   onSnapshot(collection(db, 'products'), (snap) => {
     clearTimeout(timer);
     S.loaded = true; S.failed = false;
-    S.products = snap.docs.map(d => {
+    S.products = snap.docs.filter(d => !hiddenFromShop(d.data())).map(d => {
       const data = d.data() || {};
       return { ...data, id: d.id, name: String(data.name || 'ไม่มีชื่อสินค้า'), image: data.image || FALLBACK_IMG,
         tags: Array.isArray(data.tags) ? data.tags.map(String) : [] };

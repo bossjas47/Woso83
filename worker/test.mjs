@@ -1,6 +1,6 @@
 // Run: node worker/test.mjs (Node 20+). Fakes Google, Firestore, Identity Toolkit, EasySlip and Discord; no network.
 import assert from 'assert';
-import { handle, matchAmmo, sweepRentals, rentPrice, encodeFields, decodeFields, evaluatePromo, bestTopupPromo, maskName, usernameToEmail, getValidVoucherCode, isValidThaiPhoneNumber } from './slip-worker.js';
+import { handle, matchAmmo, ammoRateOf, ammoClosedNow, sweepRentals, sweepStock, sweepSales, sweepRestock, sweepPwRemind, sweepAuctions, sweepRelated, shopClosedNow, rentPrice, encodeFields, decodeFields, evaluatePromo, bestTopupPromo, maskName, usernameToEmail, getValidVoucherCode, isValidThaiPhoneNumber } from './slip-worker.js';
 
 const PID = 'shop-test';
 const b64u = (b) => Buffer.from(b).toString('base64url');
@@ -67,11 +67,13 @@ function world(seed = {}) {
     if (after === ':commit') {
       const writes = body.writes;
       for (const w of writes) {
+        if (w.delete) continue;
         const path = w.update.name.split('/documents/')[1];
         if (w.currentDocument?.exists === false && path in docs) return res({ error: { status: 'ALREADY_EXISTS' } }, 409);
         if (w.currentDocument?.exists === true && !(path in docs)) return res({ error: { status: 'NOT_FOUND' } }, 404);
       }
       for (const w of writes) {
+        if (w.delete) { delete docs[w.delete.split('/documents/')[1]]; continue; }
         const path = w.update.name.split('/documents/')[1];
         const f = decodeFields(w.update.fields || {});
         if (w.updateMask) { docs[path] = { ...(docs[path] || {}) }; for (const k of w.updateMask.fieldPaths) docs[path][k] = f[k]; }
@@ -89,6 +91,8 @@ function world(seed = {}) {
 }
 const env = { SERVICE_ACCOUNT: SA, EASYSLIP_KEY: 'EK', RECEIVER_MATCH: 'ร้านทดสอบ' };
 const req = async (body = { amount: 500, payload: PAYLOAD }, token, path = '/') => new Request('https://w.test' + path, { method: 'POST', headers: { authorization: `Bearer ${token ?? await idToken()}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+let qClock = NOW;
+const runQ = (w, r) => run(w, r, env, qClock += 5000); // quotes are throttled per buyer: each test quote happens a few seconds later
 const run = async (w, r, e = env, now = NOW) => { const res = await handle(r, e, { fetchFn: w.fetchFn, now }); return { http: res.status, ...(await res.json()) }; };
 
 // ======================= pure helpers =======================
@@ -289,6 +293,61 @@ r = await run(w, await cart([])); assert.strictEqual(r.http, 400); r = await run
 r = await run(w, await cart([{ productId: 'acc1', quantity: 1 }])); assert.strictEqual(r.http, 400);
 console.log('ok  cart: empty / more than 8 / missing price -> 400');
 
+// combo: ID + service in one cart -> comboPct off every line; one kind alone -> no discount
+w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 700 }, 'system/settings': { comboPct: 10 } }));
+r = await run(w, await cart([{ productId: 'acc1', quantity: 1, expectedAmount: 270 }, { productId: 'srv1', quantity: 20, expectedAmount: 360, buyerFacebook: 'FB Name', gameEmail: 'g@mail.com', gamePassword: 'pw' }]));
+assert.ok(r.results.every(x => x.ok), JSON.stringify(r)); assert.strictEqual(w.docs['users/u1'].walletBalance, 70);
+w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 700 }, 'system/settings': { comboPct: 10 } }));
+r = await run(w, await cart([{ productId: 'acc1', quantity: 1, expectedAmount: 300 }])); assert.ok(r.results[0].ok, 'one kind alone pays full price');
+console.log('ok  combo: ID + service cart gets comboPct off, single kind does not');
+
+// shop closed switch + password reminder
+assert.strictEqual(shopClosedNow({ shopClosed: true }, NOW), true); assert.strictEqual(shopClosedNow({ shopClosed: true, shopReopenAt: NOW - 1 }, NOW), false); assert.strictEqual(shopClosedNow({}, NOW), false);
+w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 700 }, 'system/settings': { shopClosed: true, shopClosedMsg: 'พักร้าน' } }));
+r = await run(w, await buy({ expectedAmount: 300 })); assert.strictEqual(r.http, 503); assert.strictEqual(r.error, 'พักร้าน'); assert.strictEqual(w.docs['users/u1'].walletBalance, 700);
+r = await run(w, await req({ boxId: 'x' }, undefined, '/box/open')); assert.strictEqual(r.http, 503);
+r = await run(w, await req({ boxId: 'x' }, await idToken({ admin: true }), '/box/open')); assert.notStrictEqual(r.http, 503, 'admin can still test the shop');
+console.log('ok  shop closed: buying refused with the message, admin passes');
+w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 700 } }));
+r = await run(w, await buy({ expectedAmount: 300 })); const oid = Object.keys(w.docs).find(k => k.startsWith('orders/'));
+assert.strictEqual(w.docs[oid].pwReminded, false);
+assert.strictEqual(await sweepPwRemind(env, { fetchFn: w.fetchFn, now: NOW }), 0, 'too early');
+assert.strictEqual(await sweepPwRemind(env, { fetchFn: w.fetchFn, now: NOW + 25 * 3600e3 }), 1); assert.strictEqual(w.docs[oid].pwReminded, true);
+assert.strictEqual(await sweepPwRemind(env, { fetchFn: w.fetchFn, now: NOW + 26 * 3600e3 }), 0, 'only once');
+console.log('ok  password reminder: due after 24 h, once');
+
+// ======================= auctions + timed drop =======================
+{
+  const bid = (tok, amount, at = NOW) => req({ auctionId: 'a1', amount }, tok, '/auction/bid').then(q => run(w, q, undefined, at));
+  const t2 = await idToken({ sub: 'u2', exp: NOW / 1000 + 1e6 }), t1 = await idToken({ exp: NOW / 1000 + 1e6 });
+  w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 1000 }, 'users/u2': { username: 'rival02', walletBalance: 1000 },
+    'auctions/a1': { name: 'ไอดีหายาก', productId: 'acc1', startPrice: 100, minStep: 10, endsAt: NOW + 3600e3, status: 'open', topBid: 0, topUid: '', bidCount: 0 },
+    'auctions/a2': { name: 'ไม่มีคนประมูล', productId: 'acc1', startPrice: 100, minStep: 10, endsAt: NOW + 1000, status: 'open', topBid: 0, topUid: '', bidCount: 0 } }));
+  let r = await bid(undefined, 90); assert.strictEqual(r.http, 400, 'below the start price');
+  r = await bid(undefined, 100); assert.strictEqual(r.ok, true); assert.strictEqual(w.docs['users/u1'].walletBalance, 900);
+  r = await bid(t2, 105); assert.strictEqual(r.http, 400, 'below the minimum step');
+  r = await bid(t2, 110); assert.strictEqual(r.ok, true); assert.strictEqual(w.docs['users/u2'].walletBalance, 890); assert.strictEqual(w.docs['users/u1'].walletBalance, 1000, 'previous leader refunded');
+  r = await bid(t1, 200, NOW + 3600e3 - 30e3); assert.strictEqual(r.ok, true); assert.strictEqual(w.docs['users/u1'].walletBalance, 800); assert.strictEqual(w.docs['users/u2'].walletBalance, 1000);
+  assert.strictEqual(w.docs['auctions/a1'].endsAt, NOW + 3600e3 - 30e3 + 120e3, 'late bid extends the end');
+  r = await bid(t1, 250, NOW + 4000e3); assert.strictEqual(r.http, 409, 'closed');
+  assert.strictEqual(await sweepAuctions(env, { fetchFn: w.fetchFn, now: NOW + 2000 }), 1, 'only the bid-less auction has ended so far');
+  assert.strictEqual(w.docs['auctions/a2'].status, 'ended');
+  assert.strictEqual(await sweepAuctions(env, { fetchFn: w.fetchFn, now: NOW + 4000e3 }), 1);
+  assert.strictEqual(w.docs['auctions/a1'].status, 'sold'); assert.strictEqual(w.docs['users/u1'].walletBalance, 800, 'winner paid exactly the winning bid once');
+  const ord = Object.values(w.docs).find(x => x.userId === 'u1' && x.amount === 200 && x.productId === 'acc1'); assert.ok(ord, 'order created at the winning price');
+  assert.strictEqual(await sweepAuctions(env, { fetchFn: w.fetchFn, now: NOW + 5000e3 }), 0, 'settled only once');
+  console.log('ok  auction: bids hold/refund credit, late bid extends, winner gets the ID at the winning price');
+
+  w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 1000 }, 'products/acc1': { name: 'ไอดีไก่ A', price: 300, stock: 1, category: 'c_acc', productType: 'account', dropAt: NOW + 60e3 }, 'products/acc1/stock_items/k1': { username: 'u', password: 'p', status: 'available' } }));
+  r = await run(w, await buy({ expectedAmount: 300 })); assert.strictEqual(r.http, 409); assert.match(r.error, /ยังไม่เปิดขาย/);
+  r = await run(w, await buy({ expectedAmount: 300 }), undefined, NOW + 61e3); assert.strictEqual(r.order ? 1 : 0, 1, 'opens at dropAt');
+  w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 1000 }, 'products/acc1': { name: 'ไอดีไก่ A', price: 300, stock: 1, category: 'c_acc', productType: 'account', hideAt: NOW + 60e3 }, 'products/acc1/stock_items/k1': { username: 'u', password: 'p', status: 'available' } }));
+  r = await run(w, await buy({ expectedAmount: 300 })); assert.ok(r.order, 'still sells before hideAt');
+  w = world(shop({ 'users/u1': { username: 'buyer01', walletBalance: 1000 }, 'products/acc1': { name: 'ไอดีไก่ A', price: 300, stock: 1, category: 'c_acc', productType: 'account', hideAt: NOW - 1 }, 'products/acc1/stock_items/k1': { username: 'u', password: 'p', status: 'available' } }));
+  r = await run(w, await buy({ expectedAmount: 300 })); assert.strictEqual(r.http, 409); assert.match(r.error, /ปิดขายแล้ว/);
+  console.log('ok  timed drop: buying refused before dropAt, allowed after');
+}
+
 // ======================= rentals =======================
 const rshop = (extra = {}) => shop({
   'users/u1': { username: 'buyer01', walletBalance: 1000 },
@@ -392,28 +451,92 @@ const ammoShop = (extra = {}) => ({
 const guestReq = (body, path) => new Request('https://w.test' + path, { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4' }, body: JSON.stringify(body) });
 
 w = world(ammoShop());
-r = await run(w, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+r = await runQ(w, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
 assert.strictEqual(r.ammoTotal, 112); assert.strictEqual(r.amount, 224); assert.strictEqual(r.ids, 2);
 assert.strictEqual(w.docs['products/am1/stock_items/a'].status, 'reserved');
 const q1 = r.quoteId;
-r = await run(w, await req({ productId: 'am1', target: 5 }, undefined, '/ammo/quote')); assert.strictEqual(r.http, 400); // below ammoMin
+r = await runQ(w, await req({ productId: 'am1', target: 5 }, undefined, '/ammo/quote')); assert.strictEqual(r.http, 400); // below ammoMin
 r = await run(w, await req({ quoteId: q1, method: 'wallet' }, undefined, '/ammo/pay'));
 assert.strictEqual(r.status, 'completed'); assert.strictEqual(r.accounts.length, 2); assert.strictEqual(w.docs['users/u1'].walletBalance, 776);
 assert.strictEqual(w.docs['products/am1/stock_items/b'].status, 'sold'); assert.strictEqual(w.docs['products/am1'].stock, 50);
 const ao = Object.entries(w.docs).find(([k, d]) => k.startsWith('orders/') && d.isAmmo)[1];
 assert.strictEqual(ao.ammoTotal, 112); assert.strictEqual(ao.userId, 'u1');
 r = await run(w, await req({ quoteId: q1, method: 'wallet' }, undefined, '/ammo/pay')); assert.strictEqual(r.http, 409); assert.strictEqual(w.docs['users/u1'].walletBalance, 776);
+assert.strictEqual(ammoRateOf({ ammoRate: 2 }), 2);
+assert.strictEqual(ammoRateOf({ ammoRate: 2, ammoDiscType: 'fixed', ammoDiscValue: 0.5 }), 1.5);
+assert.strictEqual(ammoRateOf({ ammoRate: 2, ammoDiscType: 'percent', ammoDiscValue: 10 }), 1.8);
+assert.strictEqual(ammoRateOf({ ammoRate: 2, ammoDiscType: 'fixed', ammoDiscValue: 2 }), 2);      // would be free: ignored
+assert.strictEqual(ammoRateOf({ ammoRate: 2, ammoDiscType: 'percent', ammoDiscValue: 100 }).toFixed(4), '0.0200'); // capped at 99%
+const dp = { ammoRate: 2, ammoDiscType: 'percent', ammoDiscValue: 10, ammoDiscFrom: 1000, ammoDiscTo: 2000, ammoTiers: [{ min: 500, type: 'fixed', value: 0.1 }, { min: 1000, type: 'fixed', value: 0.5 }] };
+assert.strictEqual(ammoRateOf(dp, 100, 1500), 1.8);        // window open, no tier reached
+assert.strictEqual(ammoRateOf(dp, 100, 5000), 2);          // window over
+assert.strictEqual(ammoRateOf(dp, 500, 5000), 1.9);        // tier 500
+assert.strictEqual(ammoRateOf(dp, 1000, 1500), 1.5);       // best of window 1.8 / tier 1.5, no stacking
+assert.strictEqual(ammoRateOf(dp, 1000, 500), 1.5);        // before the window: tier only
+assert.strictEqual(ammoRateOf({ ...dp, ammoDiscValue: 0, ammoTiersFrom: 3000, ammoTiersTo: 4000 }, 1000, 1500), 2); // tier window not open yet
+assert.strictEqual(ammoRateOf({ ...dp, ammoDiscValue: 0, ammoTiersFrom: 1000, ammoTiersTo: 2000 }, 1000, 1500), 1.5);
+console.log('ok  ammo discount: baht / percent per กอง, free or 100% capped');
+{ // discount + low-stock alert + list price kept on the order
+  const shop = ammoShop({ ammoDiscType: 'fixed', ammoDiscValue: 0.5, ammoLowStock: 100 }); shop['system_private/secrets'] = { discordWebhook: 'https://discord.com/api/webhooks/1/abc' };
+  const w2 = world(shop);
+  let q = await runQ(w2, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+  assert.strictEqual(q.rate, 1.5); assert.strictEqual(q.listRate, 2); assert.strictEqual(q.amount, 168);
+  r = await run(w2, await req({ quoteId: q.quoteId, method: 'wallet' }, undefined, '/ammo/pay'));
+  assert.strictEqual(r.status, 'completed'); assert.ok(!('_low' in r));
+  assert.match(JSON.stringify(w2.log.discord), /ใกล้หมด/);                                          // 162 -> 50 crosses the limit of 100
+  const o2 = Object.entries(w2.docs).find(([k2, d]) => k2.startsWith('orders/') && d.isAmmo)[1];
+  assert.strictEqual(o2.unitPrice, 1.5); assert.strictEqual(o2.listUnitPrice, 2);
+  // claim -> admin refund as credit, once
+  const [oid2] = Object.entries(w2.docs).find(([k2, d]) => k2.startsWith('orders/') && d.isAmmo).map((x, i) => i ? x : x.split('/')[1]);
+  const bal0 = w2.docs['users/u1'].walletBalance;
+  r = await run(w2, await req({ orderId: oid2, reason: 'x' }, undefined, '/ammo/claim')); assert.strictEqual(r.http, 400);   // reason too short
+  r = await run(w2, await req({ orderId: oid2, reason: 'ล็อกอินไม่ได้' }, undefined, '/ammo/claim')); assert.strictEqual(r.ok, true);
+  assert.strictEqual(w2.docs['orders/' + oid2].claimStatus, 'open');
+  r = await run(w2, await req({ orderId: oid2, reason: 'ล็อกอินไม่ได้อีก' }, undefined, '/ammo/claim')); assert.strictEqual(r.http, 409);
+  r = await run(w2, await req({ orderId: oid2, action: 'refund' }, undefined, '/admin/claim')); assert.strictEqual(r.http, 403);   // customer cannot approve
+  r = await run(w2, await req({ orderId: oid2, action: 'refund' }, adminTok, '/admin/claim')); assert.strictEqual(r.status, 'refunded');
+  assert.strictEqual(w2.docs['users/u1'].walletBalance, bal0 + 168); assert.strictEqual(w2.docs['orders/' + oid2].claimStatus, 'refunded');
+  r = await run(w2, await req({ orderId: oid2, action: 'refund' }, adminTok, '/admin/claim')); assert.strictEqual(r.http, 409);   // no double refund
+  const w3 = world(ammoShop({ ammoMaxIds: 1 }));
+  q = await runQ(w3, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+  assert.strictEqual(q.ids, 1); assert.strictEqual(q.ammoTotal, 62);                                  // one ID per order: closest single ID
+}
+{ // coupon: the cheaper of coupon / ammo discount wins; closed switch stops new quotes only
+  const shop = ammoShop({ ammoDiscType: 'fixed', ammoDiscValue: 0.5 });
+  shop['promo_codes/BIG'] = { type: 'percent', value: 50, active: true }; shop['promo_codes/TINY'] = { type: 'fixed', value: 1, active: true };
+  const w4 = world(shop);
+  let q = await runQ(w4, await req({ productId: 'am1', target: 112, promoCode: 'big' }, undefined, '/ammo/quote'));
+  assert.strictEqual(q.amount, 112); assert.strictEqual(q.promo.code, 'BIG'); assert.strictEqual(q.promo.discount, 112);   // 224 list, 50% = 112 beats 168
+  r = await run(w4, await req({ quoteId: q.quoteId, method: 'wallet' }, undefined, '/ammo/pay')); assert.strictEqual(r.status, 'completed');
+  const o4 = Object.entries(w4.docs).find(([k2, d]) => k2.startsWith('orders/') && d.isAmmo)[1];
+  assert.strictEqual(o4.promoCode, 'BIG'); assert.strictEqual(o4.discount, 112); assert.strictEqual(o4.amount, 112); assert.strictEqual(w4.docs['promo_codes/BIG'].usedCount, 1);
+  q = await runQ(w4, await req({ productId: 'am1', target: 50, promoCode: 'TINY' }, undefined, '/ammo/quote'));
+  assert.strictEqual(q.amount, 75); assert.ok(!q.promo); assert.match(q.promoMsg, /ถูกกว่า/);                               // 0.5 off per กอง (75) beats ฿1 off (99)
+  w4.docs['system/settings'] = { ammoClosed: true, ammoClosedMsg: 'ปรับสต็อก' };
+  q = await runQ(w4, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote')); assert.strictEqual(q.http, 503); assert.strictEqual(q.error, 'ปรับสต็อก');
+}
+{ // member throttle + daily closing window (Thailand time, crosses midnight)
+  const w5 = world(ammoShop());
+  const a1 = await run(w5, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote'), env, NOW + 1e6);
+  const a2 = await run(w5, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote'), env, NOW + 1e6 + 500);
+  assert.ok(a1.quoteId); assert.strictEqual(a2.http, 429);
+  const utc = (h, m) => Date.UTC(2026, 0, 1, h - 7, m);                     // Thailand clock h:m
+  const night = { ammoCloseFrom: '22:00', ammoCloseTo: '08:00' };
+  assert.strictEqual(ammoClosedNow(night, utc(23, 0)), true); assert.strictEqual(ammoClosedNow(night, utc(3, 0)), true);
+  assert.strictEqual(ammoClosedNow(night, utc(8, 0)), false); assert.strictEqual(ammoClosedNow(night, utc(12, 0)), false);
+  assert.strictEqual(ammoClosedNow({ ammoCloseFrom: '22:00' }, utc(23, 0)), false); assert.strictEqual(ammoClosedNow({ ammoClosed: true }, utc(12, 0)), true);
+}
 console.log('ok  ammo member: quote 112 -> 2 IDs ฿224 reserved; wallet pay delivers once, stock -112');
 
 w = world(ammoShop());
-r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote')); assert.strictEqual(r.http, 401);
+r = await runQ(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote')); assert.strictEqual(r.http, 401);
 r = await run(w, guestReq({ amount: 500, payload: PAYLOAD }, '/')); assert.strictEqual(r.http, 401);
 console.log('ok  ammo guest: login-only product and other routes still need a token');
 
 w = world(ammoShop({ requireLogin: false }));
-r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
+r = await runQ(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
 assert.strictEqual(r.ammoTotal, 50); const gq = r.quoteId;
-r = await run(w, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote'));
+r = await runQ(w, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote'));
 assert.strictEqual(r.ammoTotal, 50); assert.strictEqual(r.ids, 2); // a is held by the guest -> 30 + 20
 r = await run(w, guestReq({ quoteId: gq, method: 'wallet' }, '/ammo/pay')); assert.strictEqual(r.http, 400);
 w.setSlip(slipBody({ amount: { amount: 99 }, transRef: 'G1' }));
@@ -422,12 +545,12 @@ w.setSlip(slipBody({ amount: { amount: 100 }, transRef: 'G1' }));
 r = await run(w, guestReq({ quoteId: gq, method: 'slip', payload: PAYLOAD }, '/ammo/pay'), env, NOW + 18000);
 assert.strictEqual(r.status, 'completed'); assert.deepStrictEqual(r.accounts, [{ username: 'a@m', password: 'pa', ammo: 50 }]);
 assert.ok(w.docs['slip_refs/G1']); assert.strictEqual(Object.values(w.docs).find(d => d.isAmmo && d.guest).userId, '');
-r = await run(w, await req({ productId: 'am1', target: 30 }, undefined, '/ammo/quote'));
+r = await runQ(w, await req({ productId: 'am1', target: 30 }, undefined, '/ammo/quote'));
 assert.strictEqual(w.docs['products/am1/stock_items/d'].status, 'available'); // u1's older hold on d released
 console.log('ok  ammo guest: quote holds IDs from others; slip must match; paid slip delivers IDs in the reply');
 
 w = world(ammoShop({ requireLogin: false })); w.setTw(200, twOk('50.00'));
-r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
+r = await runQ(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
 r = await run(w, guestReq({ quoteId: r.quoteId, method: 'angpao', link: 'https://gift.truemoney.com/campaign/?v=abcdefghij1234' }, '/ammo/pay'), { ...env, TRUEMONEY_PHONE: '0812345678' }, NOW + 9000);
 assert.strictEqual(r.code, 'undelivered'); assert.strictEqual(w.docs['products/am1/stock_items/a'].status, 'reserved');
 assert.strictEqual(Object.entries(w.docs).find(([k]) => k.startsWith('ammo_quotes/'))[1].status, 'paid_undelivered'); assert.ok(w.log.discord.length || true);
@@ -435,4 +558,113 @@ console.log('ok  ammo guest angpao: voucher short of the price -> nothing delive
 
 w = world(); const vr = await handle(await req({}, undefined, '/nope'), env, { fetchFn: w.fetchFn, now: NOW });
 assert.strictEqual(vr.headers.get('x-astraphex-worker'), '10'); console.log('ok  version header for old-deployment detection');
+
+// ---- extend hold (+5 min, once) and daily stock check ----
+{
+  const w5 = world(ammoShop({ ammoDiscType: undefined }));
+  let q = await runQ(w5, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+  const exp0 = w5.docs[`ammo_quotes/${q.quoteId}`].expiresAt;
+  let e = await run(w5, await req({ quoteId: q.quoteId }, undefined, '/ammo/extend'), env, qClock);
+  assert.strictEqual(e.expiresAt, exp0 + 300000); assert.strictEqual(w5.docs['products/am1/stock_items/a'].reservedUntil, exp0 + 300000);
+  e = await run(w5, await req({ quoteId: q.quoteId }, undefined, '/ammo/extend'), env, qClock); assert.strictEqual(e.http, 409);
+  const w6 = world(ammoShop());
+  q = await runQ(w6, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+  e = await run(w6, await req({ quoteId: q.quoteId }, undefined, '/ammo/extend'), env, w6.docs[`ammo_quotes/${q.quoteId}`].expiresAt + 1); assert.strictEqual(e.http, 409); // already expired
+  const w7 = world(ammoShop({ stock: 100 })); w7.docs['system_private/secrets'] = { discordWebhook: 'https://discord.com/api/webhooks/1/abc' };
+  assert.strictEqual(await sweepStock(env, { fetchFn: w7.fetchFn, now: NOW }), 1); assert.match(JSON.stringify(w7.log.discord), /ไก่กระสุน/);
+  const w8 = world(ammoShop());
+  assert.strictEqual(await sweepStock(env, { fetchFn: w8.fetchFn, now: NOW }), 0);
+  console.log('ok  ammo extend hold once; daily stock check flags mismatch only');
+}
+
+// ---- slip checker down -> manual queue; bundle; timed sale; push events ----
+{
+  const w = world({ 'users/u1': { username: 'buyer01', walletBalance: 0 } });
+  const down = async (r) => { const res = await handle(r, env, { fetchFn: (u, o) => String(u).includes('easyslip') ? Promise.reject(new Error('down')) : w.fetchFn(u, o), now: NOW, ctx: { waitUntil() {} } }); return { http: res.status, ...(await res.json()) }; };
+  const r = await down(await req());
+  assert.strictEqual(r.status, 'queued');
+  const t = Object.entries(w.docs).find(([k, d]) => k.startsWith('topup_transactions/') && d.verifiedVia === 'manual_queue')[1];
+  assert.strictEqual(t.status, 'pending'); assert.strictEqual(t.amount, 500); assert.strictEqual(w.docs['users/u1'].walletBalance, 0);
+  const dupe = await (await handle(await req(), env, { fetchFn: (u, o) => String(u).includes('easyslip') ? Promise.reject(new Error('down')) : w.fetchFn(u, o), now: NOW + 20000, ctx: { waitUntil() {} } })).json();
+  assert.strictEqual(dupe.status, 'rejected'); assert.match(dupe.message, /ส่งให้แอดมินตรวจแล้ว/);
+  console.log('ok  slip checker down -> pending top-up for manual approval, resend not queued twice');
+}
+{
+  const shop = ammoShop();
+  const w = world({ ...shop, 'users/u1': { username: 'buyer01', walletBalance: 1000 },
+    'products/bd1': { name: 'ไอดี+กระสุน', price: 300, stock: 1, bundleAmmoId: 'am1', bundleAmmo: 110, active: true },
+    'products/bd1/stock_items/i1': { username: 'id@m', password: 'ip', status: 'available' } });
+  const r = await run(w, await req({ productId: 'bd1', quantity: 1 }, undefined, '/buy'));
+  assert.strictEqual(r.status, 'completed'); assert.strictEqual(r.order.accounts?.length ?? r.order.accountsDelivered.length, 3);
+  assert.strictEqual(w.docs['users/u1'].walletBalance, 700); assert.strictEqual(w.docs['products/am1'].stock, 162 - r.order.bundleAmmo);
+  assert.ok(Math.abs(r.order.bundleAmmo - 110) <= 11);
+  const w3 = world({ ...shop, 'users/u1': { username: 'buyer01', walletBalance: 1000 }, 'products/bd1': { name: 'x', price: 300, stock: 1, bundleAmmoId: 'am1', bundleAmmo: 900, active: true }, 'products/bd1/stock_items/i1': { username: 'id@m', password: 'ip', status: 'available' } });
+  const r3 = await run(w3, await req({ productId: 'bd1', quantity: 1 }, undefined, '/buy')); assert.strictEqual(r3.http, 409); assert.strictEqual(w3.docs['users/u1'].walletBalance, 1000);
+  console.log('ok  bundle: ID + ammo delivered together; not enough ammo -> nothing charged');
+}
+{
+  const w = world({ 'products/s1': { name: 'x', price: 100, salePrice: 70, saleFrom: NOW - 1000, saleTo: NOW + 3600e3, stock: 1 } });
+  assert.strictEqual(await sweepSales(env, { fetchFn: w.fetchFn, now: NOW }), 1);
+  assert.strictEqual(w.docs['products/s1'].price, 70); assert.strictEqual(w.docs['products/s1'].basePrice, 100);
+  assert.strictEqual(await sweepSales(env, { fetchFn: w.fetchFn, now: NOW + 10 }), 0);
+  assert.strictEqual(await sweepSales(env, { fetchFn: w.fetchFn, now: NOW + 2 * 3600e3 }), 1);
+  assert.strictEqual(w.docs['products/s1'].price, 100); assert.strictEqual(w.docs['products/s1'].saleOn, false);
+  console.log('ok  timed sale: price swapped on start, restored on end');
+}
+
+// ---- gift tickets for loot boxes + price watch ----
+{
+  const box = { name: 'กล่อง', price: 50, active: true, prizes: [{ id: 'p1', kind: 'credit', amount: 5, weight: 1, rarity: 'common' }] };
+  const w = world({ 'users/u1': { username: 'buyer01', walletBalance: 200 }, 'users/u2': { username: 'friend', walletBalance: 0 }, 'boxes/b1': box });
+  let r = await run(w, await req({ boxId: 'b1', count: 2 }, undefined, '/box/gift'));
+  assert.strictEqual(r.balance, 100); const code = r.code; assert.strictEqual(w.docs[`box_gifts/${code}`].left, 2);
+  r = await run(w, await req({ boxId: 'b1', giftCode: code }, undefined, '/box/open')); // sender's own token = u1 in the harness
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.balance, 105, 'free open: only the credit prize is added'); assert.strictEqual(w.docs[`box_gifts/${code}`].left, 1);
+  r = await run(w, await req({ boxId: 'b1', giftCode: code }, undefined, '/box/open')); assert.strictEqual(w.docs[`box_gifts/${code}`].status, 'used');
+  r = await run(w, await req({ boxId: 'b1', giftCode: code }, undefined, '/box/open')); assert.strictEqual(r.http, 409);
+  r = await run(w, await req({ boxId: 'b1', count: 2 }, undefined, '/box/gift')); const c2 = r.code;
+  r = await run(w, await req({ code: c2 }, undefined, '/box/gift/cancel')); assert.strictEqual(r.refund, 100);
+  r = await run(w, await req({ code: c2 }, undefined, '/box/gift/cancel')); assert.strictEqual(r.http, 409);
+  console.log('ok  gift tickets: paid once, free opens count down, cancel refunds the rest');
+}
+{
+  const w = world({ 'products/s2': { name: 'x', price: 100, salePrice: 70, saleFrom: NOW - 1000, saleTo: NOW + 3600e3, stock: 1 }, 'price_watch/u1_s2': { uid: 'u1', productId: 's2' } });
+  assert.strictEqual(await sweepSales(env, { fetchFn: w.fetchFn, now: NOW }), 1); assert.strictEqual(w.docs['products/s2'].saleOn, true);
+  console.log('ok  sale start with a watcher does not break the sweep');
+}
+// ---- pity + win-back coupon ----
+{
+  const box = { name: 'กล่อง', price: 10, active: true, pityEvery: 3, pityRarity: 'epic', prizes: [{ id: 'c', kind: 'credit', amount: 1, weight: 1e9, rarity: 'common' }, { id: 'e', kind: 'credit', amount: 50, weight: 1, rarity: 'epic' }] };
+  const w = world({ 'users/u1': { username: 'buyer01', walletBalance: 100 }, 'boxes/b1': box });
+  const ids = [];
+  for (let i = 0; i < 4; i++) { const r = await run(w, await req({ boxId: 'b1' }, undefined, '/box/open')); ids.push(r.prize?.id); }
+  assert.deepStrictEqual(ids, ['c', 'c', 'e', 'c'], 'third open is the guaranteed epic, then counter restarts');
+  assert.strictEqual(w.docs['box_pity/u1_b1'].miss, 1);
+  console.log('ok  pity: guaranteed hit after N-1 misses, counter resets');
+}
+{
+  const w = world({ 'users/u2': { username: 'friend' } });
+  let r = await run(w, await req({ uid: 'u2', type: 'percent', value: 15, days: 7 }, adminTok, '/admin/winback'));
+  assert.strictEqual(r.ok, true); const pc = w.docs[`promo_codes/${r.code}`];
+  assert.strictEqual(pc.onlyUid, 'u2'); assert.strictEqual(pc.maxTotalUses, 1); assert.strictEqual(pc.expiresAt, NOW + 7 * 864e5);
+  r = await run(w, await req({ uid: 'u2', type: 'percent', value: 99, days: 7 }, adminTok, '/admin/winback')); assert.strictEqual(r.http, 400);
+  r = await run(w, await req({ uid: 'u2', type: 'percent', value: 10, days: 7 }, undefined, '/admin/winback')); assert.strictEqual(r.http, 403);
+  assert.strictEqual(evaluatePromo(pc, { id: 'p', categoryId: 'c' }, 100, 'u3', NOW).ok, false);
+  assert.strictEqual(evaluatePromo(pc, { id: 'p', categoryId: 'c' }, 100, 'u2', NOW).ok, true);
+  assert.strictEqual(evaluatePromo(pc, { id: 'p', categoryId: 'c' }, 100, 'u2', NOW + 8 * 864e5).ok, false);
+  console.log('ok  win-back: personal single-use coupon, owner + expiry enforced');
+}
+{
+  const w = world({ 'products/r1': { name: 'ไอดี', price: 100, stock: 0, active: true }, 'products/r2': { name: 'ไอดี2', price: 100, stock: 3, active: true }, 'stock_watch/u1_r1': { uid: 'u1', productId: 'r1' }, 'stock_watch/u1_r2': { uid: 'u1', productId: 'r2' } });
+  assert.strictEqual(await sweepRestock(env, { fetchFn: w.fetchFn, now: NOW }), 1, 'only the product with stock again is announced');
+  assert.ok(w.docs['stock_watch/u1_r1'] && !w.docs['stock_watch/u1_r2']);
+  console.log('ok  restock sweep: announces and clears only in-stock watches');
+}
+{
+  const mk = (id, u, p) => [`orders/${id}`, { userId: u, productId: p, status: 'completed', paymentMethod: 'wallet' }];
+  const w = world(Object.fromEntries([mk('o1', 'u1', 'A'), mk('o2', 'u1', 'B'), mk('o3', 'u2', 'A'), mk('o4', 'u2', 'B'), mk('o5', 'u3', 'A'), mk('o6', 'u3', 'C'), mk('o7', 'u4', 'A'), mk('o8', 'u4', 'x', ).map((v, i) => i ? { ...v, isAmmo: true } : v)]));
+  await sweepRelated(env, { fetchFn: w.fetchFn, now: NOW });
+  assert.deepStrictEqual(w.docs['system/related'].map, { A: ['B'], B: ['A'] }, 'only pairs seen at least twice; ammo ignored');
+  console.log('ok  related: co-purchase pairs need 2+ customers');
+}
 console.log('worker: all checks passed');

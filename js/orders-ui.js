@@ -1,4 +1,6 @@
-import { esc, baht, fmtDate, icon, ICONS, copyText, imgAttrs } from "./ui.js";
+import { db, auth } from "../firebase-config.js";
+import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { ROOT, maskName, esc, baht, fmtDate, icon, ICONS, copyText, imgAttrs, toast, callWorker } from "./ui.js";
 
 /**
  * Order rendering shared by the account page and the product-page success card.
@@ -23,7 +25,10 @@ export function credentialBoxHtml(order) {
   if (order.status !== 'completed' || !accs.length) {
     return `<div class="rounded-2xl bg-mist p-4 text-sm text-slate">${order.status === 'cancelled' ? 'ออเดอร์นี้ถูกยกเลิก' : 'แอดมินเช็กยอดเสร็จเมื่อไหร่ ไอดีขึ้นตรงนี้ทันที'}</div>`;
   }
-  return accs.map((a, i) => {
+  const allKey = `${order.id || order.orderId}-all`;
+  vault.set(allKey, { all: accs.map(a => `${a.username}|${a.password}`).join('\n') });
+  const copyAll = accs.length > 1 ? `<button type="button" onclick='copyCred(${esc(JSON.stringify(allKey))},"all")' class="apple-explore-pill px-4 py-2 text-sm w-full">${icon(ICONS.copy, 'w-4 h-4', 2)}คัดลอกทั้งหมด ${accs.length} ไอดี (อีเมล|รหัส บรรทัดละไอดี)</button>` : '';
+  return copyAll + accs.map((a, i) => {
     const key = `${order.id || order.orderId}-${i}`;
     vault.set(key, a);
     const k = esc(JSON.stringify(key));
@@ -59,6 +64,41 @@ export const PRODUCT_IMAGES = new Map();
 export const orderThumb = (o, size = 72) => { const src = o.image || PRODUCT_IMAGES.get(o.productId), css = `width:${size}px;height:${size}px;border-radius:${Math.round(size / 4)}px`; // inline: tw.css has no arbitrary sizes
   return src ? `<img ${imgAttrs(src, size, size)} alt="" style="${css}" class="object-cover bg-mist shrink-0">` : `<span style="${css}" class="bg-mist text-pricingBlue flex items-center justify-center shrink-0">${icon(o.productType === 'service' || o.kind === 'service' ? ICONS.bolt : ICONS.id, 'w-6 h-6', 1.8)}</span>`; };
 
+const CLAIM_TEXT = { open: 'แจ้งเคลมแล้ว รอแอดมินตรวจ', refunded: 'เคลมสำเร็จ คืนเงินเป็นเครดิตแล้ว', rejected: 'เคลมไม่ผ่าน' };
+/** Ammo orders: claim button for 24 h after buying (members only), then the claim's status. */
+function claimHtml(o) {
+  if (!o.isAmmo || !o.userId) return '';
+  if (o.claimStatus) return `<p class="text-sm text-slate"><span class="font-medium text-ink">เคลม:</span> ${esc(CLAIM_TEXT[o.claimStatus] || '')}${o.claimNote ? ' · ' + esc(o.claimNote) : ''}</p>`;
+  const t = o.createdAt?.toMillis?.() ?? 0;
+  return o.status === 'completed' && t && Date.now() - t <= 864e5 ? `<button type="button" onclick="claimAmmo(${esc(JSON.stringify(o.id))})" class="text-[13px] text-appleBlue hover:underline text-left">ไอดีมีปัญหา? แจ้งเคลม (ภายใน 24 ชม. หลังซื้อ) ›</button>` : '';
+}
+window.claimAmmo = async (id) => {
+  const reason = (prompt('อธิบายปัญหาของไอดี เช่น ล็อกอินไม่ได้ รหัสผ่านผิด') || '').trim();
+  if (!reason) return;
+  try { await callWorker('/ammo/claim', { orderId: id, reason }); toast('ส่งคำขอเคลมแล้ว แอดมินจะตรวจสอบ', 'success'); }
+  catch (e) { toast(e.message || 'แจ้งเคลมไม่สำเร็จ', 'error'); }
+};
+
+/** Reviews by order id (filled by the account page). A completed ID order shows its review status, or a star form. */
+export const REVIEWS = new Map();
+const REVIEW_TEXT = { pending: 'รอแอดมินอนุมัติ', shown: 'แสดงในหน้าสินค้าแล้ว', hidden: 'ไม่ได้แสดง' };
+function reviewHtml(o) {
+  if (o.status !== 'completed' || !o.userId || o.paymentMethod === 'prize') return '';
+  const r = REVIEWS.get(o.id), id = esc(JSON.stringify(o.id));
+  if (r) return `<p class="text-sm text-slate"><span class="font-medium text-ink">รีวิวของคุณ:</span> <span style="color:#f5a623">${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}</span> · ${esc(REVIEW_TEXT[r.status] || '')}${r.text ? `<br>${esc(r.text)}` : ''}</p>`;
+  return `<details class="text-sm"><summary class="text-appleBlue cursor-pointer">ให้คะแนนสินค้านี้ ›</summary>
+    <div class="mt-2 space-y-2"><div id="rv-stars-${esc(o.id)}" data-v="5" style="font-size:26px;color:#f5a623;cursor:pointer;user-select:none">${[1, 2, 3, 4, 5].map(n => `<span onclick="setStars(${id},${n})">★</span>`).join('')}</div>
+      <textarea id="rv-text-${esc(o.id)}" rows="2" maxlength="200" placeholder="เล่าให้คนอื่นฟังหน่อย (ไม่บังคับ)" class="w-full apple-input p-2.5 text-sm"></textarea>
+      <button type="button" onclick="sendReview(${id}, ${esc(JSON.stringify(o.productId || ''))})" class="apple-pricing-pill px-4 py-1.5 text-[13px]">ส่งรีวิว</button></div></details>`;
+}
+window.setStars = (id, n) => { const el = document.getElementById('rv-stars-' + id); if (!el) return; el.dataset.v = n; [...el.children].forEach((s, i) => { s.style.opacity = i < n ? 1 : .25; }); };
+window.sendReview = async (id, productId) => {
+  const u = auth.currentUser; if (!u || !productId) return;
+  const stars = Number(document.getElementById('rv-stars-' + id)?.dataset.v) || 5, text = (document.getElementById('rv-text-' + id)?.value || '').trim().slice(0, 200);
+  try { await setDoc(doc(db, 'reviews', id), { orderId: id, productId, uid: u.uid, name: maskName(u.displayName || (u.email || '').split('@')[0] || 'ลูกค้า').slice(0, 40), stars, text, status: 'pending', createdAt: serverTimestamp() }); toast('ส่งรีวิวแล้ว รอแอดมินอนุมัติ', 'success'); }
+  catch (e) { console.warn('review:', e); toast('ส่งรีวิวไม่สำเร็จ', 'error'); }
+};
+
 export function orderCardHtml(o) {
   const st = STATUS[o.status] || { label: o.status || '-', cls: 'bg-mist text-slate' };
   const isSrv = o.productType === 'service';
@@ -75,10 +115,14 @@ export function orderCardHtml(o) {
         <div class="flex flex-wrap items-center gap-2 mt-2">
           <span class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${st.cls}">${esc(st.label)}</span>
           <span class="text-[11px] text-slate"><span class="font-mono">#${esc(o.orderNumber || o.orderId || o.id)}</span> · ${esc(fmtDate(o.createdAt))}</span>
+          ${o.isAmmo && o.productId ? `<a href="${esc(`${ROOT}front/product.html?id=${encodeURIComponent(o.productId)}`)}&qty=${num(o.ammoTarget || o.ammoTotal)}" class="text-[12px] text-appleBlue hover:underline">สั่งซ้ำ ${num(o.ammoTarget || o.ammoTotal).toLocaleString('th-TH')} กอง ›</a>` : o.productId && o.paymentMethod !== 'prize' && (o.status === 'completed' || o.status === 'processing') ? `<a href="${esc(`${ROOT}front/product.html?id=${encodeURIComponent(o.productId)}`)}" class="text-[12px] text-appleBlue hover:underline">สั่งอีกครั้ง ›</a>` : ''}
         </div>
       </div>
     </div>
     ${isSrv ? serviceStepsHtml(o) : credentialBoxHtml(o)}
+    ${!isSrv && o.pwRemindAt && o.status === 'completed' ? '<p class="text-[12px] text-slate">🔐 เปลี่ยนรหัสผ่านเกมทันทีหลังได้รับไอดี เพื่อความปลอดภัยของบัญชี</p>' : ''}
+    ${isSrv ? '' : claimHtml(o)}
+    ${isSrv ? '' : reviewHtml(o)}
     ${!isSrv && o.adminNote ? `<p class="text-sm text-slate"><span class="font-medium text-ink">หมายเหตุ:</span> ${esc(o.adminNote)}</p>` : ''}
   </article>`;
 }
@@ -86,7 +130,7 @@ const num = (v) => Number(v) || 0;
 
 window.copyCred = (key, field) => {
   const a = vault.get(key);
-  if (a) copyText(a[field] || '', field === 'password' ? 'คัดลอกรหัสผ่านแล้ว' : 'คัดลอก Username แล้ว');
+  if (a) copyText(a[field] || '', field === 'all' ? 'คัดลอกทุกไอดีแล้ว' : field === 'password' ? 'คัดลอกรหัสผ่านแล้ว' : 'คัดลอก Username แล้ว');
 };
 window.togglePw = (key, btn) => {
   const a = vault.get(key);

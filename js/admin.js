@@ -1,12 +1,13 @@
 import { db, auth } from "../firebase-config.js";
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, where, limit,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot, query, where, limit, orderBy,
   runTransaction, Timestamp, serverTimestamp, increment, deleteField
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { watchCategories, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
+import { watchCategories, catVisible, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
 import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
 import { rankTable, rankOf, rankBadge, rankIcon, titleBadge, TITLE_COLORS } from "./rank.js";
+import { ammoRateOf } from "./ammo-rate.js";
 import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /**
@@ -38,7 +39,7 @@ const can = (p) => ADMIN || PERMS.has(p);
 const STAFF_ONLY_QUEUE = () => !ADMIN && !can('pay'); // can work service jobs but not handle money
 const TAB_OK = { dashboard: () => ADMIN, settings: () => ADMIN, products: () => can('products'), categories: () => can('products'), orders: () => can('orders') || can('pay'), topups: () => can('pay'), rentals: () => can('rentals'), boxes: () => can('boxes'), vault: () => can('vault'), users: () => can('users'), promos: () => can('promos') };
 const tabOk = (t) => (TAB_OK[t] || (() => false))();
-let PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
+let REVIEWS_P = [], ACLAIMS = [], AQUOTES = [], PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
 let rentalFilter = 'todo';
 let me = null;
 
@@ -157,13 +158,17 @@ function startListeners() {
   if (can('boxes')) window.startBoxWatch?.(); // loot-box opens feed the dashboard too (js/back/boxes.js)
   document.addEventListener('boxopens', () => renderDashboard());
   const warn = (what) => (e) => { console.warn(what, e); triggerToast(`โหลด${what}ไม่สำเร็จ`, 'error'); };
-  if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); if (ADMIN && Object.keys(SETTINGS).length) renderSpotlightRows(); }, warn('สินค้า'));
+  if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); renderAuctionsAdmin(); renderProfit(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); if (ADMIN && Object.keys(SETTINGS).length) renderSpotlightRows(); }, warn('สินค้า'));
   if (can('products') || can('boxes') || can('promos')) watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
-  if (can('pay')) onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); }, warn('ออเดอร์'));
+  if (can('pay')) onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); renderWinback(); renderProfit(); }, warn('ออเดอร์'));
   if (can('pay')) onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
   if (can('rentals')) onSnapshot(collection(db, 'rentals'), (s) => { RENTALS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminRentals(); renderBadges(); }, warn('การเช่า'));
   if (can('users') || can('vault')) onSnapshot(collection(db, 'users'), (s) => { USERS = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminUsers(); renderDashboard(); document.dispatchEvent(new Event('adminusers')); }, warn('ผู้ใช้'));
   if (can('promos')) onSnapshot(collection(db, 'topup_promos'), (s) => { TPROMOS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => num(a.minAmount) - num(b.minAmount)); renderTopupPromos(); });
+  if (ADMIN) onSnapshot(query(collection(db, 'ammo_quotes'), where('status', 'in', ['open', 'paid_undelivered', 'refunded_credit'])), (s) => { AQUOTES = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDashboard(); }, warn('รายการกันไอดี'));
+  if (can('products')) onSnapshot(collection(db, 'auctions'), (s) => { AUCTIONS = s.docs.map(d => ({ id: d.id, ...d.data() })); renderAuctionsAdmin(); }, warn('ประมูล'));
+  if (ADMIN) onSnapshot(query(collection(db, 'reviews'), where('status', '==', 'pending'), limit(50)), (s) => { REVIEWS_P = s.docs.map(d => ({ id: d.id, ...d.data() })); renderReviewsDash(); }, warn('รีวิว'));
+  if (ADMIN) onSnapshot(query(collection(db, 'ammo_claims'), where('status', '==', 'open')), (s) => { ACLAIMS = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDashboard(); }, warn('รายการเคลม'));
   onSnapshot(doc(db, 'stats', 'public'), (s) => { STATS = s.exists() ? s.data() : {}; renderStatHints(); });
   onSnapshot(doc(db, 'system', 'settings'), (s) => { const first = !Object.keys(SETTINGS).length; SETTINGS = s.exists() ? s.data() : {}; if (first) loadAdminSettings(); });
   onSnapshot(doc(db, 'system', 'promptpay_qr'), (s) => { const img = s.exists() ? s.data().image : ''; $('qr-preview').src = img || SETTINGS.promptpayQrUrl || ''; $('qr-preview').classList.toggle('hidden', !(img || SETTINGS.promptpayQrUrl)); $('qr-preview-empty').classList.toggle('hidden', !!(img || SETTINGS.promptpayQrUrl)); });
@@ -222,6 +227,8 @@ function renderAdminProducts(list = null) {
         <button onclick='toggleFeatured(${id})' title="แสดงเป็นพิเศษหน้าแรก" class="apple-explore-pill px-2.5 py-1 text-[11px] ${p.featured ? 'text-pricingBlue border-pricingBlue' : ''}">${p.featured ? '★ แนะนำ' : '☆ แนะนำ'}</button>
         ${srv ? '' : `<button onclick='openStockModal(${id})' class="apple-pricing-pill px-3 py-1 text-[11px]">สต็อก ${num(p.stock)}</button>`}
         <button onclick='openProductModal(${id})' class="apple-explore-pill px-2.5 py-1 text-[11px]">แก้ไข</button>
+        <button onclick='duplicateProduct(${id})' title="คัดลอกเป็นสินค้าใหม่" class="apple-explore-pill px-2.5 py-1 text-[11px]">คัดลอก</button>
+        ${p.unlisted ? `<button onclick='copyProductLink(${id})' title="คัดลอกลิงก์ลับ" class="apple-explore-pill px-2.5 py-1 text-[11px]">🔒 ลิงก์</button>` : ''}
         <button onclick='deleteAdminProduct(${id})' class="apple-explore-pill px-2.5 py-1 text-[11px] text-red-500 border-red-200">ลบ</button>
       </td></tr>`;
   }).join('');
@@ -258,7 +265,10 @@ function applyTypeUi() {
   const ammo = !srv && $('prod-ammo-on')?.checked;
   $('ammo-config-box')?.classList.toggle('hidden', srv);
   $('ammo-fields')?.classList.toggle('hidden', !ammo);
+  if (ammo) ammoPreview();
   $('rent-config-box')?.classList.toggle('hidden', srv || ammo);
+  $('promo-config-box')?.classList.toggle('hidden', ammo);
+  $('bundle-fields')?.classList.toggle('hidden', srv);
   $('rent-fields')?.classList.toggle('hidden', !$('prod-rent-on')?.checked);
   $('lbl-prod-stock').textContent = srv ? 'จำนวนที่รับงานได้ (หน่วย):' : 'จำนวนสต็อก (ชิ้น):';
   $('hint-prod-stock').textContent = srv ? 'จำนวนงานที่รับได้ ระบบลดให้อัตโนมัติเมื่อมีออเดอร์' : 'ไอดีเกม: กดปุ่ม "สต็อก" ในตารางเพื่อเพิ่มไอดีจริง ระบบนับให้เอง (แก้ตรงนี้ไม่ได้)';
@@ -307,15 +317,40 @@ function fillProductCategorySelect() {
   sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
 }
 
+const msToLocal = (ms) => ms ? new Date(num(ms) - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : '';
+const localToMs = (v) => v ? new Date(v).getTime() : 0;
+/** "500 0.1" / "1000 5%" per line -> [{ min, type, value }]; null when a line is wrong */
+function parseAmmoTiers(text, rate) {
+  const out = [];
+  for (const line of text.split('\n').map(l => l.trim()).filter(Boolean)) {
+    const m = line.match(/^(\d+)\s+(\d+(?:\.\d+)?)\s*(%?)$/); if (!m) return null;
+    const [min, value, pct] = [Number(m[1]), Number(m[2]), m[3] === '%'];
+    if (!(min > 0) || !(value > 0) || (pct ? value >= 100 : value >= rate)) return null;
+    out.push({ min, type: pct ? 'percent' : 'fixed', value });
+  }
+  return out.sort((a, b) => a.min - b.min);
+}
+/** Live "what will the customer pay" lines under the ammo discount fields (windows ignored: shows the price while the discount is live). */
+document.addEventListener('input', (e) => { if (e.target.closest?.('#ammo-fields')) ammoPreview(); });
+function ammoPreview() {
+  const out = $('ammo-preview'); if (!out) return;
+  const v = (id) => $(id)?.value ?? '', rate = Number(v('prod-ammo-rate')) || 0;
+  if (!(rate > 0)) { out.textContent = 'ใส่ราคาต่อกองเพื่อดูตัวอย่าง'; return; }
+  const tiers = parseAmmoTiers(v('prod-ammo-tiers'), rate);
+  const p = { ammoRate: rate, ammoDiscType: v('prod-ammo-disc-type'), ammoDiscValue: Number(v('prod-ammo-disc')) || 0, ammoTiers: tiers || [] };
+  const mins = [...new Set([Number(v('prod-ammo-min')) || 1, ...p.ammoTiers.map(t => t.min)])].sort((a, b) => a - b);
+  out.innerHTML = (tiers ? '' : '<span class="text-red-500">ตารางขั้นจำนวนกองผิดรูปแบบ · </span>') + mins.map(q => { const r = ammoRateOf(p, q); return `${q} กอง → ฿${money(r)}/กอง = <b class="text-ink">฿${money(r * q)}</b>${r < rate ? ` <span class="text-launchOrange">(ลด ฿${money((rate - r) * q)})</span>` : ''}`; }).join('<br>');
+}
 function openProductModal(productId = null) {
   fillProductCategorySelect();
+  $('prod-bundle-id').innerHTML = '<option value="">— ไม่แถม —</option>' + PRODUCTS.filter(x => x.isAmmo === true).map(x => `<option value="${adminEsc(x.id)}">${adminEsc(x.name)}</option>`).join('');
   const p = productId ? PRODUCTS.find(x => x.id === productId) : null;
   $('product-crud-form').reset();
   $('product-modal-heading').innerText = p ? 'แก้ไขสินค้า: ' + p.name : 'เพิ่มสินค้าใหม่';
   $('prod-edit-id').value = p?.id || '';
   if (p) {
     const set = (id, v) => { $(id).value = v ?? ''; };
-    set('prod-name', p.name); set('prod-koen', p.koen); set('prod-koen-label', p.koenLabel); set('prod-price', p.price); set('prod-stock', p.stock ?? 0);
+    set('prod-name', p.name); set('prod-koen', p.koen); set('prod-koen-label', p.koenLabel); set('prod-price', p.saleOn ? p.basePrice : p.price); set('prod-stock', p.stock ?? 0);
     set('prod-image', p.image); set('prod-gallery', (p.gallery || []).join('\n')); set('prod-tags', (p.tags || []).join(', '));
     set('prod-desc', p.desc); set('prod-specs', (p.specs || []).join('\n'));
     const fm = Object.fromEntries((p.farmModes || []).map(m => [m.key, m.price]));
@@ -327,9 +362,12 @@ function openProductModal(productId = null) {
     $('prod-category').value = categoryOf(CATS, p.category) ? p.category : '';
     $('prod-featured').checked = p.featured === true;
     $('prod-rent-on').checked = num(p.rentHourPrice) > 0 || (p.rentPackages || []).length > 0;
-    $('prod-ammo-on').checked = p.isAmmo === true; set('prod-ammo-rate', p.ammoRate); set('prod-ammo-min', p.ammoMin); $('prod-ammo-login').checked = p.requireLogin !== false;
+    $('prod-ammo-on').checked = p.isAmmo === true; set('prod-ammo-rate', p.ammoRate); set('prod-ammo-min', p.ammoMin); set('prod-ammo-disc-type', p.ammoDiscType || 'fixed'); set('prod-ammo-disc', p.ammoDiscValue); set('prod-ammo-disc-from', msToLocal(p.ammoDiscFrom)); set('prod-ammo-disc-to', msToLocal(p.ammoDiscTo)); set('prod-ammo-maxids', p.ammoMaxIds); set('prod-ammo-low', p.ammoLowStock); set('prod-ammo-tiers-from', msToLocal(p.ammoTiersFrom)); set('prod-ammo-tiers-to', msToLocal(p.ammoTiersTo)); set('prod-ammo-tiers', (p.ammoTiers || []).map(t => `${t.min} ${t.value}${t.type === 'percent' ? '%' : ''}`).join('\n')); $('prod-ammo-login').checked = p.requireLogin !== false;
     set('prod-rent-rate', p.rentHourPrice); set('prod-rent-min', p.rentMinHours); set('prod-rent-deposit', p.rentDeposit);
     set('prod-rent-packages', (p.rentPackages || []).map(k => `${k.hours} ${k.price}`).join('\n'));
+    set('prod-sale-price', p.salePrice); set('prod-sale-from', msToLocal(p.saleFrom)); set('prod-sale-to', msToLocal(p.saleTo));
+    set('prod-drop-at', msToLocal(p.dropAt)); set('prod-cost', p.cost); set('prod-hide-at', msToLocal(p.hideAt)); $('prod-unlisted').checked = p.unlisted === true;
+    set('prod-bundle-id', p.bundleAmmoId); set('prod-bundle-n', p.bundleAmmo);
     $('prod-type').value = isServiceProduct(p, CATS) ? 'service' : 'account';
   } else {
     $('prod-stock').value = 0;
@@ -344,6 +382,30 @@ function openProductModal(productId = null) {
 }
 function closeProductModal() { $('product-form-modal').classList.add('hidden'); $('product-form-modal').classList.remove('flex'); }
 
+/** Append-only trail of admin changes (firestore.rules: create only, read admin). Shown in ตั้งค่า › ประวัติการแก้ไข. */
+const audit = (action, target, detail = '') => setDoc(doc(collection(db, 'audit_logs')), { at: serverTimestamp(), by: me?.email || me?.uid || '', action, target: String(target || '').slice(0, 120), detail: String(detail).slice(0, 600) }).catch(e => console.warn('audit:', e));
+const AUDIT_FIELDS = ['name', 'price', 'category', 'active', 'isAmmo', 'ammoRate', 'ammoMin', 'ammoMaxIds', 'ammoLowStock', 'ammoDiscType', 'ammoDiscValue', 'ammoDiscFrom', 'ammoDiscTo', 'ammoTiers', 'ammoTiersFrom', 'ammoTiersTo', 'requireLogin'];
+const auditVal = (v) => v?._methodName === 'deleteField' || v == null || v === '' ? '-' : JSON.stringify(v);
+async function loadAudit() {
+  const box = $('audit-list'); box.innerHTML = '<p class="text-slate">กำลังโหลด…</p>';
+  try {
+    const rows = (await getDocs(query(collection(db, 'audit_logs'), orderBy('at', 'desc'), limit(50)))).docs.map(d => d.data());
+    box.innerHTML = rows.length ? rows.map(r => `<div class="rounded-xl bg-mist px-3 py-2"><p><b>${adminEsc(r.action)}</b> ${adminEsc(r.target)} <span class="text-slate">· ${adminEsc(r.by)} · ${adminEsc(fmtDate(r.at))}</span></p>${r.detail ? `<p class="text-slate break-words">${adminEsc(r.detail)}</p>` : ''}</div>`).join('') : '<p class="text-slate">ยังไม่มีประวัติ</p>';
+  } catch (e) { console.warn(e); box.innerHTML = '<p class="text-red-500">โหลดไม่สำเร็จ (ตรวจว่า Publish firestore.rules ใหม่แล้ว)</p>'; }
+}
+/** Everything needed to rebuild the shop: categories, settings, products and ALL their stock rows (IDs + passwords). */
+async function exportBackup() {
+  if (!ADMIN) return;
+  if (!confirm('ไฟล์สำรองมีไอดีและรหัสผ่านของสต็อกทั้งหมด เก็บให้ปลอดภัยและอย่าส่งต่อ ดำเนินการต่อหรือไม่?')) return;
+  try {
+    const products = [];
+    for (const p of PRODUCTS) products.push({ ...p, stock_items: (await getDocs(collection(db, 'products', p.id, 'stock_items'))).docs.map(d => ({ id: d.id, ...d.data() })) });
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), categories: CATS, settings: SETTINGS, products }, null, 1)], { type: 'application/json' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `astraphex-backup-${new Date().toISOString().slice(0, 10)}.json` });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    audit('ส่งออกข้อมูลสำรอง', '', `${products.length} สินค้า`);
+  } catch (e) { console.warn(e); triggerToast('ส่งออกไม่สำเร็จ', 'error'); }
+}
 async function handleProductFormSubmit(e) {
   e.preventDefault();
   const editId = $('prod-edit-id').value.trim();
@@ -351,6 +413,14 @@ async function handleProductFormSubmit(e) {
   const isSrv = $('prod-type').value === 'service';
   const ammoOn = !isSrv && $('prod-ammo-on').checked, ammoRate = num($('prod-ammo-rate').value);
   if (ammoOn && !(ammoRate > 0)) return triggerToast('ใส่ราคาต่อกอง', 'error');
+  const discType = $('prod-ammo-disc-type').value === 'percent' ? 'percent' : 'fixed', disc = ammoOn ? num($('prod-ammo-disc').value) : 0;
+  if (disc < 0 || (discType === 'percent' ? disc >= 100 : disc >= ammoRate) && disc > 0) return triggerToast(discType === 'percent' ? 'ส่วนลด % ต้องน้อยกว่า 100' : 'ส่วนลดบาทต้องน้อยกว่าราคาต่อกอง', 'error');
+  const dFrom = ammoOn && disc > 0 ? localToMs($('prod-ammo-disc-from').value) : 0, dTo = ammoOn && disc > 0 ? localToMs($('prod-ammo-disc-to').value) : 0;
+  if (dFrom && dTo && dTo <= dFrom) return triggerToast('เวลาสิ้นสุดส่วนลดต้องอยู่หลังเวลาเริ่ม', 'error');
+  const tiers = ammoOn ? parseAmmoTiers($('prod-ammo-tiers').value, ammoRate) : [];
+  const tFrom = tiers?.length ? localToMs($('prod-ammo-tiers-from').value) : 0, tTo = tiers?.length ? localToMs($('prod-ammo-tiers-to').value) : 0;
+  if (tFrom && tTo && tTo <= tFrom) return triggerToast('เวลาสิ้นสุดขั้นจำนวนกองต้องอยู่หลังเวลาเริ่ม', 'error');
+  if (!tiers) return triggerToast('ส่วนลดตามจำนวนกอง: ใส่บรรทัดละ "จำนวนกอง ค่าลด" (ลดบาทต้องน้อยกว่าราคาต่อกอง · % ต้องน้อยกว่า 100)', 'error');
   const rentOn = !isSrv && !ammoOn && $('prod-rent-on').checked;
   const rentRate = rentOn ? num($('prod-rent-rate').value) : 0;
   const rentPackages = rentOn ? $('prod-rent-packages').value.split('\n').map(l => l.trim().split(/[\s,]+/).map(Number)).filter(r => r[0] >= 1 && r[1] > 0).map(r => ({ hours: Math.floor(r[0]), price: r[1] })) : [];
@@ -364,9 +434,20 @@ async function handleProductFormSubmit(e) {
   const farmModes = isSrv && fId > 0 && fSelf > 0 ? [{ key: 'with_id', label: 'ให้ไอดีไปยืน', price: fId }, { key: 'self', label: 'ไปยืนเอง', price: fSelf }] : null;
   if (!(price > 0) && !farmModes) return triggerToast('กรุณาใส่ราคา', 'error');
   const id = editId || 'prod_' + Date.now().toString(36);
+  const salePrice = num($('prod-sale-price')?.value), sFrom = localToMs($('prod-sale-from')?.value), sTo = localToMs($('prod-sale-to')?.value), baseP = farmModes ? Math.min(fId, fSelf) : price;
+  const saleOk = !ammoOn && salePrice > 0 && salePrice < baseP && (!sFrom || !sTo || sTo > sFrom);
+  const saleLive = saleOk && (!sFrom || Date.now() >= sFrom) && (!sTo || Date.now() <= sTo);
+  const bundleN = Math.floor(num($('prod-bundle-n')?.value)), bundleOn = !isSrv && !ammoOn && !!$('prod-bundle-id')?.value && bundleN > 0;
   const payload = {
     id, name: $('prod-name').value.trim(), category: category || deleteField(), koen: $('prod-koen').value.trim(), koenLabel: opt('prod-koen-label'),
-    price: farmModes ? Math.min(fId, fSelf) : price, image,
+    price: saleLive ? salePrice : farmModes ? Math.min(fId, fSelf) : price, image,
+    salePrice: saleOk ? salePrice : deleteField(), saleFrom: saleOk && sFrom ? sFrom : deleteField(), saleTo: saleOk && sTo ? sTo : deleteField(),
+    basePrice: saleLive ? (farmModes ? Math.min(fId, fSelf) : price) : deleteField(), saleOn: saleLive ? true : deleteField(),
+    cost: num($('prod-cost').value) > 0 ? num($('prod-cost').value) : deleteField(),
+    hideAt: localToMs($('prod-hide-at').value) > Date.now() ? localToMs($('prod-hide-at').value) : deleteField(),
+    unlisted: $('prod-unlisted').checked || deleteField(),
+    dropAt: !isSrv && localToMs($('prod-drop-at')?.value) > Date.now() ? localToMs($('prod-drop-at').value) : deleteField(),
+    bundleAmmoId: bundleOn ? $('prod-bundle-id').value : deleteField(), bundleAmmo: bundleOn ? bundleN : deleteField(),
     // service: free number (capacity). ID product: never typed, counted from stock_items (new = 0, edit = untouched)
     ...(isSrv ? { stock: Math.max(0, parseInt($('prod-stock').value, 10) || 0) } : editId ? {} : { stock: 0 }),
     gallery: galleryText ? galleryText.split('\n').map(s => formatUrl(s)).filter(Boolean) : (image ? [image] : []),
@@ -377,6 +458,10 @@ async function handleProductFormSubmit(e) {
     serviceMin: isSrv && Math.floor(num($('prod-service-min').value)) > 0 ? Math.floor(num($('prod-service-min').value)) : deleteField(),
     serviceRate: deleteField(),
     isAmmo: ammoOn || deleteField(), ammoRate: ammoOn ? ammoRate : deleteField(),
+    ammoDiscType: disc > 0 ? discType : deleteField(), ammoDiscValue: disc > 0 ? disc : deleteField(),
+    ammoMaxIds: ammoOn && Math.floor(num($('prod-ammo-maxids').value)) > 0 ? Math.min(100, Math.floor(num($('prod-ammo-maxids').value))) : deleteField(),
+    ammoLowStock: ammoOn && Math.floor(num($('prod-ammo-low').value)) > 0 ? Math.floor(num($('prod-ammo-low').value)) : deleteField(),
+    ammoDiscFrom: dFrom || deleteField(), ammoDiscTo: dTo || deleteField(), ammoTiers: tiers.length ? tiers : deleteField(), ammoTiersFrom: tFrom || deleteField(), ammoTiersTo: tTo || deleteField(),
     ammoMin: ammoOn && Math.floor(num($('prod-ammo-min').value)) > 1 ? Math.floor(num($('prod-ammo-min').value)) : deleteField(),
     requireLogin: ammoOn && !$('prod-ammo-login').checked ? false : deleteField(),
     rentHourPrice: rentRate > 0 ? rentRate : deleteField(),
@@ -388,20 +473,24 @@ async function handleProductFormSubmit(e) {
     infoLines: opt('prod-info'), howTo: opt('prod-howto'), warrantyText: opt('prod-warranty'),
     updatedAt: serverTimestamp(), ...(editId ? {} : { createdAt: serverTimestamp() })
   };
-  try { await setDoc(doc(db, 'products', id), payload, { merge: true }); triggerToast('บันทึกสินค้าแล้ว', 'success'); closeProductModal(); }
+  const old = PRODUCTS.find(x => x.id === id);
+  const oldBase = num(old?.basePrice) || num(old?.price);
+  if (!isSrv && !ammoOn && !rentOn && price > 0 && price !== oldBase) payload.priceHist = [...(Array.isArray(old?.priceHist) ? old.priceHist : oldBase ? [{ t: tsMs(old.createdAt) || Date.now() - 864e5, p: oldBase }] : []), { t: Date.now(), p: price }].slice(-30); // shown as the price chart on the product page
+  const diff = old ? AUDIT_FIELDS.filter(k => k in payload && auditVal(payload[k]) !== auditVal(old[k])).map(k => `${k}: ${auditVal(old[k])} → ${auditVal(payload[k])}`).join('; ') : 'สร้างสินค้าใหม่';
+  try { await setDoc(doc(db, 'products', id), payload, { merge: true }); if (diff) audit(old ? 'แก้สินค้า' : 'สร้างสินค้า', payload.name, diff); triggerToast('บันทึกสินค้าแล้ว', 'success'); closeProductModal(); }
   catch (err) { console.warn(err); triggerToast('บันทึกสินค้าไม่สำเร็จ', 'error'); }
 }
 async function deleteAdminProduct(id) {
   if (!confirm('ลบสินค้านี้? (ไอดีที่ยังไม่ขายในสต็อกจะเข้าถึงไม่ได้)')) return;
-  try { await deleteDoc(doc(db, 'products', id)); triggerToast('ลบสินค้าแล้ว', 'success'); } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
+  try { await deleteDoc(doc(db, 'products', id)); audit('ลบสินค้า', PRODUCTS.find(x => x.id === id)?.name || id); triggerToast('ลบสินค้าแล้ว', 'success'); } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
 }
 function openStockModalQuick() { const p = PRODUCTS.find(x => !isServiceProduct(x, CATS)); p ? openStockModal(p.id) : triggerToast('ยังไม่มีสินค้าประเภทไอดีเกม', 'error'); }
 
 // ---- bulk stock ----
-let currentStockProductId = null, parsedStockItems = [];
+let currentStockProductId = null, parsedStockItems = [], stockExisting = new Set(); // usernames already on the shelf (available / reserved) of the open product
 const stockIsAmmo = () => PRODUCTS.find(x => x.id === currentStockProductId)?.isAmmo === true;
 function parseStockLines(text, ammo = stockIsAmmo()) {
-  const items = [], seen = new Set(); let dup = false, bad = 0;
+  const items = [], seen = new Set(); let dup = false, bad = 0, inDb = 0;
   text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
     let u, p, a = 0;
     if (ammo) { // email|pass|ammo (also ":" or spaces between the three parts)
@@ -410,24 +499,25 @@ function parseStockLines(text, ammo = stockIsAmmo()) {
       [u, p, a] = [m[1], m[2], Number(m[3])];
     } else {
       const m = line.match(/^(?:email|user|username)\s+(\S+)\s+(?:password|pass|pwd)\s+(.+)$/i) || line.match(/^([^:\s|]+)\s*[:|]\s*(.+)$/) || line.match(/^(\S+)\s+(\S+)$/);
-      if (!m) return;
+      if (!m) { bad++; return; }
       [u, p] = [m[1].trim(), m[2].trim()];
     }
     if (seen.has(u.toLowerCase())) { dup = true; return; }
+    if (stockExisting.has(u.toLowerCase())) { inDb++; return; }
     seen.add(u.toLowerCase()); items.push(ammo ? { username: u, password: p, ammo: a } : { username: u, password: p });
   });
-  return { items, hasDuplicates: dup, bad };
+  return { items, hasDuplicates: dup, bad, inDb };
 }
 function handleStockTextareaInput(val) {
-  const { items, hasDuplicates, bad } = parseStockLines(val);
+  const { items, hasDuplicates, bad, inDb } = parseStockLines(val);
   parsedStockItems = items;
   const ammo = items.reduce((t, it) => t + (it.ammo || 0), 0);
-  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดไม่มีจำนวนกอง (ข้าม)` : ''}`;
+  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดอ่านไม่ได้ (ข้าม)` : ''}${inDb ? ` · ${inDb} ไอดีซ้ำกับในคลัง (ข้าม)` : ''}`;
   $('btn-add-stock-label').textContent = `บันทึกและนำเข้าสต็อก (${items.length} ชิ้น)`;
   $('stock-duplicate-warning').classList.toggle('hidden', !hasDuplicates);
 }
 function openStockModal(id) {
-  currentStockProductId = id;
+  currentStockProductId = id; stockExisting = new Set();
   $('bulk-stock-textarea').value = ''; handleStockTextareaInput('');
   const p = PRODUCTS.find(x => x.id === id);
   $('stock-modal-prod-title').textContent = p?.name || id;
@@ -449,6 +539,7 @@ async function submitBulkStockImport() {
       batch.update(prodRef, { stock: increment(chunk.reduce((t, it) => t + (it.ammo || 1), 0)) });
       await batch.commit();
     }
+    audit('นำเข้าสต็อก', PRODUCTS.find(x => x.id === currentStockProductId)?.name || currentStockProductId, `${parsedStockItems.length} ไอดี`);
     triggerToast(`นำเข้าไอดี ${parsedStockItems.length} รายการแล้ว`, 'success');
     $('bulk-stock-textarea').value = ''; handleStockTextareaInput('');
     loadAvailableStockItems(currentStockProductId);
@@ -460,6 +551,8 @@ async function loadAvailableStockItems(id) {
   const p = PRODUCTS.find(x => x.id === id), ammo = p?.isAmmo === true;
   let items = [];
   try { items = (await getDocs(query(collection(db, 'products', id, 'stock_items'), where('status', 'in', ammo ? ['available', 'reserved'] : ['available'])))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { console.warn(e); }
+  stockExisting = new Set(items.map(it => String(it.username || '').toLowerCase()));
+  handleStockTextareaInput($('bulk-stock-textarea').value);
   const real = ammo ? items.reduce((t, it) => t + num(it.ammo), 0) : items.length;
   $('stock-available-count').textContent = ammo ? `${items.length} ไอดี · ${real.toLocaleString('th-TH')} กอง` : items.length;
   $('stock-modal-current-count').textContent = real;
@@ -479,6 +572,7 @@ async function deleteSingleStockItem(pid, itemId, n = 1) {
     b.delete(doc(db, 'products', pid, 'stock_items', itemId));
     b.update(doc(db, 'products', pid), { stock: increment(-n) });
     await b.commit();
+    audit('ลบไอดีออกจากสต็อก', PRODUCTS.find(x => x.id === pid)?.name || pid, itemId);
     triggerToast('ลบไอดีออกจากคลังแล้ว', 'success');
     loadAvailableStockItems(pid);
   } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
@@ -526,12 +620,67 @@ function renderDashboard() {
   const todo = [
     [ORDERS.filter(o => o.status === 'pending_payment').length, 'ออเดอร์รอตรวจการชำระเงิน', 'orders'],
     [TOPUPS.filter(t => t.status === 'pending').length, 'รายการเติมเงินรอตรวจ', 'topups'],
-    [RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length, 'การเช่ารอตรวจ (เปลี่ยนรหัส/คืนมัดจำ)', 'rentals']
+    [RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length, 'การเช่ารอตรวจ (เปลี่ยนรหัส/คืนมัดจำ)', 'rentals'],
+    [ACLAIMS.length, 'คำขอเคลมไอดีไก่กระสุน (อยู่ในแผงไก่กระสุนด้านล่าง)', 'dashboard'],
+    [REVIEWS_P.length, 'รีวิวรออนุมัติ (อยู่ด้านล่าง)', 'dashboard']
   ].filter(x => x[0]);
   $('dash-todo').innerHTML = todo.map(([n, t, tab]) => `<button type="button" onclick="switchAdminTab('${tab}')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span>${t}</span><b class="text-launchOrange">${n}</b></button>`).join('')
     + low.slice(0, 6).map(p => `<button type="button" onclick="switchAdminTab('products')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span class="truncate">สต็อกเหลือน้อย: ${adminEsc(p.name)}</span><b class="${num(p.stock) <= 0 ? 'text-red-500' : 'text-launchOrange'}">${num(p.stock)}</b></button>`).join('')
     || '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
   if (!todo.length && !low.length) $('dash-todo').innerHTML = '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
+  renderAmmoDash(day0, D);
+}
+function renderReviewsDash() {
+  renderDashboard();
+  const box = $('dash-reviews'); if (!box) return;
+  box.classList.toggle('hidden', !REVIEWS_P.length);
+  const pn = (id) => PRODUCTS.find(p => p.id === id)?.name || id;
+  $('dash-reviews-body').innerHTML = REVIEWS_P.map(r => { const id = adminEsc(JSON.stringify(r.id)); return `<div class="rounded-xl bg-mist px-3 py-2.5 space-y-1.5"><p><span style="color:#f5a623">${'★'.repeat(num(r.stars))}${'☆'.repeat(5 - num(r.stars))}</span> <b>${adminEsc(r.name)}</b> · <span class="text-slate">${adminEsc(pn(r.productId))}</span></p>${r.text ? `<p>${adminEsc(r.text)}</p>` : ''}
+    <div class="flex gap-2"><button type="button" onclick='moderateReview(${id}, "shown")' class="apple-pricing-pill px-3 py-1 text-[11px]">แสดง</button><button type="button" onclick='moderateReview(${id}, "hidden")' class="apple-explore-pill px-3 py-1 text-[11px]">ซ่อน</button></div></div>`; }).join('');
+}
+async function moderateReview(id, status) {
+  try { await updateDoc(doc(db, 'reviews', id), { status }); triggerToast(status === 'shown' ? 'แสดงรีวิวแล้ว' : 'ซ่อนรีวิวแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('ทำรายการไม่สำเร็จ', 'error'); }
+}
+async function resolveAmmoClaim(orderId, action) {
+  const note = action === 'reject' ? (prompt('เหตุผลที่ปฏิเสธ (ลูกค้าจะเห็น)') || '').trim() : '';
+  if (action === 'reject' && !note) return;
+  if (action === 'refund' && !confirm('คืนเงินเต็มจำนวนออเดอร์นี้เป็นเครดิตให้ลูกค้า?')) return;
+  try { await callWorker('/admin/claim', { orderId, action, note }); triggerToast(action === 'refund' ? 'คืนเครดิตแล้ว' : 'ปฏิเสธคำขอแล้ว', 'success'); }
+  catch (e) { triggerToast(e.message || 'ทำรายการไม่สำเร็จ', 'error'); }
+}
+/** กอง sold per hour of day (Thai time) as plain bars, so the admin sees when to restock / run a discount. */
+function hourChart(orders) {
+  if (!orders.length) return '';
+  const h = Array(24).fill(0); orders.forEach(o => { h[new Date(tsMs(o.createdAt) + 7 * 36e5).getUTCHours()] += num(o.ammoTotal); });
+  const max = Math.max(...h, 1), top = h.indexOf(Math.max(...h));
+  return `<div class="rounded-xl bg-mist px-3 py-2.5"><p class="text-slate mb-2">ขายตามชั่วโมง (30 วัน, กอง) · ขายดีสุด <b class="text-ink">${String(top).padStart(2, '0')}:00</b></p>
+    <div style="display:flex;align-items:flex-end;gap:2px;height:64px">${h.map((v, i) => `<div title="${String(i).padStart(2, '0')}:00 · ${v.toLocaleString('th-TH')} กอง" style="flex:1;height:${Math.max(2, Math.round(v / max * 100))}%;background:${i === top ? '#0071e3' : '#b8c4d4'};border-radius:2px"></div>`).join('')}</div>
+    <div style="display:flex;justify-content:space-between" class="text-[10px] text-slate mt-1"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div></div>`;
+}
+/** Ammo panel: per product sold today / 30 days, shelf left, IDs held right now, discount given; plus money received but not delivered. */
+function renderAmmoDash(day0, D) {
+  const box = $('dash-ammo'); if (!box) return;
+  const prods = PRODUCTS.filter(p => p.isAmmo === true);
+  box.classList.toggle('hidden', !prods.length && !ACLAIMS.length);
+  if (!prods.length && !ACLAIMS.length) return;
+  const now = Date.now(), sold = ORDERS.filter(o => o.isAmmo === true && o.status === 'completed');
+  const stuck = AQUOTES.filter(q => q.status === 'paid_undelivered');
+  const row = (p) => {
+    const mine = sold.filter(o => o.productId === p.id), sum = (from, f) => mine.filter(o => tsMs(o.createdAt) >= from).reduce((t, o) => t + f(o), 0);
+    const held = AQUOTES.filter(q => q.productId === p.id && q.status === 'open' && num(q.expiresAt) > now).reduce((t, q) => t + num(q.ammoTotal), 0);
+    const give = (o) => Math.max(0, num(o.listUnitPrice) - num(o.unitPrice)) * num(o.ammoTotal);
+    return `<div class="rounded-xl bg-mist px-3 py-2.5 space-y-1"><p class="font-semibold truncate">${adminEsc(p.name)}</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-slate">
+        <span>วันนี้ <b class="text-ink">${sum(day0, o => num(o.ammoTotal)).toLocaleString('th-TH')}</b> กอง · ฿${money(sum(day0, o => num(o.amount)))}</span>
+        <span>30 วัน <b class="text-ink">${sum(day0 - 29 * D, o => num(o.ammoTotal)).toLocaleString('th-TH')}</b> กอง · ฿${money(sum(day0 - 29 * D, o => num(o.amount)))}</span>
+        <span>คงเหลือ <b class="text-ink">${num(p.stock).toLocaleString('th-TH')}</b> กอง${held ? ` · กันไว้ ${held.toLocaleString('th-TH')}` : ''}</span>
+        <span>ลดไปแล้ว <b class="text-ink">฿${money(sum(0, give))}</b></span></div></div>`;
+  };
+  const claimFlag = (c) => { const mine = ORDERS.filter(o => o.userId === c.uid), n = mine.filter(o => o.claimStatus).length, tot = mine.filter(o => o.isAmmo && PAID(o)).length; return n >= 3 || (tot >= 4 && n / tot > 0.3) ? `<p class="text-red-500">⚠ ลูกค้ารายนี้เคลมแล้ว ${n} ครั้งจาก ${tot} ออเดอร์ ตรวจให้ละเอียด</p>` : ''; };
+  const claims = ACLAIMS.map(c => `<div class="rounded-xl bg-mist px-3 py-2.5 space-y-1.5">${claimFlag(c)}<p><b>เคลมไอดี</b> ${adminEsc(c.orderNumber)} · ${adminEsc(c.productName)} · ฿${money(c.amount)} · <span class="text-slate">${adminEsc(c.email || '')}</span></p><p class="text-slate">${adminEsc(c.reason)}</p>
+    <div class="flex gap-2"><button type="button" onclick='resolveAmmoClaim(${adminEsc(JSON.stringify(c.id))}, "refund")' class="apple-pricing-pill px-3 py-1 text-[11px]">คืนเป็นเครดิต ฿${money(c.amount)}</button><button type="button" onclick='resolveAmmoClaim(${adminEsc(JSON.stringify(c.id))}, "reject")' class="apple-explore-pill px-3 py-1 text-[11px] text-red-500 border-red-200">ปฏิเสธ</button></div></div>`).join('');
+  $('dash-ammo-body').innerHTML = claims + (stuck.length ? `<div class="rounded-xl bg-red-50 text-red-500 px-3 py-2.5"><b>จ่ายเงินแล้วแต่ไม่ได้ไอดี ${stuck.length} รายการ</b> · ${stuck.slice(0, 5).map(q => `${adminEsc(q.productName)} ฿${money(q.paidAmount)} (อ้างอิง ${adminEsc(q.paidRef || '-')})`).join(' · ')}<br><span class="text-slate">ตรวจใน Discord แล้วส่งไอดีให้ลูกค้าเอง</span></div>` : '') + prods.map(row).join('') + hourChart(sold.filter(o => tsMs(o.createdAt) >= day0 - 29 * D));
 }
 
 // ==========================================
@@ -576,18 +725,35 @@ function renderAdminCategories() {
   const tbody = $('admin-categories-table-body'); if (!tbody) return;
   tbody.innerHTML = CATS.length ? CATS.map(c => {
     const id = adminEsc(JSON.stringify(c.id));
-    return `<tr class="border-b border-hairline">
-      <td class="py-3 px-4 font-medium">${c.image ? `<img src="${adminEsc(c.image)}" alt="" class="inline-block w-10 h-6 object-cover rounded mr-2 align-middle">` : ''}${adminEsc(c.name)}<div class="text-[11px] text-slate font-mono font-normal">${adminEsc(c.id)}</div></td>
+    return `<tr class="border-b border-hairline" draggable="true" data-cat="${adminEsc(c.id)}" title="ลากเพื่อจัดลำดับ">
+      <td class="py-3 px-4 font-medium"><span class="text-steel cursor-grab mr-2" aria-hidden="true">⠿</span>${c.image ? `<img src="${adminEsc(c.image)}" alt="" class="inline-block w-10 h-6 object-cover rounded mr-2 align-middle">` : ''}${adminEsc(c.name)}${!catVisible(c) ? ' <span class="text-[10px] text-launchOrange">(ซ่อนอยู่)</span>' : ''}${c.badge ? ` <span class="text-[10px] bg-mist px-1.5 rounded-full">${adminEsc(c.badge)}</span>` : ''}<div class="text-[11px] text-slate font-mono font-normal">${adminEsc(c.id)}</div>${c.desc ? `<div class="text-[11px] text-slate font-normal mt-0.5">${adminEsc(c.desc)}</div>` : ''}</td>
       <td class="py-3 px-4 text-slate">${adminEsc(KIND_LABEL[c.kind] || c.kind)}</td>
       <td class="py-3 px-4 font-mono">${c.kind === 'service' ? `ขั้นต่ำ ${adminEsc(c.minQty || 1)} ${adminEsc(c.unit || '')}` : '-'}</td>
       <td class="py-3 px-4 font-mono text-slate">${PRODUCTS.filter(p => p.category === c.id).length}</td>
       <td class="py-3 px-4 text-right whitespace-nowrap"><button onclick='editCategory(${id})' class="apple-explore-pill px-3 py-1 text-[11px]">แก้ไข</button> <button onclick='deleteCategory(${id})' class="apple-explore-pill px-3 py-1 text-[11px] text-red-500 border-red-200">ลบ</button></td></tr>`;
   }).join('') : `<tr><td colspan="5" class="py-12 text-center text-slate">ยังไม่มีหมวดหมู่ · สินค้าทั้งหมดจะแสดงในหน้าร้านตามปกติ</td></tr>`;
 }
+/** Drag a category row to a new place: every row gets order = position × 10 in one batch. */
+(() => {
+  let from = null;
+  const body = () => $('admin-categories-table-body');
+  document.addEventListener('dragstart', (e) => { const tr = e.target.closest?.('tr[data-cat]'); if (tr) { from = tr.dataset.cat; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', from); } });
+  document.addEventListener('dragover', (e) => { if (from && e.target.closest?.('tr[data-cat]')) e.preventDefault(); });
+  document.addEventListener('drop', async (e) => {
+    const tr = e.target.closest?.('tr[data-cat]'); if (!from || !tr || !body()?.contains(tr)) return;
+    e.preventDefault(); const to = tr.dataset.cat, moved = from; from = null;
+    if (to === moved) return;
+    const ids = [...body().querySelectorAll('tr[data-cat]')].map(r => r.dataset.cat).filter(id => id !== moved);
+    ids.splice(ids.indexOf(to) + (body().querySelector(`tr[data-cat="${moved}"]`).compareDocumentPosition(tr) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : 0), 0, moved);
+    try { const b = writeBatch(db); ids.forEach((id, i) => b.update(doc(db, 'categories', id), { order: (i + 1) * 10 })); await b.commit(); triggerToast('จัดลำดับหมวดหมู่แล้ว', 'success'); }
+    catch (err) { console.warn(err); triggerToast('จัดลำดับไม่สำเร็จ', 'error'); }
+  });
+  document.addEventListener('dragend', () => { from = null; });
+})();
 function editCategory(id) {
   const c = categoryOf(CATS, id); if (!c) return;
   const set = (k, v) => { $(k).value = v ?? ''; };
-  set('cat-edit-id', c.id); set('cat-name', c.name); set('cat-kind', c.kind); set('cat-image', c.image); set('cat-unit', c.unit); set('cat-min', c.minQty); set('cat-order', c.order);
+  set('cat-edit-id', c.id); set('cat-name', c.name); set('cat-kind', c.kind); set('cat-image', c.image); set('cat-desc', c.desc); set('cat-badge', c.badge); $('cat-hidden').checked = c.hidden === true; set('cat-show-from', msToLocal(c.showFrom)); set('cat-show-to', msToLocal(c.showTo)); set('cat-unit', c.unit); set('cat-min', c.minQty); set('cat-order', c.order);
   toggleCategoryKind(); $('cat-name').focus();
 }
 function resetCategoryForm() { $('category-form').reset(); $('cat-edit-id').value = ''; toggleCategoryKind(); }
@@ -596,16 +762,16 @@ async function handleCategorySubmit(e) {
   e.preventDefault();
   const kind = $('cat-kind').value;
   const id = $('cat-edit-id').value || 'cat_' + Date.now().toString(36);
-  const data = { name: $('cat-name').value.trim(), kind, order: num($('cat-order').value), image: formatUrl($('cat-image').value) || deleteField(), updatedAt: serverTimestamp() };
+  const data = { name: $('cat-name').value.trim(), kind, order: num($('cat-order').value), image: formatUrl($('cat-image').value) || deleteField(), desc: $('cat-desc').value.trim().slice(0, 300) || deleteField(), badge: $('cat-badge').value.trim().slice(0, 16) || deleteField(), hidden: $('cat-hidden').checked || deleteField(), showFrom: localToMs($('cat-show-from').value) || deleteField(), showTo: localToMs($('cat-show-to').value) || deleteField(), updatedAt: serverTimestamp() };
   if (kind === 'service') { data.unit = $('cat-unit').value.trim() || 'กอง'; data.minQty = Math.max(1, Math.floor(num($('cat-min').value)) || 1); }
   else { data.unit = deleteField(); data.minQty = deleteField(); }
-  try { await setDoc(doc(db, 'categories', id), data, { merge: true }); triggerToast('บันทึกหมวดหมู่แล้ว', 'success'); resetCategoryForm(); }
+  try { await setDoc(doc(db, 'categories', id), data, { merge: true }); audit($('cat-edit-id').value ? 'แก้หมวดหมู่' : 'สร้างหมวดหมู่', data.name); triggerToast('บันทึกหมวดหมู่แล้ว', 'success'); resetCategoryForm(); }
   catch (err) { triggerToast('บันทึกหมวดหมู่ไม่สำเร็จ', 'error'); }
 }
 async function deleteCategory(id) {
   const used = PRODUCTS.filter(p => p.category === id).length;
   if (!confirm(used ? `มีสินค้า ${used} รายการในหมวดนี้ สินค้าจะกลายเป็นสินค้าเดี่ยว (ไม่มีหมวด) ลบต่อหรือไม่?` : 'ยืนยันลบหมวดหมู่นี้?')) return;
-  try { await deleteDoc(doc(db, 'categories', id)); triggerToast('ลบหมวดหมู่แล้ว', 'success'); } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
+  try { await deleteDoc(doc(db, 'categories', id)); audit('ลบหมวดหมู่', categoryOf(CATS, id)?.name || id); triggerToast('ลบหมวดหมู่แล้ว', 'success'); } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
 }
 
 // ==========================================
@@ -619,6 +785,18 @@ window.getAdminUsers = () => USERS;
 const userOf = (uid) => USERS.find(u => u.uid === uid) || {};
 const buyerName = (o) => userOf(o.userId).username || String(o.userEmail || '').split('@')[0] || 'user';
 
+/** Orders in the chosen date range (empty = no limit) as a UTF-8 CSV that Excel opens with Thai text intact. */
+function exportOrdersCsv() {
+  const from = $('csv-from').value ? new Date($('csv-from').value + 'T00:00:00').getTime() : 0, to = $('csv-to').value ? new Date($('csv-to').value + 'T23:59:59.999').getTime() : Infinity;
+  const rows = ORDERS.filter(o => tsMs(o.createdAt) >= from && tsMs(o.createdAt) <= to).reverse();
+  if (!rows.length) return triggerToast('ไม่มีออเดอร์ในช่วงวันที่เลือก', 'error');
+  const cell = (v) => { let s = typeof v === 'number' ? String(v) : String(v ?? ''); if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }; // leading = + - @ would run as a formula in Excel
+  const head = ['เลขออเดอร์', 'วันที่', 'สินค้า', 'ประเภท', 'จำนวน', 'กองที่ได้', 'ก่อนลด', 'ส่วนลด', 'ส่วนลดยศ', 'ยอดสุทธิ', 'โค้ด', 'วิธีชำระ', 'สถานะ', 'ผู้ซื้อ', 'อีเมล'];
+  const body = rows.map(o => [o.orderNumber || o.orderId || o.id, new Date(tsMs(o.createdAt)).toLocaleString('sv-SE'), o.productName, o.isAmmo ? 'ไก่กระสุน' : o.productType === 'service' ? 'บริการ' : 'ไอดี', num(o.quantity), o.isAmmo ? num(o.ammoTotal) : '', num(o.subtotal), num(o.discount), num(o.rankDiscount), num(o.amount ?? o.finalPrice), o.promoCode || '', o.paymentMethod || '', o.status || '', o.guest ? 'ลูกค้าไม่ล็อกอิน' : buyerName(o), o.userEmail || o.buyerEmail || '']);
+  const blob = new Blob(['\ufeff' + [head, ...body].map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `orders_${$('csv-from').value || 'all'}_${$('csv-to').value || 'now'}.csv` });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 function renderAdminOrders() {
   const list = $('admin-orders-list'); if (!list) return;
   const done = ORDERS.filter(o => o.status === 'completed');
@@ -732,6 +910,7 @@ async function approveOrder(orderId) {
       if (o.promoCode) txn.set(doc(db, 'promo_codes', o.promoCode), { usedCount: increment(1) }, { merge: true });
     });
     triggerToast(srv ? 'นำงานเข้าคิวแล้ว' : 'ส่งมอบไอดีแล้ว', 'success');
+    callWorker('/push/queue', { orderId, event: 'paid' }).catch(e => console.warn('push:', e)); // buyer: "ยืนยันการชำระเงินแล้ว"
   } catch (e) {
     console.warn('approve:', e);
     triggerToast(e.message === 'NOT_PENDING' ? 'ออเดอร์นี้ถูกดำเนินการไปแล้ว' : e.message === 'ITEM_TAKEN' ? 'ไอดีถูกใช้ไปแล้ว ลองกดอีกครั้ง' : 'ดำเนินการไม่สำเร็จ', 'error');
@@ -910,7 +1089,110 @@ async function deleteTopupPromo(id) {
 // ==========================================
 // USERS
 // ==========================================
+function duplicateProduct(id) {
+  openProductModal(id);
+  $('prod-edit-id').value = ''; $('prod-name').value += ' (สำเนา)'; $('product-modal-heading').innerText = 'เพิ่มสินค้าใหม่ (คัดลอก)';
+}
+function copyProductLink(id) {
+  const url = new URL(`product.html?id=${encodeURIComponent(id)}`, location.href.replace(/admin\.html.*$/, '')).href;
+  navigator.clipboard?.writeText(url).then(() => triggerToast('คัดลอกลิงก์แล้ว', 'success'), () => prompt('คัดลอกลิงก์นี้', url));
+}
+
+/** Sales history and profit per product from the orders already loaded (paid orders only; cost = prod-cost x units). */
+function renderProfit() {
+  const box = $('profit-list'); if (!box || !can('pay')) return;
+  const by = {};
+  for (const o of ORDERS.filter(PAID)) {
+    if (!o.productId) continue;
+    const u = o.isAmmo ? num(o.ammoTotal) : num(o.receiveQty) || num(o.quantity) || 1, r = (by[o.productId] ||= { units: 0, rev: 0, orders: [] });
+    r.units += u; r.rev += num(o.amount); r.orders.push(o);
+  }
+  const rows = Object.entries(by).map(([id, r]) => { const p = PRODUCTS.find(x => x.id === id), cost = num(p?.cost) * r.units; return { id, p, ...r, profit: p && num(p.cost) > 0 ? r.rev - cost : null }; })
+    .filter(r => r.p).sort((a, b) => (b.profit ?? -1e12) - (a.profit ?? -1e12) || b.rev - a.rev).slice(0, 30);
+  const tot = rows.filter(r => r.profit !== null).reduce((s, r) => s + r.profit, 0);
+  box.innerHTML = (rows.some(r => r.profit !== null) ? `<p class="text-slate">กำไรรวมสินค้าที่ใส่ต้นทุน: <b class="text-ink">฿${money(tot, 0)}</b></p>` : '') + (rows.map(r => `<details class="rounded-xl bg-mist px-3 py-2"><summary class="cursor-pointer flex gap-3 items-center"><b class="truncate mr-auto">${adminEsc(r.p.name)}</b><span class="text-slate">ขาย ${money(r.units, 0)}</span><span>฿${money(r.rev, 0)}</span><span style="min-width:84px;text-align:right;color:${r.profit === null ? '#86868b' : r.profit >= 0 ? '#0a7a3b' : '#d70015'}">${r.profit === null ? 'ไม่มีต้นทุน' : (r.profit >= 0 ? '+' : '−') + '฿' + money(Math.abs(r.profit), 0)}</span></summary>
+    <div class="mt-2 space-y-1 text-slate">${r.orders.slice(0, 15).map(o => `<p>${adminEsc(fmtDate(o.createdAt))} · ${adminEsc(buyerName(o))} · ${adminEsc(o.orderNumber || '')} · ฿${money(num(o.amount))}</p>`).join('')}${r.orders.length > 15 ? `<p>… อีก ${r.orders.length - 15} ออเดอร์</p>` : ''}</div></details>`).join('') || '<p class="text-slate">ยังไม่มียอดขาย</p>');
+}
+
+const csvCell = (v) => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }; // a leading = + - @ would run as an Excel formula
+function exportProductsCsv() {
+  const rows = [['id', 'ชื่อ', 'ราคา', 'ต้นทุน', 'แท็ก', 'สเปก'], ...PRODUCTS.map(p => [p.id, p.name, p.saleOn ? p.basePrice : p.price, p.cost || '', (p.tags || []).join('|'), (p.specs || []).join('|')])];
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' })), download: 'products.csv' });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+export const parseCsv = (text) => { // RFC 4180: quoted cells, "" escapes, CRLF or LF
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(x => x.trim()));
+};
+async function importProductsCsv(input) {
+  const f = input.files?.[0]; input.value = ''; if (!f) return;
+  const rows = parseCsv((await f.text()).replace(/^\ufeff/, '')).slice(1), plan = [];
+  for (const [id, name, price, cost, tags, specs] of rows) {
+    const p = PRODUCTS.find(x => x.id === (id || '').trim()); if (!p) continue;
+    const u = {}, cl = (s) => String(s ?? '').replace(/^'/, '').trim();
+    if (cl(name) && cl(name) !== p.name) u.name = cl(name).slice(0, 200);
+    const np = num(cl(price)), oldP = p.saleOn ? num(p.basePrice) : num(p.price), fixedPrice = !p.saleOn && !p.isAmmo && !isServiceProduct(p, CATS) && !(num(p.rentHourPrice) > 0);
+    if (fixedPrice && np > 0 && np !== oldP) { u.price = np; u.priceHist = [...(Array.isArray(p.priceHist) ? p.priceHist : oldP ? [{ t: tsMs(p.createdAt) || Date.now() - 864e5, p: oldP }] : []), { t: Date.now(), p: np }].slice(-30); }
+    const nc = num(cl(cost)); if (cost !== undefined && cl(cost) !== '' && nc >= 0 && nc !== num(p.cost)) u.cost = nc > 0 ? nc : deleteField();
+    const nt = cl(tags).split('|').map(s => s.trim()).filter(Boolean).slice(0, 20); if (tags !== undefined && nt.join('|') !== (p.tags || []).join('|')) u.tags = nt;
+    const ns = cl(specs).split('|').map(s => s.trim()).filter(Boolean).slice(0, 40); if (specs !== undefined && ns.join('|') !== (p.specs || []).join('|')) u.specs = ns;
+    if (Object.keys(u).length) plan.push([p, u]);
+  }
+  if (!plan.length) return triggerToast('ไม่มีสินค้าที่เปลี่ยนแปลง', 'error');
+  if (!confirm(`อัปเดต ${plan.length} สินค้า?\n` + plan.slice(0, 8).map(([p, u]) => `• ${p.name}: ${Object.keys(u).filter(k => k !== 'priceHist').join(', ')}`).join('\n'))) return;
+  try {
+    for (let i = 0; i < plan.length; i += 400) { const b = writeBatch(db); plan.slice(i, i + 400).forEach(([p, u]) => b.update(doc(db, 'products', p.id), { ...u, updatedAt: serverTimestamp() })); await b.commit(); }
+    audit('นำเข้า CSV สินค้า', `${plan.length} รายการ`); triggerToast(`อัปเดต ${plan.length} สินค้าแล้ว`, 'success');
+  } catch (e) { console.warn(e); triggerToast('นำเข้าไม่สำเร็จ', 'error'); }
+}
+
+let AUCTIONS = [];
+const AUC_STATUS = { open: 'กำลังประมูล', settling: 'กำลังส่งมอบ', sold: 'ขายแล้ว', failed: 'ส่งมอบไม่สำเร็จ (คืนเครดิตแล้ว)', ended: 'ปิด ไม่มีคนประมูล' };
+function renderAuctionsAdmin() {
+  const sel = $('auc-product'), box = $('auction-admin-list'); if (!sel || !box) return;
+  const cur = sel.value, ok = PRODUCTS.filter(p => !isServiceProduct(p, CATS) && !p.isAmmo && !(num(p.rentHourPrice) > 0) && !p.isBox && num(p.stock) > 0);
+  sel.innerHTML = ok.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (เหลือ ${num(p.stock)})</option>`).join('') || '<option value="">ไม่มีไอดีที่มีสต็อก</option>';
+  if (ok.some(p => p.id === cur)) sel.value = cur;
+  box.innerHTML = AUCTIONS.slice().sort((a, b) => num(b.endsAt) - num(a.endsAt)).slice(0, 15).map(a => `<div class="flex items-center gap-2 rounded-xl bg-mist px-3 py-2"><b class="truncate">${esc(a.name)}</b><span class="text-slate mr-auto">${AUC_STATUS[a.status] || a.status} · ${num(a.bidCount)} ครั้ง${a.topBid ? ` · ฿${money(num(a.topBid))} (${esc(a.topName)})` : ''} · ${a.status === 'open' ? 'ปิด ' : ''}${esc(new Date(num(a.endsAt)).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }))}</span>${!num(a.bidCount) ? `<button type="button" class="text-red-500" onclick='removeAuction(${esc(JSON.stringify(a.id))})'>ลบ</button>` : ''}</div>`).join('') || '<p class="text-slate">ยังไม่มีการประมูล</p>';
+}
+async function createAuction(e) {
+  e.preventDefault();
+  const p = PRODUCTS.find(x => x.id === $('auc-product').value); if (!p) return false;
+  const id = 'auc_' + Date.now().toString(36);
+  try {
+    await setDoc(doc(db, 'auctions', id), { name: p.name, image: p.image || '', specs: (p.specs || []).slice(0, 8), productId: p.id, startPrice: Math.max(1, Math.floor(num($('auc-start').value))), minStep: Math.max(1, Math.floor(num($('auc-step').value))), endsAt: Date.now() + Math.min(168, Math.max(1, num($('auc-hours').value))) * 36e5, status: 'open', topBid: 0, topUid: '', topName: '', bidCount: 0, createdAt: serverTimestamp() });
+    audit('เริ่มประมูล', p.name); triggerToast('เริ่มประมูลแล้ว', 'success');
+  } catch (err) { console.warn(err); triggerToast('สร้างการประมูลไม่สำเร็จ', 'error'); }
+  return false;
+}
+async function removeAuction(id) { if (!confirm('ลบการประมูลนี้?')) return; try { await deleteDoc(doc(db, 'auctions', id)); } catch (e) { triggerToast('ลบไม่ได้ (มีผู้เสนอราคาแล้ว)', 'error'); } }
+
+function renderWinback() {
+  const box = $('winback-list'); if (!box) return;
+  const days = Math.max(1, num($('wb-days').value) || 30), cut = Date.now() - days * 864e5, by = {};
+  ORDERS.filter(PAID).forEach(o => { const u = o.userId; if (!u) return; const t = tsMs(o.createdAt); (by[u] ||= { n: 0, last: 0, sum: 0 }); by[u].n++; by[u].sum += num(o.amount); by[u].last = Math.max(by[u].last, t); });
+  const rows = Object.entries(by).filter(([, v]) => v.n >= 2 && v.last < cut).sort((a, b) => b[1].sum - a[1].sum).slice(0, 30);
+  box.innerHTML = rows.length ? rows.map(([uid, v]) => `<div class="flex items-center gap-2 rounded-xl bg-mist px-3 py-2"><button type="button" class="text-appleBlue hover:underline font-medium" onclick='openUserModal(${adminEsc(JSON.stringify(uid))})'>${adminEsc(userOf(uid).username || uid.slice(0, 8))}</button><span class="text-slate mr-auto">ซื้อ ${v.n} ครั้ง · ฿${money(v.sum, 0)} · หาย ${Math.floor((Date.now() - v.last) / 864e5)} วัน</span><button type="button" class="apple-explore-pill px-3 py-1" onclick='sendWinback(${adminEsc(JSON.stringify(uid))}, this)'>ส่งโค้ด</button></div>`).join('') : '<p class="text-slate">ไม่มีลูกค้าที่เข้าเงื่อนไข</p>';
+}
+async function sendWinback(uid, btn) {
+  btn.disabled = true;
+  try {
+    const r = await callWorker('/admin/winback', { uid, type: $('wb-type').value, value: num($('wb-value').value), days: num($('wb-valid').value) });
+    btn.outerHTML = `<span class="font-mono text-ink select-all">${adminEsc(r.code)}</span><span class="text-slate">${r.sent ? '· ส่งแจ้งเตือนแล้ว' : '· ลูกค้าไม่ได้เปิดแจ้งเตือน คัดลอกส่งเอง'}</span>`;
+  } catch (e) { btn.disabled = false; triggerToast(e.message, 'error'); }
+}
+
 function renderAdminUsers() {
+  renderWinback();
   const tbody = $('admin-users-table-body'); if (!tbody) return;
   $('metric-user-count').innerText = USERS.length;
   $('metric-user-balance').innerText = `฿${money(USERS.reduce((s, u) => s + num(u.walletBalance), 0), 0)}`;
@@ -931,8 +1213,9 @@ function renderAdminUsers() {
 
 let umUid = null;
 function userModalTab(t) {
-  ['info', 'wallet', 'history'].forEach(k => { $(`um-pane-${k}`).classList.toggle('hidden', k !== t); $(`um-tab-${k}`).className = `py-2 rounded-full ${k === t ? 'bg-gallery shadow-sm font-semibold' : 'text-slate'}`; });
+  ['overview', 'info', 'wallet', 'history'].forEach(k => { $(`um-pane-${k}`).classList.toggle('hidden', k !== t); $(`um-tab-${k}`).className = `py-2 rounded-full ${k === t ? 'bg-gallery shadow-sm font-semibold' : 'text-slate'}`; });
   if (t === 'history') loadUserHistory();
+  if (t === 'overview') loadUserOverview();
   if (t === 'wallet') loadWalletLogs();
 }
 function syncPermBox() { $('um-perms-wrap').classList.toggle('hidden', $('um-role').value === 'admin'); }
@@ -959,7 +1242,7 @@ function openUserModal(uid) {
   showVault(u);
   $('um-worker-note').textContent = workerUrl() ? '' : 'ยังไม่ได้ตั้งค่า Worker: เปลี่ยนชื่อผู้ใช้สำหรับล็อกอิน / รหัสผ่าน / สิทธิ์ Admin / ระงับการล็อกอิน จะยังไม่มีผล (บันทึกได้เฉพาะข้อมูลในฐานข้อมูล)';
   $('um-amount').value = ''; $('um-wnote').value = '';
-  userModalTab('info');
+  userModalTab('overview');
   openModal('user-modal');
 }
 const vaultMs = (u) => tsMs(u?.vaultUntil);
@@ -1041,6 +1324,21 @@ async function loadWalletLogs() {
     box.innerHTML = logs.length ? logs.map(l => `<div class="py-2 flex justify-between gap-3"><span class="text-slate">${adminEsc(fmtDate(l.at))} · ${adminEsc(l.note || '-')}</span><span class="font-mono font-semibold ${num(l.delta) < 0 ? 'text-launchOrange' : 'text-emerald-600'}">${num(l.delta) >= 0 ? '+' : ''}${money(l.delta)}</span></div>`).join('') : '<p class="py-3 text-slate">ยังไม่มีประวัติ</p>';
   } catch (e) { box.innerHTML = '<p class="py-3 text-slate">โหลดไม่สำเร็จ</p>'; }
 }
+/** One-glance customer card: money in/out, claims, boxes, reviews, last purchase, plus claim-abuse warning. */
+async function loadUserOverview() {
+  const box = $('um-overview'), u = userOf(umUid), uid = umUid;
+  const orders = ORDERS.filter(o => o.userId === uid), paid = orders.filter(o => PAID(o)), tops = TOPUPS.filter(t => t.uid === uid && t.status === 'completed');
+  const claims = orders.filter(o => o.claimStatus).length, ammoN = paid.filter(o => o.isAmmo).length, boxes = (window.getBoxOpens?.() || []).filter(b => b.uid === uid);
+  const last = paid.map(o => tsMs(o.createdAt)).sort((a, b) => b - a)[0];
+  const tile = (k, v) => `<div class="rounded-xl bg-mist px-3 py-2.5"><p class="text-slate">${k}</p><p class="text-base font-semibold text-ink">${v}</p></div>`;
+  const warn = claims >= 3 || (ammoN >= 4 && claims / ammoN > 0.3) ? `<p class="rounded-xl bg-red-50 text-red-500 px-3 py-2.5">⚠ เคลมแล้ว ${claims} ครั้งจาก ${ammoN} ออเดอร์ไก่กระสุน ตรวจให้ละเอียดก่อนคืนเงิน</p>` : '';
+  const draw = (rv = '') => { box.innerHTML = `${warn}<div class="grid grid-cols-2 gap-2">${tile('ใช้จ่ายรวม', '฿' + money(paid.reduce((t, o) => t + num(o.amount), 0)))}${tile('ออเดอร์สำเร็จ', paid.length)}${tile('เติมเงินรวม', '฿' + money(tops.reduce((t, x) => t + num(x.amount), 0)))}${tile('เครดิตคงเหลือ', '฿' + money(u.walletBalance))}${tile('เคลมไอดี', claims)}${tile('เปิดกล่องสุ่ม', boxes.length + ' ครั้ง')}${tile('ซื้อล่าสุด', last ? fmtDate(last) : '-')}${tile('รีวิว', rv || '…')}</div>${u.facebook ? `<p class="text-slate">Facebook: ${adminEsc(u.facebook)}</p>` : ''}`; };
+  draw();
+  try {
+    const s = await getDocs(query(collection(db, 'reviews'), where('uid', '==', uid), limit(50)));
+    if (uid === umUid) draw(s.size ? `${s.size} · เฉลี่ย ${(s.docs.reduce((t, d) => t + num(d.data().stars), 0) / s.size).toFixed(1)}★` : 'ยังไม่มี');
+  } catch (e) { if (uid === umUid) draw('-'); }
+}
 function loadUserHistory() {
   const t = TOPUPS.filter(x => x.uid === umUid), o = ORDERS.filter(x => x.userId === umUid);
   $('um-topups').innerHTML = t.length ? t.map(x => `<div class="py-2 flex justify-between gap-3"><span>${adminEsc(fmtDate(x.createdAt))} · ${x.paymentMethod === 'angpao' ? 'ซองอั่งเปา (อัตโนมัติ)' : x.paymentMethod === 'truemoney' ? 'TrueMoney' : 'พร้อมเพย์'}</span><span class="font-mono">฿${money(x.amount)} · ${(TOPUP_UI[x.status] || [x.status])[0]}</span></div>`).join('') : '<p class="py-2 text-slate">ไม่มีรายการ</p>';
@@ -1055,6 +1353,8 @@ async function loadAdminSettings() {
   let secrets = {};
   try { const s = await getDoc(doc(db, 'system_private', 'secrets')); if (s.exists()) secrets = s.data(); } catch (_) {}
   const set = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
+  $('setting-ammo-closed').checked = d.ammoClosed === true; set('setting-ammo-closed-msg', d.ammoClosedMsg); set('setting-ammo-close-from', d.ammoCloseFrom); set('setting-ammo-close-to', d.ammoCloseTo);
+  $('setting-shop-closed').checked = d.shopClosed === true; set('setting-shop-closed-msg', d.shopClosedMsg); set('setting-shop-reopen', d.shopReopenAt ? msToLocal(d.shopReopenAt) : ''); set('setting-combo-pct', d.comboPct || 0);
   $('setting-announce-on').checked = d.announcementEnabled === true;
   set('setting-announce-text', d.announcementText ?? d.marqueeText);
   set('setting-announce-link', d.announcementLink);
@@ -1134,6 +1434,8 @@ async function handleSaveSettings(e) {
   if (webhook && !/^https:\/\/(discord(app)?\.com)\/api\/webhooks\//.test(webhook)) return triggerToast('Discord Webhook URL ไม่ถูกต้อง', 'error');
   const n = (id) => Math.max(0, Math.floor(num(v(id))));
   const payload = {
+    ammoClosed: $('setting-ammo-closed').checked, ammoClosedMsg: v('setting-ammo-closed-msg'), ammoCloseFrom: v('setting-ammo-close-from') && v('setting-ammo-close-to') ? v('setting-ammo-close-from') : '', ammoCloseTo: v('setting-ammo-close-from') && v('setting-ammo-close-to') ? v('setting-ammo-close-to') : '',
+    shopClosed: $('setting-shop-closed').checked, shopClosedMsg: v('setting-shop-closed-msg'), shopReopenAt: localToMs(v('setting-shop-reopen')) || 0, comboPct: Math.min(50, Math.max(0, Math.floor(num(v('setting-combo-pct'))))),
     announcementEnabled: $('setting-announce-on').checked, announcementText: v('setting-announce-text'), announcementLink: v('setting-announce-link'),
     popupEnabled: $('setting-popup-on').checked, popupImages: v('setting-popup-images').split('\n').map(x => formatUrl(x.trim())).filter(Boolean).slice(0, 6),
     vaultPackages: v('setting-vault-packages').split('\n').map(l => l.split('=').map(x => Math.round(num(x)))).filter(([d, p]) => d >= 1 && d <= 365 && p > 0).slice(0, 4).map(([days, price]) => ({ days, price })),
@@ -1148,6 +1450,7 @@ async function handleSaveSettings(e) {
   try {
     await setDoc(doc(db, 'system', 'settings'), payload, { merge: true });
     await setDoc(doc(db, 'system_private', 'secrets'), { discordWebhook: webhook, updatedAt: serverTimestamp() }, { merge: true });
+    audit('บันทึกตั้งค่าร้าน', '', ['ammoClosed', 'shopClosed', 'comboPct', 'ammoCloseFrom', 'ammoCloseTo', 'announcementEnabled', 'slipWorkerUrl'].filter(k => auditVal(payload[k]) !== auditVal(SETTINGS[k])).map(k => `${k}: ${auditVal(SETTINGS[k])} → ${auditVal(payload[k])}`).join('; '));
     triggerToast('บันทึกการตั้งค่าแล้ว', 'success');
   } catch (err) { console.warn(err); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
@@ -1203,17 +1506,40 @@ async function testWebhook() {
 }
 
 Object.assign(window, {
+  parseCsv, duplicateProduct, copyProductLink, exportProductsCsv, importProductsCsv,
+  createAuction, removeAuction,
+  renderWinback, sendWinback,
   saveSpotlight, saveFestival,
   saveHomeQuick,
   renderDashboard, applyTypeUi, setRentalFilter, closeRental, renderAdminRentals,
   handlePinSetupSubmit, handlePinUnlockSubmit, promptResetPin, lockAdminSession, switchAdminTab,
   openStockModal, closeStockModal, handleStockTextareaInput, submitBulkStockImport, deleteSingleStockItem, openStockModalQuick,
-  openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,
+  moderateReview, ammoPreview, openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,
   updateImagePreview, filterAdminProducts, toggleFeatured, handleCategoryChange, updateServiceSummary, syncServiceRateToPrice, setServiceUnitPreset,
   applyServiceTemplate, editCategory, resetCategoryForm, toggleCategoryKind, handleCategorySubmit, deleteCategory,
-  renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
+  exportOrdersCsv, resolveAmmoClaim, loadAudit, exportBackup, renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
   renderAdminTopups, approveTopup, rejectTopup, saveTopupPromo, editTopupPromo, resetTopupPromo, deleteTopupPromo,
   renderAdminUsers, grantVault, openUserModal, userModalTab, saveUserInfo, saveUserWallet,
   handleSaveSettings, uploadQr, removeQr, testWebhook, closeModal,
   getProductsForPromo: () => PRODUCTS, getCategoriesForPromo: () => CATS
 });
+
+// ---------- Ctrl/⌘+K: jump to any tab by typing ----------
+(() => {
+  let box = null;
+  const close = () => { box?.remove(); box = null; };
+  const open = () => {
+    if (box) return close();
+    const tabs = [...document.querySelectorAll('[id^="admin-tab-btn-"]')].filter(b => !b.classList.contains('hidden'));
+    box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.35);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh';
+    box.innerHTML = '<div style="width:min(92vw,440px);background:#fff;border-radius:20px;padding:12px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><input type="search" placeholder="ไปที่… (เช่น ออเดอร์, กล่องสุ่ม, ตั้งค่า)" class="w-full apple-input px-4 py-2.5 text-sm" aria-label="ค้นหาเมนู"><div class="mt-2 space-y-1 text-sm" style="max-height:50vh;overflow:auto"></div></div>';
+    document.body.appendChild(box);
+    const inp = box.querySelector('input'), list = box.firstElementChild.lastElementChild;
+    const draw = () => { const q = inp.value.trim().toLowerCase(); list.innerHTML = ''; tabs.filter(b => b.textContent.toLowerCase().includes(q)).forEach((b, i) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'w-full text-left rounded-xl px-3 py-2 hover:bg-mist' + (i ? '' : ' bg-mist'); x.textContent = b.textContent.trim(); x.onclick = () => { close(); b.click(); }; list.appendChild(x); }); };
+    inp.oninput = draw; draw(); inp.focus();
+    inp.onkeydown = (e) => { if (e.key === 'Enter') list.querySelector('button')?.click(); };
+    box.onclick = (e) => { if (e.target === box) close(); };
+  };
+  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open(); } else if (e.key === 'Escape') close(); });
+})();

@@ -3,14 +3,14 @@ import { collection, doc, getDocs, onSnapshot, query, updateDoc, where } from "h
 import { onAuthStateChanged, signOut, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { esc, num, toast, fmtDate, icon, ICONS, onSettings, money } from "./ui.js";
 import { RANKS, rankTable, rankOf, rankIcon, titleBadge } from "./rank.js";
-import { orderCardHtml, PRODUCT_IMAGES } from "./orders-ui.js";
+import { orderCardHtml, PRODUCT_IMAGES, REVIEWS } from "./orders-ui.js";
 import { ensureProfile } from "./profile.js";
 import { mountPushCard } from "./push.js";
 
 /** Account page: profile + status, balance with top-up shortcut, game-ID orders, service queue, settings. */
 const $ = (id) => document.getElementById(id);
 let user = null, profile = {}, orders = [], tab = 'ids';
-let unsubOrders = null, unsubProfile = null;
+let unsubOrders = null, unsubProfile = null, unsubReviews = null;
 
 function switchAccountTab(t) {
   tab = t;
@@ -76,11 +76,12 @@ function renderOrders() {
   $('sec-services').innerHTML = srv.length
     ? `<div id="push-card"></div><a href="queue.html" class="flex items-center justify-between soft-card px-5 py-3.5 text-[15px]"><span>ดูคิวงานทั้งหมดของร้าน</span>${icon('M9 6l6 6-6 6', 'w-4 h-4 text-steel', 2)}</a>` + srv.map(orderCardHtml).join('')
     : empty('ยังไม่มีงานบริการ', 'category.html', 'ดูบริการ');
-  if (srv.some(o => o.status !== 'completed' && o.status !== 'cancelled')) mountPushCard($('push-card'), 'เปิดแจ้งเตือนไว้ ใกล้ถึงคิว ถึงคิว หรืองานเสร็จ มือถือเด้งบอกทันที');
+  if (orders.some(o => o.status !== 'completed' && o.status !== 'cancelled')) mountPushCard($('push-card'), 'เปิดแจ้งเตือนไว้ รู้ทันทีเมื่อชำระเงินยืนยัน ถึงคิว หรืองานเสร็จ มือถือเด้งบอกทันที');
 }
 
 function watch(u) {
-  unsubOrders?.(); unsubProfile?.();
+  unsubOrders?.(); unsubProfile?.(); unsubReviews?.();
+  unsubReviews = onSnapshot(query(collection(db, 'reviews'), where('uid', '==', u.uid)), (s) => { REVIEWS.clear(); s.forEach(d => REVIEWS.set(d.id, d.data())); if (orders.length) renderOrders(); }, (e) => console.warn('reviews:', e));
   unsubOrders = onSnapshot(query(collection(db, 'orders'), where('userId', '==', u.uid)), (s) => {
     orders = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now()));
     renderOrders();
@@ -98,7 +99,7 @@ onAuthStateChanged(auth, async (u) => {
   $('acc-loading').classList.add('hidden');
   $('acc-guest').classList.toggle('hidden', !!u);
   $('acc-dash').classList.toggle('hidden', !u);
-  if (!u) { unsubOrders?.(); unsubProfile?.(); return; }
+  if (!u) { unsubOrders?.(); unsubProfile?.(); unsubReviews?.(); return; }
   renderProfile();
   $('sec-ids').innerHTML = `<div class="skeleton h-40 !rounded-[28px]"></div><div class="skeleton h-40 !rounded-[28px]"></div>`;
   watch(u);
