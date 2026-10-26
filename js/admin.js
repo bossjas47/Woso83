@@ -6,7 +6,7 @@ import {
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { watchCategories, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
 import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
-import { rankTable, rankOf, rankBadge, rankIcon } from "./rank.js";
+import { rankTable, rankOf, rankBadge, rankIcon, titleBadge, TITLE_COLORS } from "./rank.js";
 import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /**
@@ -920,7 +920,7 @@ function renderAdminUsers() {
   const rows = USERS.filter(u => !q || [u.username, u.email, u.contactEmail, u.facebook, u.uid].some(v => String(v || '').toLowerCase().includes(q)));
   $('admin-users-empty').classList.toggle('hidden', rows.length > 0);
   tbody.innerHTML = rows.slice(0, 300).map(u => `<tr class="border-b border-hairline">
-    <td class="py-3 px-4"><p class="font-semibold flex items-center gap-2">${adminEsc(u.username || '(ไม่มีชื่อ)')} ${rankBadge(rankOf(u, SETTINGS))}</p><p class="text-[10px] text-slate font-mono">${adminEsc(u.uid)}</p></td>
+    <td class="py-3 px-4"><p class="font-semibold flex items-center gap-2">${adminEsc(u.username || '(ไม่มีชื่อ)')} ${rankBadge(rankOf(u, SETTINGS))} ${titleBadge(u)}</p><p class="text-[10px] text-slate font-mono">${adminEsc(u.uid)}</p></td>
     <td class="py-3 px-4 text-slate">${adminEsc(u.contactEmail || (/@tactical\.store$/.test(u.email || '') ? '' : u.email) || '-')}${u.facebook ? `<br>FB: ${adminEsc(u.facebook)}` : ''}</td>
     <td class="py-3 px-4 font-mono font-semibold">฿${money(u.walletBalance)}</td>
     <td class="py-3 px-4">${u.role === 'admin' ? '<span class="text-launchOrange font-semibold">Admin</span>' : u.role === 'staff' ? `<span class="font-semibold" title="${adminEsc((u.perms || []).map(p => PERM_LABEL[p] || p).join(', '))}">ทีมงาน (${(u.perms || []).length})</span>` : 'User'}</td>
@@ -947,10 +947,12 @@ function openUserModal(uid) {
   $('um-contact-email').value = u.contactEmail || '';
   $('um-facebook').value = u.facebook || '';
   $('um-password').value = '';
+  $('um-title').value = u.title || '';
+  $('um-title-color').innerHTML = Object.entries(TITLE_COLORS).map(([k, c]) => `<option value="${k}" ${u.titleColor === k ? 'selected' : ''}>${c[2]}</option>`).join('');
   $('um-role').value = u.role === 'admin' ? 'admin' : 'user';
   $('um-perms').innerHTML = Object.entries(PERM_LABEL).map(([k, t]) => `<label class="flex items-start gap-2 py-1"><input type="checkbox" value="${k}" ${(u.perms || []).includes(k) ? 'checked' : ''}> <span>${adminEsc(t)}</span></label>`).join('');
   syncPermBox();
-  document.querySelectorAll('#um-pane-info input[id^="um-"], #um-pane-info select').forEach(el => { if (['um-username', 'um-password', 'um-role', 'um-status'].includes(el.id) || el.closest('#um-perms-wrap')) el.disabled = !ADMIN; });
+  document.querySelectorAll('#um-pane-info input[id^="um-"], #um-pane-info select').forEach(el => { if (['um-username', 'um-password', 'um-role', 'um-status', 'um-title', 'um-title-color'].includes(el.id) || el.closest('#um-perms-wrap')) el.disabled = !ADMIN; });
   $('um-status').value = u.status === 'suspended' ? 'suspended' : 'active';
   $('um-login-email').textContent = u.email || '-';
   $('um-balance').textContent = `฿${money(u.walletBalance)}`;
@@ -1000,7 +1002,7 @@ async function saveUserInfo(e) {
     }
     await updateDoc(doc(db, 'users', umUid), {
       username: username || u.username || '', contactEmail: $('um-contact-email').value.trim(), facebook: $('um-facebook').value.trim(),
-      ...(ADMIN ? { role: newRole, status, perms, ...(loginEmail ? { email: loginEmail } : {}) } : {}), adminUpdatedAt: serverTimestamp()
+      ...(ADMIN ? { role: newRole, status, perms, title: $('um-title').value.trim().slice(0, 24), titleColor: $('um-title-color').value, ...(loginEmail ? { email: loginEmail } : {}) } : {}), adminUpdatedAt: serverTimestamp()
     });
     $('um-password').value = '';
     triggerToast(Object.keys(authChange).length && !workerUrl() ? 'บันทึกข้อมูลแล้ว (การล็อกอินยังไม่เปลี่ยน เพราะยังไม่ได้ตั้ง Worker)' : 'บันทึกข้อมูลผู้ใช้แล้ว', 'success');

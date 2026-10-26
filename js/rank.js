@@ -46,3 +46,11 @@ export function rankIcon(i, cls = 'w-6 h-6') {
 }
 /** Small inline badge: icon + name. */
 export const rankBadge = (i, cls = 'w-4 h-4') => (i < 0 ? '' : `<span class="rank-badge" style="--rk:${RANKS[i].color}">${rankIcon(i, cls)}${RANKS[i].name}</span>`);
+
+/** Custom title an admin gives a user (users.title + users.titleColor); plain text badge, colours are fixed presets. */
+export const TITLE_COLORS = { gray: ['#f5f5f7', '#1d1d1f', 'เทา'], blue: ['#eaf3ff', '#0071e3', 'น้ำเงิน'], violet: ['#f3edff', '#7c3aed', 'ม่วง'], green: ['#e7f8ec', '#1f9d55', 'เขียว'], orange: ['#fff3e6', '#b64400', 'ส้ม'], gold: ['#fff3d6', '#8a6100', 'ทอง'] };
+export function titleBadge(p) {
+  const t = String(p?.title || '').trim().slice(0, 24); if (!t) return '';
+  const [bg, fg] = TITLE_COLORS[p.titleColor] || TITLE_COLORS.gray;
+  return `<span class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full" style="background:${bg};color:${fg}">${t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}</span>`;
+}

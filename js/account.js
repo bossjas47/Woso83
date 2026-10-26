@@ -2,7 +2,7 @@ import { db, auth } from "../firebase-config.js";
 import { collection, doc, getDocs, onSnapshot, query, updateDoc, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged, signOut, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { esc, num, toast, fmtDate, icon, ICONS, onSettings, money } from "./ui.js";
-import { RANKS, rankTable, rankOf, rankIcon } from "./rank.js";
+import { RANKS, rankTable, rankOf, rankIcon, titleBadge } from "./rank.js";
 import { orderCardHtml, PRODUCT_IMAGES } from "./orders-ui.js";
 import { ensureProfile } from "./profile.js";
 import { mountPushCard } from "./push.js";
@@ -25,6 +25,7 @@ function switchAccountTab(t) {
 function renderProfile() {
   const name = profile.username || user.displayName || (user.email || '').split('@')[0] || 'สมาชิก';
   $('acc-name').textContent = name;
+  $('acc-title').innerHTML = titleBadge(profile);
   $('acc-avatar').textContent = [...name][0]?.toUpperCase() || 'A';
   $('acc-since').textContent = fmtDate(profile.createdAt || user.metadata?.creationTime).split(' ').slice(0, 3).join(' ');
   $('acc-balance').innerHTML = `<small>฿</small>${num(profile.walletBalance).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
