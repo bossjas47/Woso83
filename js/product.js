@@ -102,6 +102,11 @@ function render() {
   renderValuePacks();
   recalc();
   applyRentUi();
+  if (P.isAmmo === true) { // ammo bundles: own checkout (js/ammo.js), priced by the real ammo total
+    ['farm-modes-section', 'packages-section', 'quantity-card', 'checkout-card', 'rent-card'].forEach(id => $(id)?.classList.add('hidden'));
+    $('product-stock-line').innerHTML = stock <= 0 ? '<span class="text-launchOrange font-medium">สินค้าหมด</span>' : `<span class="text-emerald-600 font-medium">พร้อมส่ง ${stock.toLocaleString('th-TH')} กอง</span>`;
+    import('./ammo.js').then(m => m.mountAmmo($('ammo-card'), P)).catch(e => console.warn('ammo:', e));
+  }
 }
 
 function renderBadges() {

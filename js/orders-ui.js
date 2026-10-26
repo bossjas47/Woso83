@@ -28,7 +28,7 @@ export function credentialBoxHtml(order) {
     vault.set(key, a);
     const k = esc(JSON.stringify(key));
     return `<div class="rounded-2xl border border-hairline bg-gallery p-4 space-y-3">
-      ${accs.length > 1 ? `<p class="text-xs font-semibold text-slate">ไอดีที่ ${i + 1}</p>` : ''}
+      ${accs.length > 1 || a.ammo ? `<p class="text-xs font-semibold text-slate">${accs.length > 1 ? `ไอดีที่ ${i + 1}` : 'ไอดี'}${a.ammo ? ` · ${Number(a.ammo).toLocaleString('th-TH')} กอง` : ''}</p>` : ''}
       <div>
         <p class="text-xs text-slate mb-1">Username / อีเมลเกม</p>
         <div class="flex items-center gap-2"><code class="flex-1 min-w-0 truncate rounded-xl bg-mist px-3 py-2.5 text-[15px] text-ink">${esc(a.username)}</code>

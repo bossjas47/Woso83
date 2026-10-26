@@ -5,7 +5,7 @@ import { ROOT, SHOP_NAME, esc, icon, ICONS, onSettings, contactsOf, toast, openM
 import { ensureProfile } from "./profile.js";
 import { RANKS, rankOf, rankIcon } from "./rank.js";
 
-let lastProfile = null, lastST = {};
+let lastProfile = null, lastST = {}, festivalLoaded = false;
 onSettings((st) => { lastST = st; });
 const rankLine = () => { const i = rankOf(lastProfile, lastST); return i < 0 ? '<span class="opacity-70">ซื้อครั้งแรกรับยศ Bronze</span>' : `${rankIcon(i, 'w-5 h-5')}<a href="${ROOT}front/account.html" class="font-semibold">ยศ ${RANKS[i].name}</a>`; };
 /**
@@ -236,7 +236,11 @@ function init() {
   renderBottomNav();
   renderMoreSheet();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(); });
-  onSettings((s) => { settings = s || {}; renderAnnouncement(); renderFooter(); renderMoreSheet(); });
+  onSettings((s) => {
+    settings = s || {}; renderAnnouncement(); renderFooter(); renderMoreSheet();
+    // festival code is only downloaded while a festival is on (or was on, so it can switch itself off)
+    if (settings.festival?.on || festivalLoaded) { festivalLoaded = true; import('./festival.js').then(m => m.applyFestival(settings.festival, ACTIVE === 'home')).catch(e => console.warn('festival:', e)); }
+  });
   onAuthStateChanged(auth, (u) => {
     user = u;
     renderHeaderAuth();

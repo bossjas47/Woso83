@@ -106,3 +106,29 @@
 .admin-page input[type=checkbox]:not(.sr-only):focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
 .admin-page input[type=checkbox]:not(.sr-only):disabled { background: #e6e6e8; cursor: not-allowed; }
 .admin-page label:has(> input[type=checkbox]) { gap: 10px; cursor: pointer; }
+
+/* Home spotlight: hand-picked products (settings.spotlight). White 28px card on mist band, crossfade slides. */
+.sp { position: relative; margin: 0 auto; max-width: 1080px; text-align: left; }
+.sp-track { position: relative; display: grid; }
+.sp-slide { grid-area: 1 / 1; display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 28px; padding: 28px; border-radius: 28px; background: #f5f5f7; color: #1d1d1f; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s; }
+.sp-slide.on { opacity: 1; visibility: visible; }
+.sp-text { display: flex; flex-direction: column; gap: 10px; padding-left: 12px; min-width: 0; }
+.sp-kicker { color: #b64400; font-size: 14px; font-weight: 600; letter-spacing: -0.224px; }
+.sp-name { font-weight: 600; font-size: clamp(28px, 4.4vw, 48px); line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.sp-tag { color: #707070; font-size: 17px; line-height: 1.47; letter-spacing: -0.374px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sp-buy { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.sp-price { font-size: 21px; font-weight: 600; }
+.sp-price small { font-size: 14px; font-weight: 400; color: #707070; }
+.sp-media { display: block; aspect-ratio: 4 / 3; border-radius: 28px; overflow: hidden; background: #fff; }
+.sp-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; }
+.sp-slide:hover .sp-media img { transform: scale(1.03); }
+.sp-dots { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.sp-dots button { width: 8px; height: 8px; border-radius: 9999px; background: #d6d6d6; transition: width .3s, background-color .3s; }
+.sp-dots button[aria-selected="true"] { width: 24px; background: #1d1d1f; }
+@media (max-width: 767px) {
+  .sp-slide { grid-template-columns: 1fr; gap: 16px; padding: 12px 12px 20px; }
+  .sp-media { order: -1; }
+  .sp-text { padding: 0 8px; }
+  .sp-tag { font-size: 15px; -webkit-line-clamp: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .sp-slide, .sp-media img { transition: none; } }

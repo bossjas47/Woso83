@@ -141,14 +141,15 @@ export function contactsOf(s = getSettings()) {
 
 // ---------- Worker (Cloudflare) ----------
 export const workerBase = () => String(getSettings().slipWorkerUrl || '').trim().replace(/\/+$/, '');
-export async function callWorker(path, body) {
+/** opts.guest: allowed without login (ammo products that need no account); the token is still sent when signed in. */
+export async function callWorker(path, body, opts = {}) {
   const base = workerBase();
   if (!base) throw Object.assign(new Error('ยังไม่ได้ตั้งค่า Worker'), { code: 'no-worker' });
   const user = auth.currentUser;
-  if (!user) throw Object.assign(new Error('กรุณาเข้าสู่ระบบ'), { code: 'unauthenticated' });
+  if (!user && !opts.guest) throw Object.assign(new Error('กรุณาเข้าสู่ระบบ'), { code: 'unauthenticated' });
   const res = await fetch(base + path, {
     method: 'POST',
-    headers: { authorization: 'Bearer ' + await user.getIdToken(), 'content-type': 'application/json' },
+    headers: { ...(user ? { authorization: 'Bearer ' + await user.getIdToken() } : {}), 'content-type': 'application/json' },
     body: JSON.stringify(body || {})
   });
   const data = await res.json().catch(() => ({}));

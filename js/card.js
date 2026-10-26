@@ -1,4 +1,5 @@
 import { ROOT, esc, icon, ICONS, imgAttrs } from "./ui.js";
+import "./cart-store.js"; // registers window.quickAddCart for the card cart button
 
 /** Product card shared by the home and category pages. The whole card links to the product page. */
 export const productUrl = (id, buy = false) => `${ROOT}front/product.html?id=${encodeURIComponent(id)}${buy ? '&action=buy' : ''}`;
@@ -15,15 +16,18 @@ export function deliveryBadge(isService, instant, rent = false) {
     : `<span class="badge badge-auto">${icon(ICONS.id, 'w-3.5 h-3.5', 2)}ไอดีเกม (รับในเมนูออเดอร์)</span>`;
 }
 
+const CART_D = 'M3 4h2l2.4 11h10.2L20 7H6.2M9 20h.01M17 20h.01';
 export function productCardHtml({ p, isService, unit, min, price, stock, koen, categoryName, fallback, instant }) {
   const rent = !isService && isRentProduct(p);
   const out = stock <= 0;
-  const low = !isService && stock > 0 && stock <= 3;
+  // cart: sold IDs and services without a play mode to choose; rentals, ammo bundles and mode services go through the product page
+  const cartable = !rent && !p.isAmmo && !(isService && Array.isArray(p.farmModes) && p.farmModes.length);
+  const low = !isService && !p.isAmmo && stock > 0 && stock <= 3;
   const url = p.href || productUrl(p.id);
   const name = esc(p.name || 'ไม่มีชื่อสินค้า');
   if (p.isBox) return boxCardHtml(p, url);
   const stockText = out ? (isService ? 'คิวเต็ม' : rent ? 'ไม่มีไอดีว่าง' : 'สินค้าหมด')
-    : rent ? `ว่างให้เช่า ${stock} ไอดี` : isService ? `รับงานได้ ${stock} ${esc(unit)}` : low ? `เหลือ ${stock} ไอดี` : `พร้อมส่ง ${stock} ไอดี`;
+    : p.isAmmo ? `พร้อมส่ง ${stock.toLocaleString('th-TH')} กอง` : rent ? `ว่างให้เช่า ${stock} ไอดี` : isService ? `รับงานได้ ${stock} ${esc(unit)}` : low ? `เหลือ ${stock} ไอดี` : `พร้อมส่ง ${stock} ไอดี`;
   const dot = out ? 'bg-steel' : low ? 'bg-launchOrange' : 'bg-emerald-500';
   const stockCls = out ? 'text-slate' : low ? 'text-launchOrange' : 'text-slate';
   const mode = rent ? `${icon(ICONS.queue, 'w-3 h-3', 2)}ให้เช่า` : isService ? `${icon(ICONS.queue, 'w-3 h-3', 2)}ตามคิว` : instant ? `${icon(ICONS.bolt, 'w-3 h-3', 2)}ส่งทันที` : `${icon(ICONS.id, 'w-3 h-3', 2)}รับในออเดอร์`;
@@ -40,17 +44,17 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
         <h3 class="text-[15px] sm:text-base leading-snug font-semibold text-ink line-clamp-2 mt-1.5 min-h-[2.6em]"><a href="${url}">${name}</a></h3>
         ${koen ? `<p class="text-xs text-slate mt-0.5 line-clamp-1">${esc(koen)}</p>` : ''}
         <div class="mt-auto pt-2.5">
-          <p class="text-xl leading-none font-heading font-semibold">฿${Number(price).toLocaleString('th-TH', { maximumFractionDigits: 2 })}${rent ? `<span class="text-xs text-slate font-normal"> ${Number(p.rentHourPrice) > 0 ? '/ ชม.' : 'ขึ้นไป'}</span>` : isService ? `<span class="text-xs text-slate font-normal"> / ${esc(unit)}</span>` : ''}</p>
+          <p class="text-xl leading-none font-heading font-semibold">฿${Number(price).toLocaleString('th-TH', { maximumFractionDigits: 2 })}${p.isAmmo ? '<span class="text-xs text-slate font-normal"> / กอง</span>' : rent ? `<span class="text-xs text-slate font-normal"> ${Number(p.rentHourPrice) > 0 ? '/ ชม.' : 'ขึ้นไป'}</span>` : isService ? `<span class="text-xs text-slate font-normal"> / ${esc(unit)}</span>` : ''}</p>
           ${isService && min > 1 ? `<p class="text-[11px] text-slate mt-1">ขั้นต่ำ ${min} ${esc(unit)}</p>` : ''}
           ${out
             ? `<span class="mt-3 flex items-center justify-center w-full h-12 rounded-full bg-control text-steel text-[15px] font-semibold">${isService ? 'คิวเต็ม' : rent ? 'ไม่มีไอดีว่าง' : 'สินค้าหมด'}</span>`
-            : `<a href="${productUrl(p.id, true)}" class="apple-pricing-pill mt-3 w-full h-12 text-[16px] font-semibold">${rent ? 'เช่าเลย' : 'สั่งซื้อ'}${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>`}
+            : `<div class="mt-3 flex gap-2"><a href="${productUrl(p.id, true)}" class="apple-pricing-pill flex-1 min-w-0 h-12 text-[16px] font-semibold">${rent ? 'เช่าเลย' : 'สั่งซื้อ'}${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>${cartable ? `<button type="button" onclick="quickAddCart(this, ${esc(JSON.stringify(p.id))}, ${min})" data-max="${isService ? 99999 : stock}" class="card-cart" aria-label="เพิ่ม ${name} ลงตะกร้า">${icon(CART_D, 'w-5 h-5', 2)}</button>` : ''}</div>`}
         </div>
       </div>
     </article>`;
 }
 
-/** Loot box shown as a product (catalog merges boxes in under the "กล่องสุ่ม" category). */
+/** Loot box shown as a product (in its category, or standalone). */
 function boxCardHtml(p, url) {
   const name = esc(p.name);
   return `

@@ -39,7 +39,8 @@ export function usernameToEmail(username) {
 
 try { localStorage.removeItem('tactical_accounts'); localStorage.removeItem('tactical_current_user'); } catch (_) {}
 
-const next = () => { const n = new URLSearchParams(location.search).get('next'); return n && /^[a-z]+\.html([?#].*)?$/.test(n) ? n : 'account.html'; };
+// same-site only: a page name (box.html, cart) or an absolute path (/front/box?id=…); never //host or a scheme
+const next = () => { const n = new URLSearchParams(location.search).get('next'); return n && /^(\/(?![\/\\])[\w\-./]*|[a-z]+(\.html)?)([?#][^\\]*)?$/i.test(n) ? n : 'account.html'; };
 
 let busy = false;
 async function handleLogin(e) {

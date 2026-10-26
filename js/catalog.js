@@ -3,12 +3,12 @@ import { readProducts, writeProducts } from "./products-cache.js";
 import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { ROOT, esc, icon, ICONS, onSettings, workerBase } from "./ui.js";
 import { productCardHtml, productSkeletonHtml } from "./card.js";
-import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE, NONE_LABEL } from "./categories.js";
+import { watchCategories, categoryCardsHtml, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE } from "./categories.js";
 
 /**
  * Catalog shared by the home page and the category page: one compact filter bar (search + a single
  * "ตัวกรอง" dropdown with category / budget / sort), category cards while browsing, product grid,
- * skeleton while loading and empty states. Products without a category still show (as "สินค้าอื่น ๆ").
+ * skeleton while loading and empty states. Products without a category show standalone, under the category cards.
  */
 export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 
@@ -70,12 +70,11 @@ function fillCategorySelect() {
   const sel = document.getElementById('f-cat');
   if (!sel) return;
   const count = (id) => S.products.filter(p => (id === NONE ? catIdOf(p, S.cats) === NONE : p.category === id)).length;
-  const groups = ['account', 'service', 'box'].map(kind => {
+  const groups = ['account', 'service'].map(kind => {
     const items = S.cats.filter(c => c.kind === kind);
     return items.length ? `<optgroup label="${esc(KIND_LABEL[kind])}">${items.map(c => `<option value="${esc(c.id)}">${esc(c.name)} (${count(c.id)})</option>`).join('')}</optgroup>` : '';
   }).join('');
-  const none = count(NONE);
-  sel.innerHTML = `<option value="all">ทุกหมวดหมู่ (${S.products.length})</option>${groups}${none && S.cats.length ? `<option value="${NONE}">${NONE_LABEL} (${none})</option>` : ''}`;
+  sel.innerHTML = `<option value="all">ทุกหมวดหมู่ (${S.products.length})</option>${groups}`;
   sel.value = [...sel.options].some(o => o.value === S.cat) ? S.cat : 'all';
 }
 
@@ -145,7 +144,13 @@ export function render() {
 
   if (S.failed) { if (countEl) countEl.textContent = 'โหลดไม่สำเร็จ'; showEmpty('โหลดรายการสินค้าไม่สำเร็จ', 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้', false); return; }
   if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเติมสต๊อก เดี๋ยวของมา แวะมาใหม่นะ', false); return; }
-  if (browsing) { grid.innerHTML = ''; if (countEl) countEl.textContent = `${S.cats.length + (S.products.some(p => catIdOf(p, S.cats) === NONE) ? 1 : 0)} หมวดหมู่ · ${S.products.length} สินค้า`; return; }
+  if (browsing) {
+    // products without a category are standalone: shown as cards right under the category cards
+    const free = S.products.filter(p => catIdOf(p, S.cats) === NONE).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.order || 0) - (b.order || 0));
+    grid.innerHTML = free.map(cardFor).join('');
+    if (countEl) countEl.textContent = `${S.cats.length} หมวดหมู่ · ${S.products.length} สินค้า`;
+    return;
+  }
 
   const q = S.q.toLowerCase().trim();
   const list = S.products.filter(p => {
@@ -177,12 +182,11 @@ function clearSearchAndFilters() { S.cat = 'all'; S.q = ''; S.budget = 'all'; S.
 function closeFilterPanel() { document.getElementById('filter-panel')?.classList.add('hidden'); document.getElementById('filter-toggle')?.setAttribute('aria-expanded', 'false'); }
 Object.assign(window, { filterCategory, clearFilter, clearSearchAndFilters, closeFilterPanel });
 
-export const BOX_CAT = '_box';
 function merge() {
   const boxes = S.boxes.map(b => ({ id: 'box_' + b.id, boxId: b.id, isBox: true, name: String(b.name || 'กล่องสุ่ม'), desc: b.desc || '', price: Number(b.price) || 0, image: b.image || ROOT + 'assets/box.svg',
-    category: BOX_CAT, prizeCount: (b.prizes || []).length, tags: [], featured: b.featured === true, href: `${ROOT}front/box.html?id=${encodeURIComponent(b.id)}` }));
+    category: b.category || '', prizeCount: (b.prizes || []).length, tags: [], featured: b.featured === true, href: `${ROOT}front/box.html?id=${encodeURIComponent(b.id)}` }));
   S.products = [...S.real, ...boxes];
-  S.cats = boxes.length ? [...S.realCats, { id: BOX_CAT, name: 'กล่องสุ่ม', kind: 'box', image: ROOT + 'assets/box.svg' }] : S.realCats;
+  S.cats = S.realCats;
 }
 
 export function mountCatalog(options = {}) {
@@ -218,7 +222,7 @@ export function mountCatalog(options = {}) {
   render();
 
   watchCategories((list) => { S.realCats = list; merge(); fillCategorySelect(); render(); opts.onProducts?.(S); });
-  // Loot boxes show as products in a virtual "กล่องสุ่ม" category; the card opens front/box.html?id=…
+  // Loot boxes show as products (in their category, or standalone when none); the card opens front/box.html?id=…
   onSnapshot(collection(db, 'boxes'), (snap) => {
     S.boxes = snap.docs.map(d => ({ ...d.data(), id: d.id })).filter(b => b.active !== false);
     merge(); if (S.loaded) { fillCategorySelect(); render(); opts.onProducts?.(S); }

@@ -157,7 +157,7 @@ function startListeners() {
   if (can('boxes')) window.startBoxWatch?.(); // loot-box opens feed the dashboard too (js/back/boxes.js)
   document.addEventListener('boxopens', () => renderDashboard());
   const warn = (what) => (e) => { console.warn(what, e); triggerToast(`โหลด${what}ไม่สำเร็จ`, 'error'); };
-  if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); }, warn('สินค้า'));
+  if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); if (ADMIN && Object.keys(SETTINGS).length) renderSpotlightRows(); }, warn('สินค้า'));
   if (can('products') || can('boxes') || can('promos')) watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
   if (can('pay')) onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); }, warn('ออเดอร์'));
   if (can('pay')) onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
@@ -255,7 +255,10 @@ function applyTypeUi() {
   $('btn-type-account').className = srv ? off : on;
   $('btn-type-service').className = srv ? on : off;
   $('service-config-box')?.classList.toggle('hidden', !srv);
-  $('rent-config-box')?.classList.toggle('hidden', srv);
+  const ammo = !srv && $('prod-ammo-on')?.checked;
+  $('ammo-config-box')?.classList.toggle('hidden', srv);
+  $('ammo-fields')?.classList.toggle('hidden', !ammo);
+  $('rent-config-box')?.classList.toggle('hidden', srv || ammo);
   $('rent-fields')?.classList.toggle('hidden', !$('prod-rent-on')?.checked);
   $('lbl-prod-stock').textContent = srv ? 'จำนวนที่รับงานได้ (หน่วย):' : 'จำนวนสต็อก (ชิ้น):';
   $('hint-prod-stock').textContent = srv ? 'จำนวนงานที่รับได้ ระบบลดให้อัตโนมัติเมื่อมีออเดอร์' : 'ไอดีเกม: กดปุ่ม "สต็อก" ในตารางเพื่อเพิ่มไอดีจริง ระบบนับให้เอง (แก้ตรงนี้ไม่ได้)';
@@ -324,6 +327,7 @@ function openProductModal(productId = null) {
     $('prod-category').value = categoryOf(CATS, p.category) ? p.category : '';
     $('prod-featured').checked = p.featured === true;
     $('prod-rent-on').checked = num(p.rentHourPrice) > 0 || (p.rentPackages || []).length > 0;
+    $('prod-ammo-on').checked = p.isAmmo === true; set('prod-ammo-rate', p.ammoRate); set('prod-ammo-min', p.ammoMin); $('prod-ammo-login').checked = p.requireLogin !== false;
     set('prod-rent-rate', p.rentHourPrice); set('prod-rent-min', p.rentMinHours); set('prod-rent-deposit', p.rentDeposit);
     set('prod-rent-packages', (p.rentPackages || []).map(k => `${k.hours} ${k.price}`).join('\n'));
     $('prod-type').value = isServiceProduct(p, CATS) ? 'service' : 'account';
@@ -331,6 +335,7 @@ function openProductModal(productId = null) {
     $('prod-stock').value = 0;
     $('prod-featured').checked = false;
     $('prod-rent-on').checked = false;
+    $('prod-ammo-on').checked = false; $('prod-ammo-login').checked = true;
     $('prod-type').value = categoryOf(CATS, $('prod-category').value)?.kind === 'service' ? 'service' : 'account';
   }
   updateImagePreview(p?.image || '');
@@ -344,11 +349,13 @@ async function handleProductFormSubmit(e) {
   const editId = $('prod-edit-id').value.trim();
   const category = $('prod-category').value;
   const isSrv = $('prod-type').value === 'service';
-  const rentOn = !isSrv && $('prod-rent-on').checked;
+  const ammoOn = !isSrv && $('prod-ammo-on').checked, ammoRate = num($('prod-ammo-rate').value);
+  if (ammoOn && !(ammoRate > 0)) return triggerToast('ใส่ราคาต่อกอง', 'error');
+  const rentOn = !isSrv && !ammoOn && $('prod-rent-on').checked;
   const rentRate = rentOn ? num($('prod-rent-rate').value) : 0;
   const rentPackages = rentOn ? $('prod-rent-packages').value.split('\n').map(l => l.trim().split(/[\s,]+/).map(Number)).filter(r => r[0] >= 1 && r[1] > 0).map(r => ({ hours: Math.floor(r[0]), price: r[1] })) : [];
   if (rentOn && !(rentRate > 0) && !rentPackages.length) return triggerToast('ใส่ราคา/ชั่วโมง หรือแพ็กเกจเช่าอย่างน้อย 1 อย่าง', 'error');
-  const price = rentOn ? (rentRate || Math.min(...rentPackages.map(k => k.price))) : (num($(isSrv ? 'prod-service-rate' : 'prod-price').value) || num($('prod-price').value));
+  const price = ammoOn ? ammoRate : rentOn ? (rentRate || Math.min(...rentPackages.map(k => k.price))) : (num($(isSrv ? 'prod-service-rate' : 'prod-price').value) || num($('prod-price').value));
   const image = formatUrl($('prod-image').value);
   const galleryText = $('prod-gallery').value.trim();
   const packages = $('prod-packages').value.split('\n').map(l => l.trim().split(/[\s,]+/).map(Number)).filter(r => r[0] >= 1).map(r => ({ qty: Math.floor(r[0]), bonus: Math.max(0, Math.floor(r[1]) || 0) }));
@@ -369,6 +376,9 @@ async function handleProductFormSubmit(e) {
     serviceUnit: isSrv && $('prod-service-unit').value.trim() ? $('prod-service-unit').value.trim() : deleteField(),
     serviceMin: isSrv && Math.floor(num($('prod-service-min').value)) > 0 ? Math.floor(num($('prod-service-min').value)) : deleteField(),
     serviceRate: deleteField(),
+    isAmmo: ammoOn || deleteField(), ammoRate: ammoOn ? ammoRate : deleteField(),
+    ammoMin: ammoOn && Math.floor(num($('prod-ammo-min').value)) > 1 ? Math.floor(num($('prod-ammo-min').value)) : deleteField(),
+    requireLogin: ammoOn && !$('prod-ammo-login').checked ? false : deleteField(),
     rentHourPrice: rentRate > 0 ? rentRate : deleteField(),
     rentMinHours: rentOn && Math.floor(num($('prod-rent-min').value)) > 1 ? Math.floor(num($('prod-rent-min').value)) : deleteField(),
     rentDeposit: rentOn && num($('prod-rent-deposit').value) > 0 ? num($('prod-rent-deposit').value) : deleteField(),
@@ -389,21 +399,30 @@ function openStockModalQuick() { const p = PRODUCTS.find(x => !isServiceProduct(
 
 // ---- bulk stock ----
 let currentStockProductId = null, parsedStockItems = [];
-function parseStockLines(text) {
-  const items = [], seen = new Set(); let dup = false;
+const stockIsAmmo = () => PRODUCTS.find(x => x.id === currentStockProductId)?.isAmmo === true;
+function parseStockLines(text, ammo = stockIsAmmo()) {
+  const items = [], seen = new Set(); let dup = false, bad = 0;
   text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
-    const m = line.match(/^(?:email|user|username)\s+(\S+)\s+(?:password|pass|pwd)\s+(.+)$/i) || line.match(/^([^:\s|]+)\s*[:|]\s*(.+)$/) || line.match(/^(\S+)\s+(\S+)$/);
-    if (!m) return;
-    const [u, p] = [m[1].trim(), m[2].trim()];
+    let u, p, a = 0;
+    if (ammo) { // email|pass|ammo (also ":" or spaces between the three parts)
+      const m = line.match(/^(\S+?)\s*[|:\s]\s*(\S+)\s*[|:\s]\s*(\d{1,6})$/);
+      if (!m || !(Number(m[3]) > 0)) { bad++; return; }
+      [u, p, a] = [m[1], m[2], Number(m[3])];
+    } else {
+      const m = line.match(/^(?:email|user|username)\s+(\S+)\s+(?:password|pass|pwd)\s+(.+)$/i) || line.match(/^([^:\s|]+)\s*[:|]\s*(.+)$/) || line.match(/^(\S+)\s+(\S+)$/);
+      if (!m) return;
+      [u, p] = [m[1].trim(), m[2].trim()];
+    }
     if (seen.has(u.toLowerCase())) { dup = true; return; }
-    seen.add(u.toLowerCase()); items.push({ username: u, password: p });
+    seen.add(u.toLowerCase()); items.push(ammo ? { username: u, password: p, ammo: a } : { username: u, password: p });
   });
-  return { items, hasDuplicates: dup };
+  return { items, hasDuplicates: dup, bad };
 }
 function handleStockTextareaInput(val) {
-  const { items, hasDuplicates } = parseStockLines(val);
+  const { items, hasDuplicates, bad } = parseStockLines(val);
   parsedStockItems = items;
-  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า`;
+  const ammo = items.reduce((t, it) => t + (it.ammo || 0), 0);
+  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดไม่มีจำนวนกอง (ข้าม)` : ''}`;
   $('btn-add-stock-label').textContent = `บันทึกและนำเข้าสต็อก (${items.length} ชิ้น)`;
   $('stock-duplicate-warning').classList.toggle('hidden', !hasDuplicates);
 }
@@ -425,8 +444,9 @@ async function submitBulkStockImport() {
     for (let i = 0; i < parsedStockItems.length; i += 400) {
       const chunk = parsedStockItems.slice(i, i + 400);
       const batch = writeBatch(db);
-      chunk.forEach(it => batch.set(doc(collection(prodRef, 'stock_items')), { username: it.username, password: it.password, status: 'available', addedAt: serverTimestamp(), addedBy: me?.uid || '' }));
-      batch.update(prodRef, { stock: increment(chunk.length) });
+      chunk.forEach(it => batch.set(doc(collection(prodRef, 'stock_items')), { username: it.username, password: it.password, ...(it.ammo ? { ammo: it.ammo } : {}), status: 'available', addedAt: serverTimestamp(), addedBy: me?.uid || '' }));
+      // ammo products count stock in กอง (sum of ammo), other ID products in IDs
+      batch.update(prodRef, { stock: increment(chunk.reduce((t, it) => t + (it.ammo || 1), 0)) });
       await batch.commit();
     }
     triggerToast(`นำเข้าไอดี ${parsedStockItems.length} รายการแล้ว`, 'success');
@@ -437,25 +457,27 @@ async function submitBulkStockImport() {
 }
 async function loadAvailableStockItems(id) {
   const tbody = $('stock-items-list-body'); tbody.innerHTML = '';
+  const p = PRODUCTS.find(x => x.id === id), ammo = p?.isAmmo === true;
   let items = [];
-  try { items = (await getDocs(query(collection(db, 'products', id, 'stock_items'), where('status', '==', 'available')))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { console.warn(e); }
-  $('stock-available-count').textContent = items.length;
-  $('stock-modal-current-count').textContent = items.length;
+  try { items = (await getDocs(query(collection(db, 'products', id, 'stock_items'), where('status', 'in', ammo ? ['available', 'reserved'] : ['available'])))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { console.warn(e); }
+  const real = ammo ? items.reduce((t, it) => t + num(it.ammo), 0) : items.length;
+  $('stock-available-count').textContent = ammo ? `${items.length} ไอดี · ${real.toLocaleString('th-TH')} กอง` : items.length;
+  $('stock-modal-current-count').textContent = real;
   $('stock-items-empty').classList.toggle('hidden', items.length > 0);
-  const p = PRODUCTS.find(x => x.id === id);
-  if (p && num(p.stock) !== items.length && !isServiceProduct(p, CATS)) {
-    triggerToast(`สต็อกที่แสดง (${num(p.stock)}) ไม่ตรงกับไอดีจริง (${items.length}) · ปรับให้ตรงแล้ว`);
-    updateDoc(doc(db, 'products', id), { stock: items.length }).catch(() => {});
+  if (p && num(p.stock) !== real && !isServiceProduct(p, CATS)) {
+    triggerToast(`สต็อกที่แสดง (${num(p.stock)}) ไม่ตรงกับไอดีจริง (${real}) · ปรับให้ตรงแล้ว`);
+    updateDoc(doc(db, 'products', id), { stock: real }).catch(() => {});
   }
-  tbody.innerHTML = items.map((it, i) => `<tr><td class="py-2.5 px-3 text-slate w-8">${i + 1}.</td><td class="py-2.5 px-3 font-semibold select-all">${adminEsc(it.username)}</td><td class="py-2.5 px-3 text-slate">••••••••</td>
-    <td class="py-2.5 px-3 text-right"><button onclick='deleteSingleStockItem(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))})' class="text-red-500 text-[11px] hover:underline">ลบออก</button></td></tr>`).join('');
+  if (ammo) items.sort((a, b) => num(b.ammo) - num(a.ammo));
+  tbody.innerHTML = items.map((it, i) => `<tr><td class="py-2.5 px-3 text-slate w-8">${i + 1}.</td><td class="py-2.5 px-3 font-semibold select-all">${adminEsc(it.username)}${ammo ? ` <span class="text-slate font-normal">· ${num(it.ammo)} กอง${it.status === 'reserved' && num(it.reservedUntil) > Date.now() ? ' · <span class="text-launchOrange">ลูกค้ากำลังจ่าย</span>' : ''}</span>` : ''}</td><td class="py-2.5 px-3 text-slate">••••••••</td>
+    <td class="py-2.5 px-3 text-right"><button onclick='deleteSingleStockItem(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))}, ${ammo ? num(it.ammo) : 1})' class="text-red-500 text-[11px] hover:underline">ลบออก</button></td></tr>`).join('');
 }
-async function deleteSingleStockItem(pid, itemId) {
+async function deleteSingleStockItem(pid, itemId, n = 1) {
   if (!confirm('นำไอดีนี้ออกจากคลัง?')) return;
   try {
     const b = writeBatch(db);
     b.delete(doc(db, 'products', pid, 'stock_items', itemId));
-    b.update(doc(db, 'products', pid), { stock: increment(-1) });
+    b.update(doc(db, 'products', pid), { stock: increment(-n) });
     await b.commit();
     triggerToast('ลบไอดีออกจากคลังแล้ว', 'success');
     loadAvailableStockItems(pid);
@@ -582,7 +604,7 @@ async function handleCategorySubmit(e) {
 }
 async function deleteCategory(id) {
   const used = PRODUCTS.filter(p => p.category === id).length;
-  if (!confirm(used ? `มีสินค้า ${used} รายการในหมวดนี้ สินค้าจะย้ายไป "สินค้าอื่น ๆ" ลบต่อหรือไม่?` : 'ยืนยันลบหมวดหมู่นี้?')) return;
+  if (!confirm(used ? `มีสินค้า ${used} รายการในหมวดนี้ สินค้าจะกลายเป็นสินค้าเดี่ยว (ไม่มีหมวด) ลบต่อหรือไม่?` : 'ยืนยันลบหมวดหมู่นี้?')) return;
   try { await deleteDoc(doc(db, 'categories', id)); triggerToast('ลบหมวดหมู่แล้ว', 'success'); } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
 }
 
@@ -1060,6 +1082,34 @@ async function loadAdminSettings() {
     <input id="hq-sub-${i}" value="${adminEsc(q.sub)}" maxlength="40" placeholder="คำอธิบาย" aria-label="คำอธิบาย" class="hq-wide sm:col-span-3 ${inp}">
     <input id="hq-href-${i}" value="${adminEsc(q.href)}" maxlength="300" placeholder="front/box.html" aria-label="ลิงก์" class="hq-wide sm:col-span-3 ${inp} font-mono"></div>`).join('');
   renderStatHints();
+  renderSpotlightRows(d);
+  const fx = d.festival || {};
+  $('fx-on').checked = fx.on === true; $('fx-density').value = fx.density || 'mid';
+  set('fx-msg', fx.msg); set('fx-link', fx.link);
+  $('fx-until').value = fx.until ? new Date(fx.until - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+}
+function renderSpotlightRows(d = SETTINGS) {
+  const sp = d.spotlight || {};
+  $('sp-on').checked = sp.on === true; $('sp-kicker').value = sp.kicker || ''; $('sp-interval').value = sp.interval || '';
+  const items = sp.items || [];
+  const opts = (sel) => '<option value="">— ไม่เลือก —</option>' + PRODUCTS.map(p => `<option value="${adminEsc(p.id)}" ${p.id === sel ? 'selected' : ''}>${adminEsc(p.name)}</option>`).join('');
+  $('sp-rows').innerHTML = [0, 1, 2, 3, 4].map(i => `<div class="grid sm:grid-cols-2 gap-2"><select id="sp-pid-${i}" aria-label="สินค้า ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs">${opts(items[i]?.id)}</select>
+    <input id="sp-tag-${i}" value="${adminEsc(items[i]?.tagline)}" maxlength="80" placeholder="ข้อความโปรย ${i + 1}" aria-label="ข้อความโปรย ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs"></div>`).join('');
+}
+async function saveSpotlight() {
+  const items = [0, 1, 2, 3, 4].map(i => ({ id: $(`sp-pid-${i}`).value, tagline: $(`sp-tag-${i}`).value.trim().slice(0, 80) })).filter(x => x.id);
+  const spotlight = { on: $('sp-on').checked, kicker: $('sp-kicker').value.trim().slice(0, 30), interval: Math.min(30, Math.max(3, Math.round(num($('sp-interval').value)) || 6)), items };
+  if (spotlight.on && !items.length) return triggerToast('เลือกสินค้าอย่างน้อย 1 รายการ', 'error');
+  try { await setDoc(doc(db, 'system', 'settings'), { spotlight, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกสินค้าแนะนำแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
+}
+async function saveFestival() {
+  const until = $('fx-until').value ? new Date($('fx-until').value).getTime() : 0;
+  const link = $('fx-link').value.trim();
+  if (link && safeHref(link) === '#') return triggerToast('ลิงก์ใช้ไม่ได้ ใส่หน้าในเว็บหรือ https://', 'error');
+  const festival = { on: $('fx-on').checked, density: ['low', 'mid', 'high'].includes($('fx-density').value) ? $('fx-density').value : 'mid', msg: $('fx-msg').value.trim().slice(0, 120), link: link.slice(0, 300), until, v: Date.now() };
+  try { await setDoc(doc(db, 'system', 'settings'), { festival, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกเทศกาลแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
 /** Home shortcut cards, saved on their own (merge) like the ranks. */
 async function saveHomeQuick() {
@@ -1151,6 +1201,7 @@ async function testWebhook() {
 }
 
 Object.assign(window, {
+  saveSpotlight, saveFestival,
   saveHomeQuick,
   renderDashboard, applyTypeUi, setRentalFilter, closeRental, renderAdminRentals,
   handlePinSetupSubmit, handlePinUnlockSubmit, promptResetPin, lockAdminSession, switchAdminTab,

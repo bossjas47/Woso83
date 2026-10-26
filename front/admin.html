@@ -6,7 +6,7 @@
   <title>หลังบ้าน — Nugget Hub</title>
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/png" href="../assets/favicon.png">
-  
+
   <!-- Apple System Font Stack & Google Fonts Prompt / Outfit Fallback -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js" crossorigin>
-  
+
   <link rel="stylesheet" href="../css/tw.css">
 
   <link rel="stylesheet" href="../css/style.css">
@@ -187,7 +187,7 @@
   <!-- HIGH-SECURITY PIN GATE MODAL -->
   <div id="admin-auth-gate" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-xl">
     <div class="apple-card max-w-md w-full p-8 text-center relative overflow-hidden bg-gallery">
-      
+
       <div class="w-14 h-14 bg-mist border border-hairline rounded-full flex items-center justify-center mx-auto mb-4 text-ink">
         <svg class="w-6 h-6 text-appleBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -225,13 +225,13 @@
         <form id="form-pin-setup" onsubmit="handlePinSetupSubmit(event)" class="space-y-4">
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-slate text-left">กำหนดรหัส PIN 6 หลัก:</label>
-            <input 
-              id="setup-pin-val" 
-              type="password" 
-              inputmode="numeric" 
-              maxlength="6" 
-              pattern="[0-9]{6}" 
-              placeholder="••••••" 
+            <input
+              id="setup-pin-val"
+              type="password"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              placeholder="••••••"
               class="w-full text-center text-2xl tracking-[0.5em] font-mono font-semibold apple-input py-3"
               required
               autocomplete="new-password"
@@ -240,13 +240,13 @@
 
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-slate text-left">ยืนยันรหัส PIN อีกครั้ง:</label>
-            <input 
-              id="setup-pin-confirm" 
-              type="password" 
-              inputmode="numeric" 
-              maxlength="6" 
-              pattern="[0-9]{6}" 
-              placeholder="••••••" 
+            <input
+              id="setup-pin-confirm"
+              type="password"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              placeholder="••••••"
               class="w-full text-center text-2xl tracking-[0.5em] font-mono font-semibold apple-input py-3"
               required
               autocomplete="new-password"
@@ -280,7 +280,7 @@
               <input type="password" inputmode="numeric" maxlength="1" class="pin-digit-input" data-index="4">
               <input type="password" inputmode="numeric" maxlength="1" class="pin-digit-input" data-index="5">
             </div>
-            
+
             <div id="pin-error-msg" class="hidden text-xs text-red-500 font-medium pt-1">
               รหัส PIN ไม่ถูกต้อง
             </div>
@@ -307,11 +307,11 @@
 
   <!-- MAIN ADMIN DASHBOARD -->
   <div id="admin-main-content" class="hidden">
-    
+
     <!-- 44px Navigation Bar -->
     <header class="sticky top-0 z-40 bg-gallery/90 backdrop-blur-xl border-b border-hairline">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 h-11 flex justify-between items-center text-xs">
-        
+
         <div class="flex items-center gap-3">
           <a href="../home.html" class="flex items-center gap-2">
             <img src="../assets/logo-icon-96.png" alt="" width="28" height="28" class="w-7 h-7 object-contain">
@@ -376,7 +376,7 @@
       </section>
 
       <section id="admin-sec-products" class="block space-y-6">
-        
+
         <!-- Metrics Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="apple-card p-6">
@@ -405,10 +405,10 @@
         <!-- Filter & Search Bar -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 apple-card p-4 sm:px-6">
           <div class="relative w-full sm:w-80">
-            <input 
-              id="admin-product-search" 
-              type="text" 
-              placeholder="ค้นหาชื่อสินค้า หมวดหมู่ หรือแท็ก..." 
+            <input
+              id="admin-product-search"
+              type="text"
+              placeholder="ค้นหาชื่อสินค้า หมวดหมู่ หรือแท็ก..."
               oninput="filterAdminProducts(this.value)"
               class="w-full apple-input-rounded pl-9 pr-4 py-2 text-xs placeholder-steel"
             />
@@ -442,7 +442,7 @@
               </tbody>
             </table>
           </div>
-          
+
           <div id="admin-products-empty" class="hidden py-16 text-center text-slate text-xs">
             ยังไม่มีสินค้า กด "เพิ่มสินค้าใหม่" เพื่อเริ่มต้น
           </div>
@@ -775,6 +775,29 @@
           </div>
 
           <div class="apple-card p-6 space-y-4">
+            <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">สินค้าแนะนำสุดพิเศษ (บนสุดหน้าแรก)</h3><button type="button" onclick="saveSpotlight()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึกสินค้าแนะนำ</button></div>
+            <label class="flex items-center gap-2 text-sm"><input id="sp-on" type="checkbox"> แสดงสินค้าแนะนำ</label>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="sp-kicker">หัวข้อเล็ก</label><input id="sp-kicker" type="text" maxlength="30" placeholder="แนะนำสุดพิเศษ" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="sp-interval">เปลี่ยนสไลด์ทุก (วินาที)</label><input id="sp-interval" type="number" min="3" max="30" placeholder="6" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
+            </div>
+            <p class="text-[11px] text-slate">เลือกได้สูงสุด 5 สินค้า เรียงตามลำดับ · ข้อความโปรย (ไม่บังคับ) แสดงใต้ชื่อสินค้า ถ้าว่างใช้คำอธิบายสินค้า</p>
+            <div id="sp-rows" class="space-y-2"></div>
+          </div>
+
+          <div class="apple-card p-6 space-y-4">
+            <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">เทศกาลพิเศษ: Shadow System</h3><button type="button" onclick="saveFestival()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึกเทศกาล</button></div>
+            <p class="text-[11px] text-slate -mt-2">ประกายสีน้ำเงิน-ม่วงลอยขึ้นทุกหน้า และหน้าต่างแจ้งเตือนแบบ System ครั้งแรกที่ลูกค้าเข้าเว็บ · หยุดเองเมื่อแท็บไม่ได้เปิดดู และปิดให้คนที่ตั้งลดการเคลื่อนไหว</p>
+            <label class="flex items-center gap-2 text-sm"><input id="fx-on" type="checkbox"> เปิดเทศกาล</label>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="fx-density">ความหนาแน่นประกาย</label><select id="fx-density" class="w-full apple-input px-3.5 py-2 text-xs"><option value="low">น้อย</option><option value="mid">กลาง</option><option value="high">มาก</option></select></div>
+              <div><label class="block text-[11px] text-slate mb-1" for="fx-until">ปิดอัตโนมัติเมื่อ (ไม่บังคับ)</label><input id="fx-until" type="datetime-local" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            </div>
+            <div><label class="block text-[11px] text-slate mb-1" for="fx-msg">ข้อความในหน้าต่าง System (เว้นว่าง = ไม่แสดงหน้าต่าง)</label><input id="fx-msg" type="text" maxlength="120" placeholder="ภารกิจประจำวัน: เติมเงินวันนี้ รับโบนัส 10%" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="fx-link">ลิงก์ปุ่ม "รับภารกิจ" (ไม่บังคับ)</label><input id="fx-link" type="text" maxlength="300" placeholder="front/topup.html" class="w-full apple-input px-3.5 py-2 text-xs font-mono"></div>
+          </div>
+
+          <div class="apple-card p-6 space-y-4">
             <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">ทางลัดหน้าแรก (4 การ์ด)</h3><button type="button" onclick="saveHomeQuick()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึกทางลัด</button></div>
             <p class="text-[11px] text-slate">ปิดการ์ดที่ไม่ใช้ได้ ลิงก์ใส่เป็นหน้าในเว็บ (เช่น front/box.html) หรือ https://</p>
             <div id="quick-rows" class="space-y-3"></div>
@@ -796,7 +819,7 @@
   <!-- MODAL: BULK STOCK REPLENISHMENT -->
   <div id="stock-management-modal" class="fixed inset-0 z-50 hidden items-start justify-center p-4 sm:p-6 bg-ink/20 backdrop-blur-xl overflow-y-auto">
     <div class="apple-card max-w-2xl w-full p-6 sm:p-8 relative my-6 sm:my-10 bg-gallery">
-      
+
       <button onclick="closeStockModal()" class="absolute top-5 right-5 text-steel hover:text-ink p-1.5 rounded-full hover:bg-mist transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
@@ -823,11 +846,11 @@
             </span>
           </div>
 
-          <textarea 
-            id="bulk-stock-textarea" 
-            rows="6" 
+          <textarea
+            id="bulk-stock-textarea"
+            rows="6"
             oninput="handleStockTextareaInput(this.value)"
-            placeholder="วางข้อความที่นี่ 1 บรรทัด = 1 สต็อก เช่น:&#10;email yeyovif@ogzmail.com password A11223344&#10;Agent01:SecretPass99&#10;john_doe@gmail.com pass98765" 
+            placeholder="วางข้อความที่นี่ 1 บรรทัด = 1 สต็อก เช่น:&#10;email yeyovif@ogzmail.com password A11223344&#10;Agent01:SecretPass99&#10;john_doe@gmail.com pass98765&#10;สินค้าไก่กระสุน: mail@x.com|pass123|62 (ท้ายบรรทัด = จำนวนกอง)"
             class="w-full apple-input p-3.5 text-xs font-mono leading-relaxed placeholder-steel"
           ></textarea>
 
@@ -837,9 +860,9 @@
           </div>
         </div>
 
-        <button 
-          id="btn-confirm-add-stock" 
-          onclick="submitBulkStockImport()" 
+        <button
+          id="btn-confirm-add-stock"
+          onclick="submitBulkStockImport()"
           class="w-full apple-pricing-pill py-3 text-xs flex items-center justify-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           <span id="btn-add-stock-label">บันทึกและนำเข้าสต็อก (0 ชิ้น)</span>
@@ -872,7 +895,7 @@
   <!-- MODAL: ADD / EDIT PRODUCT -->
   <div id="product-form-modal" class="fixed inset-0 z-50 hidden items-start justify-center p-4 sm:p-6 bg-ink/20 backdrop-blur-xl overflow-y-auto">
     <div class="apple-card max-w-2xl w-full p-6 sm:p-8 relative my-6 sm:my-10 bg-gallery">
-      
+
       <button onclick="closeProductModal()" class="absolute top-5 right-5 text-steel hover:text-ink p-1.5 rounded-full hover:bg-mist transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
@@ -891,18 +914,18 @@
         <div class="space-y-1.5">
           <label class="block text-xs font-medium text-slate">ประเภทสินค้า (Product Type):</label>
           <div class="bg-mist p-1 rounded-2xl border border-hairline flex items-center gap-1">
-            <button 
-              type="button" 
-              id="btn-type-account" 
-              onclick="setProductType('account')" 
+            <button
+              type="button"
+              id="btn-type-account"
+              onclick="setProductType('account')"
               class="flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all bg-gallery text-ink shadow-sm border border-hairline/50 flex items-center justify-center gap-1.5">
               <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12a4 4 0 014 4v3a3 3 0 01-5 2l-2-2H9l-2 2a3 3 0 01-5-2v-3a4 4 0 014-4zM8 12v3M6.5 13.5h3M16 12h.01M18 14h.01"/></svg></span>
               <span>ไอดีเกม (ส่งมอบรหัส)</span>
             </button>
-            <button 
-              type="button" 
-              id="btn-type-service" 
-              onclick="setProductType('service')" 
+            <button
+              type="button"
+              id="btn-type-service"
+              onclick="setProductType('service')"
               class="flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all text-slate hover:text-ink flex items-center justify-center gap-1.5">
               <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
               <span>งานบริการ (โยน M61 / โยนเงินM)</span>
@@ -914,10 +937,10 @@
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="sm:col-span-2">
             <label class="block text-xs font-medium text-slate mb-1">ชื่อสินค้า (Product Name):</label>
-            <input 
-              id="prod-name" 
-              type="text" 
-              placeholder="เช่น M4A1 Full Mod + T6 Ammo x300" 
+            <input
+              id="prod-name"
+              type="text"
+              placeholder="เช่น M4A1 Full Mod + T6 Ammo x300"
               class="w-full apple-input px-3.5 py-2 text-xs"
               required
             />
@@ -940,20 +963,20 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-1.5">
               <div class="sm:col-span-5">
-                <input 
-                  id="prod-koen-label" 
-                  type="text" 
-                  placeholder="มูลค่า Koen" 
-                  value="มูลค่า Koen" 
+                <input
+                  id="prod-koen-label"
+                  type="text"
+                  placeholder="มูลค่า Koen"
+                  value="มูลค่า Koen"
                   class="w-full apple-input px-3 py-2 text-xs"
                   title="เปลี่ยนชื่อคุณสมบัตินี้ได้ เช่น กองกระสุน, ทุนสำรอง, เซ็ตไอเทม"
                 />
               </div>
               <div class="sm:col-span-7">
-                <input 
-                  id="prod-koen" 
-                  type="text" 
-                  placeholder="เช่น 15,000,000 หรือ 55 กอง" 
+                <input
+                  id="prod-koen"
+                  type="text"
+                  placeholder="เช่น 15,000,000 หรือ 55 กอง"
                   class="w-full apple-input px-3 py-2 text-xs font-mono font-semibold"
                   required
                 />
@@ -970,24 +993,24 @@
 
           <div>
             <label class="block text-xs font-medium text-slate mb-1">ราคาจำหน่าย (บาท):</label>
-            <input 
-              id="prod-price" 
-              type="number" 
-              step="0.01" 
-              min="0" 
-              placeholder="350.00" 
+            <input
+              id="prod-price"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="350.00"
               class="w-full apple-input px-3.5 py-2 text-xs font-mono"
-              
+
             />
           </div>
 
           <div>
             <label id="lbl-prod-stock" class="block text-xs font-medium text-slate mb-1">จำนวนสต็อกเริ่มต้น (ชิ้น):</label>
-            <input 
-              id="prod-stock" 
-              type="number" 
-              min="0" 
-              placeholder="0" 
+            <input
+              id="prod-stock"
+              type="number"
+              min="0"
+              placeholder="0"
               class="w-full apple-input px-3.5 py-2 text-xs font-mono"
               value="0"
               required
@@ -1022,10 +1045,10 @@
           <div class="grid sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">หน่วยนับบริการ (Unit):</label>
-              <input 
-                id="prod-service-unit" 
-                type="text" 
-                placeholder="ใช้ค่าของหมวด" 
+              <input
+                id="prod-service-unit"
+                type="text"
+                placeholder="ใช้ค่าของหมวด"
                 class="w-full apple-input px-3 py-1.5 text-xs font-medium"
                 oninput="updateServiceSummary()"
               />
@@ -1040,12 +1063,12 @@
 
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">ขั้นต่ำต่อ 1 รายการ (Min Order):</label>
-              <input 
-                id="prod-service-min" 
-                type="number" 
-                min="1" 
-                step="1" 
-                placeholder="ใช้ค่าของหมวด" 
+              <input
+                id="prod-service-min"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="ใช้ค่าของหมวด"
                 class="w-full apple-input px-3 py-1.5 text-xs font-mono font-semibold"
                 oninput="updateServiceSummary()"
               />
@@ -1054,13 +1077,13 @@
 
             <div>
               <label class="block text-[11px] font-medium text-slate mb-1">ราคาต่อ 1 หน่วย (฿ / Unit):</label>
-              <input 
-                id="prod-service-rate" 
-                type="number" 
-                step="0.01" 
-                min="0" 
-                placeholder="เช่น 22.00" 
-                value="22.00" 
+              <input
+                id="prod-service-rate"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="เช่น 22.00"
+                value="22.00"
                 class="w-full apple-input px-3 py-1.5 text-xs font-mono font-semibold text-pricingBlue"
                 oninput="syncServiceRateToPrice(this.value)"
               />
@@ -1099,10 +1122,10 @@
           </div>
 
           <div class="flex gap-2">
-            <input 
-              id="prod-image" 
-              type="text" 
-              placeholder="https://images.unsplash.com/..." 
+            <input
+              id="prod-image"
+              type="text"
+              placeholder="https://images.unsplash.com/..."
               oninput="updateImagePreview(this.value)"
               class="flex-1 apple-input px-3.5 py-2 text-xs"
               required
@@ -1127,10 +1150,10 @@
             <label class="block text-xs font-medium text-ink mb-1">
               <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v12H4zM12 17a4 4 0 100-8 4 4 0 000 8z"/></svg> ภาพแกลเลอรี่เพิ่มเติม (Gallery URLs — ใส่บรรทัดละ 1 รูป):
             </label>
-            <textarea 
-              id="prod-gallery" 
-              rows="2" 
-              placeholder="https://example.com/item1.jpg&#10;https://example.com/item2.jpg" 
+            <textarea
+              id="prod-gallery"
+              rows="2"
+              placeholder="https://example.com/item1.jpg&#10;https://example.com/item2.jpg"
               class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"
             ></textarea>
           </div>
@@ -1138,20 +1161,20 @@
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">แท็กสินค้า (คั่นด้วยจุลภาค เช่น Best Seller, พร้อมบวก):</label>
-          <input 
-            id="prod-tags" 
-            type="text" 
-            placeholder="Best Seller, พร้อมบวก, คุ้มสุด" 
+          <input
+            id="prod-tags"
+            type="text"
+            placeholder="Best Seller, พร้อมบวก, คุ้มสุด"
             class="w-full apple-input px-3.5 py-2 text-xs"
           />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">คำอธิบายสินค้า (Description):</label>
-          <textarea 
-            id="prod-desc" 
-            rows="2" 
-            placeholder="อธิบายจุดเด่นของไอดีนี้..." 
+          <textarea
+            id="prod-desc"
+            rows="2"
+            placeholder="อธิบายจุดเด่นของไอดีนี้..."
             class="w-full apple-input p-2.5 text-xs leading-relaxed"
             required
           ></textarea>
@@ -1159,15 +1182,26 @@
 
         <div>
           <label class="block text-xs font-medium text-slate mb-1">อุปกรณ์ที่จะได้รับ (บรรทัดละ 1 ข้อ):</label>
-          <textarea 
-            id="prod-specs" 
-            rows="3" 
-            placeholder="เกราะ T5 ครบชุด&#10;กระสุน T6 x300&#10;Koen เงินสด 5.5M" 
+          <textarea
+            id="prod-specs"
+            rows="3"
+            placeholder="เกราะ T5 ครบชุด&#10;กระสุน T6 x300&#10;Koen เงินสด 5.5M"
             class="w-full apple-input p-2.5 text-xs font-mono leading-relaxed"
             required
           ></textarea>
         </div>
 
+        <div id="ammo-config-box" class="space-y-3 p-4 rounded-2xl bg-mist">
+          <label class="flex items-center gap-2 text-xs font-semibold"><input id="prod-ammo-on" type="checkbox" class="w-4 h-4" onchange="applyTypeUi()"> สินค้าไก่กระสุน (ลูกค้าสั่งเป็นจำนวนกอง ระบบรวมไอดีให้ได้ใกล้เคียงที่สุด)</label>
+          <div id="ammo-fields" class="hidden space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-rate">ราคาต่อกอง (฿):</label><input id="prod-ammo-rate" type="number" min="0" step="0.01" placeholder="2" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+              <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-ammo-min">สั่งขั้นต่ำ (กอง):</label><input id="prod-ammo-min" type="number" min="1" step="1" placeholder="10" class="w-full apple-input px-3 py-1.5 text-xs font-mono"></div>
+            </div>
+            <label class="flex items-center gap-2 text-xs"><input id="prod-ammo-login" type="checkbox" class="w-4 h-4" checked> ต้องเข้าสู่ระบบก่อนซื้อ (ไม่ติ๊ก = ซื้อได้เลย จ่ายด้วยสลิป/ซองอั่งเปา ไอดีเก็บในเครื่องลูกค้า)</label>
+            <p class="text-[10px] text-steel">เติมสต็อกด้วยปุ่ม "สต็อก" บรรทัดละไอดี: <span class="font-mono">อีเมล|รหัสผ่าน|จำนวนกอง</span> · ราคาที่ลูกค้าจ่าย = กองที่ได้จริง × ราคาต่อกอง (ลูกค้าเห็นก่อนกดจ่าย)</p>
+          </div>
+        </div>
         <div id="rent-config-box" class="space-y-3 p-4 rounded-2xl bg-mist">
           <label class="flex items-center gap-2 text-xs font-semibold"><input id="prod-rent-on" type="checkbox" class="w-4 h-4" onchange="applyTypeUi()"> เปิดให้เช่าไอดีนี้ (คิดเป็นชั่วโมง)</label>
           <div id="rent-fields" class="hidden space-y-3">
@@ -1271,6 +1305,7 @@
           <div><label class="block text-slate mb-1" for="box-price">ราคาต่อ 1 ครั้ง (เครดิต ฿)</label><input id="box-price" type="number" min="1" step="0.01" required class="w-full apple-input px-3.5 py-2 font-mono"></div>
           <div><label class="block text-slate mb-1" for="box-order">ลำดับแสดง (เลขน้อยขึ้นก่อน)</label><input id="box-order" type="number" step="1" class="w-full apple-input px-3.5 py-2 font-mono"></div>
         </div>
+        <div><label class="block text-slate mb-1" for="box-category">หมวดหมู่ (เว้นว่าง = แสดงเป็นสินค้าเดี่ยว ไม่อยู่ในหมวดไหน)</label><select id="box-category" class="w-full apple-input px-3.5 py-2"></select></div>
         <div class="flex flex-wrap gap-x-6 gap-y-2">
           <label class="flex items-center gap-2"><input id="box-active" type="checkbox" checked> เปิดให้ลูกค้าเล่น</label>
           <label class="flex items-center gap-2"><input id="box-show-odds" type="checkbox" checked> แสดงโอกาสสุ่ม (%) ให้ลูกค้าเห็น</label>

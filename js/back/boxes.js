@@ -154,6 +154,8 @@ export function openBoxModal(id = null) {
   $('box-price').value = b?.price ?? ''; $('box-order').value = b?.order ?? '';
   $('box-active').checked = b ? b.active !== false : true;
   $('box-show-odds').checked = b ? b.showOdds !== false : true;
+  $('box-category').innerHTML = document.getElementById('prod-category')?.innerHTML || '<option value="">— ไม่มีหมวดหมู่ —</option>';
+  $('box-category').value = [...$('box-category').options].some(o => o.value === b?.category) ? b.category : '';
   $('prize-rows').innerHTML = '';
   (b?.prizes?.length ? b.prizes : [{ kind: 'credit', amount: 5, weight: 60, rarity: 'common' }, { kind: 'credit', amount: 50, weight: 5, rarity: 'rare' }]).forEach(p => addPrizeRow(p));
   openModal('box-form-modal');
@@ -177,7 +179,7 @@ export async function handleSaveBox(e) {
   const payload = {
     name: $('box-name').value.trim(), desc: $('box-desc').value.trim(), image: $('box-image').value.trim(),
     price: Math.round(num($('box-price').value) * 100) / 100, order: Math.floor(num($('box-order').value)),
-    active: $('box-active').checked, showOdds: $('box-show-odds').checked, prizes: clean,
+    category: $('box-category').value, active: $('box-active').checked, showOdds: $('box-show-odds').checked, prizes: clean,
     updatedAt: serverTimestamp(), ...(editId ? {} : { createdAt: serverTimestamp() })
   };
   if (!(payload.price > 0)) return toast('ใส่ราคากล่อง', 'error');

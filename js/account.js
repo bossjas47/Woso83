@@ -102,9 +102,11 @@ onAuthStateChanged(auth, async (u) => {
   $('sec-ids').innerHTML = `<div class="skeleton h-40 !rounded-[28px]"></div><div class="skeleton h-40 !rounded-[28px]"></div>`;
   watch(u);
   try {
-    const claims = (await u.getIdTokenResult()).claims;
-    if (claims.admin === true) {
-      $('acc-role').textContent = 'ผู้ดูแลระบบ';
+    // force refresh: a cached token keeps the old claims for up to an hour after an admin grants the role
+    const claims = (await u.getIdTokenResult(true)).claims;
+    const staff = Array.isArray(claims.perms) && claims.perms.length > 0;
+    if (claims.admin === true || staff) {
+      $('acc-role').textContent = claims.admin === true ? 'ผู้ดูแลระบบ' : 'ทีมงาน';
       $('acc-role').className = 'text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#fff3e6] text-[#a04a00]';
       $('acc-admin-link').classList.remove('hidden');
     }

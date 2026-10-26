@@ -28,6 +28,8 @@ service cloud.firestore {
       // Game-ID credentials: admin / products / pay (an approved order hands one out); the Worker bypasses rules.
       match /stock_items/{itemId} { allow read, write: if can('products') || hasPerm('pay'); }
     }
+    // Ammo-bundle quotes (ไก่กระสุน): written by the Worker only; admins read them to sort out paid-but-undelivered guests.
+    match /ammo_quotes/{id} { allow read: if isAdmin(); allow write: if false; }
     match /categories/{catId} { allow read: if true; allow write: if can('products'); }
     // Codes can be looked up by exact name but not listed.
     match /promo_codes/{code} { allow get: if true; allow list, write: if can('promos'); }

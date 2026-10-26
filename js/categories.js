@@ -10,7 +10,6 @@ import { imgAttrs } from "./ui.js";
  * (a product whose category is missing or deleted counts as "ไม่มีหมวดหมู่", id NONE).
  */
 export const NONE = '_none';
-export const NONE_LABEL = 'สินค้าอื่น ๆ';
 export const KIND_LABEL = { account: 'ไอดีเกม', service: 'บริการในเกม', box: 'กล่องสุ่ม' };
 
 const sortCats = (list) => [...list].sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name), 'th'));
@@ -43,16 +42,14 @@ export function minQtyOf(p, cats) {
 }
 
 export function unitOf(p, cats) {
-  return p?.serviceUnit || categoryOf(cats, p?.category)?.unit || (isServiceProduct(p, cats) ? 'กอง' : 'ไอดี');
+  return p?.isAmmo ? 'กอง' : p?.serviceUnit || categoryOf(cats, p?.category)?.unit || (isServiceProduct(p, cats) ? 'กอง' : 'ไอดี');
 }
 
 const escCat = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** Card grid HTML: one card per category with products, plus "สินค้าอื่น ๆ" for products without one. Cards call window.filterCategory(id). */
+/** Card grid HTML: one card per category. Products without one are standalone (catalog renders them as cards). Cards call window.filterCategory(id). */
 export function categoryCardsHtml(cats, products) {
   const cards = cats.map(c => ({ ...c, n: products.filter(p => p.category === c.id).length }));
-  const none = products.filter(p => catIdOf(p, cats) === NONE).length;
-  if (none) cards.push({ id: NONE, name: NONE_LABEL, n: none });
   return cards.map(c => {
     const img = c.image
       ? `<img ${imgAttrs(c.image, 400, 300)} alt="" class="w-full h-full object-cover">`

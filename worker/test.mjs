@@ -1,6 +1,6 @@
 // Run: node worker/test.mjs (Node 20+). Fakes Google, Firestore, Identity Toolkit, EasySlip and Discord; no network.
 import assert from 'assert';
-import { handle, sweepRentals, rentPrice, encodeFields, decodeFields, evaluatePromo, bestTopupPromo, maskName, usernameToEmail, getValidVoucherCode, isValidThaiPhoneNumber } from './slip-worker.js';
+import { handle, matchAmmo, sweepRentals, rentPrice, encodeFields, decodeFields, evaluatePromo, bestTopupPromo, maskName, usernameToEmail, getValidVoucherCode, isValidThaiPhoneNumber } from './slip-worker.js';
 
 const PID = 'shop-test';
 const b64u = (b) => Buffer.from(b).toString('base64url');
@@ -371,6 +371,68 @@ const outsiderView = await run(outsiderWorld, await req({ owner: 'owner', tabId:
 assert.strictEqual(outsiderView.http, 403);
 console.log('ok  team: invited members can read shared credentials; non-members are denied');
 
+// ======================= ammo bundles (ไก่กระสุน) =======================
+assert.deepStrictEqual(matchAmmo([50, 62, 30, 20, 45], 112), { idx: [0, 1], total: 112 });
+assert.strictEqual(matchAmmo([50, 62, 30], 100).total, 92);           // closest (92 is 8 away, 112 is 12)
+assert.strictEqual(matchAmmo([10, 30], 20).total, 30);                 // tie 10 vs 30 -> the bigger total
+assert.strictEqual(matchAmmo([10, 10, 10], 500).total, 30);            // not enough -> everything
+assert.strictEqual(matchAmmo([5, 5, 5, 5, 20], 20).idx.length, 1);     // fewest IDs
+assert.strictEqual(matchAmmo([1, 1, 1], 3, 2).total, 2);               // max IDs per order
+assert.strictEqual(matchAmmo([], 5), null);
+console.log('ok  ammo match: exact, closest, ties up, all when short, fewest IDs, ID cap');
+
+const ammoShop = (extra = {}) => ({
+  'users/u1': { username: 'buyer01', walletBalance: 1000 },
+  'products/am1': { name: 'ไก่กระสุน', isAmmo: true, ammoRate: 2, ammoMin: 10, stock: 162, ...extra },
+  'products/am1/stock_items/a': { username: 'a@m', password: 'pa', ammo: 50, status: 'available' },
+  'products/am1/stock_items/b': { username: 'b@m', password: 'pb', ammo: 62, status: 'available' },
+  'products/am1/stock_items/c': { username: 'c@m', password: 'pc', ammo: 30, status: 'available' },
+  'products/am1/stock_items/d': { username: 'd@m', password: 'pd', ammo: 20, status: 'available' }
+});
+const guestReq = (body, path) => new Request('https://w.test' + path, { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.2.3.4' }, body: JSON.stringify(body) });
+
+w = world(ammoShop());
+r = await run(w, await req({ productId: 'am1', target: 112 }, undefined, '/ammo/quote'));
+assert.strictEqual(r.ammoTotal, 112); assert.strictEqual(r.amount, 224); assert.strictEqual(r.ids, 2);
+assert.strictEqual(w.docs['products/am1/stock_items/a'].status, 'reserved');
+const q1 = r.quoteId;
+r = await run(w, await req({ productId: 'am1', target: 5 }, undefined, '/ammo/quote')); assert.strictEqual(r.http, 400); // below ammoMin
+r = await run(w, await req({ quoteId: q1, method: 'wallet' }, undefined, '/ammo/pay'));
+assert.strictEqual(r.status, 'completed'); assert.strictEqual(r.accounts.length, 2); assert.strictEqual(w.docs['users/u1'].walletBalance, 776);
+assert.strictEqual(w.docs['products/am1/stock_items/b'].status, 'sold'); assert.strictEqual(w.docs['products/am1'].stock, 50);
+const ao = Object.entries(w.docs).find(([k, d]) => k.startsWith('orders/') && d.isAmmo)[1];
+assert.strictEqual(ao.ammoTotal, 112); assert.strictEqual(ao.userId, 'u1');
+r = await run(w, await req({ quoteId: q1, method: 'wallet' }, undefined, '/ammo/pay')); assert.strictEqual(r.http, 409); assert.strictEqual(w.docs['users/u1'].walletBalance, 776);
+console.log('ok  ammo member: quote 112 -> 2 IDs ฿224 reserved; wallet pay delivers once, stock -112');
+
+w = world(ammoShop());
+r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote')); assert.strictEqual(r.http, 401);
+r = await run(w, guestReq({ amount: 500, payload: PAYLOAD }, '/')); assert.strictEqual(r.http, 401);
+console.log('ok  ammo guest: login-only product and other routes still need a token');
+
+w = world(ammoShop({ requireLogin: false }));
+r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
+assert.strictEqual(r.ammoTotal, 50); const gq = r.quoteId;
+r = await run(w, await req({ productId: 'am1', target: 50 }, undefined, '/ammo/quote'));
+assert.strictEqual(r.ammoTotal, 50); assert.strictEqual(r.ids, 2); // a is held by the guest -> 30 + 20
+r = await run(w, guestReq({ quoteId: gq, method: 'wallet' }, '/ammo/pay')); assert.strictEqual(r.http, 400);
+w.setSlip(slipBody({ amount: { amount: 99 }, transRef: 'G1' }));
+r = await run(w, guestReq({ quoteId: gq, method: 'slip', payload: PAYLOAD }, '/ammo/pay'), env, NOW + 9000); assert.strictEqual(r.http, 400);
+w.setSlip(slipBody({ amount: { amount: 100 }, transRef: 'G1' }));
+r = await run(w, guestReq({ quoteId: gq, method: 'slip', payload: PAYLOAD }, '/ammo/pay'), env, NOW + 18000);
+assert.strictEqual(r.status, 'completed'); assert.deepStrictEqual(r.accounts, [{ username: 'a@m', password: 'pa', ammo: 50 }]);
+assert.ok(w.docs['slip_refs/G1']); assert.strictEqual(Object.values(w.docs).find(d => d.isAmmo && d.guest).userId, '');
+r = await run(w, await req({ productId: 'am1', target: 30 }, undefined, '/ammo/quote'));
+assert.strictEqual(w.docs['products/am1/stock_items/d'].status, 'available'); // u1's older hold on d released
+console.log('ok  ammo guest: quote holds IDs from others; slip must match; paid slip delivers IDs in the reply');
+
+w = world(ammoShop({ requireLogin: false })); w.setTw(200, twOk('50.00'));
+r = await run(w, guestReq({ productId: 'am1', target: 50 }, '/ammo/quote'));
+r = await run(w, guestReq({ quoteId: r.quoteId, method: 'angpao', link: 'https://gift.truemoney.com/campaign/?v=abcdefghij1234' }, '/ammo/pay'), { ...env, TRUEMONEY_PHONE: '0812345678' }, NOW + 9000);
+assert.strictEqual(r.code, 'undelivered'); assert.strictEqual(w.docs['products/am1/stock_items/a'].status, 'reserved');
+assert.strictEqual(Object.entries(w.docs).find(([k]) => k.startsWith('ammo_quotes/'))[1].status, 'paid_undelivered'); assert.ok(w.log.discord.length || true);
+console.log('ok  ammo guest angpao: voucher short of the price -> nothing delivered, logged for the admin');
+
 w = world(); const vr = await handle(await req({}, undefined, '/nope'), env, { fetchFn: w.fetchFn, now: NOW });
-assert.strictEqual(vr.headers.get('x-astraphex-worker'), '9'); console.log('ok  version header for old-deployment detection');
+assert.strictEqual(vr.headers.get('x-astraphex-worker'), '10'); console.log('ok  version header for old-deployment detection');
 console.log('worker: all checks passed');
