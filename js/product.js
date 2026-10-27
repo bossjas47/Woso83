@@ -3,7 +3,7 @@ import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, serverTimestamp, l
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
 import { esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, workerBase, callWorker, readSlipQr, fixImageUrl, sizedImage } from "./ui.js";
-import { deliveryBadge, productCardHtml, isRentProduct, saleLeftHtml, dropLeftHtml, hiddenFromShop } from "./card.js";
+import { deliveryBadge, productCardHtml, isRentProduct, saleLeftHtml, dropLeftHtml, hiddenFromShop, setSales } from "./card.js";
 import { mountPromptPay, promptpayReady } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
 import { rankDiscount, rankOf, RANKS } from "./rank.js";
@@ -51,7 +51,7 @@ async function load() {
   switchProductPaymentTab(defaultMethod(), true);
   if (new URLSearchParams(location.search).get('action') === 'buy') setTimeout(scrollToCheckoutForm, 300);
   // the rest of the shop (related items) comes after the page is already showing
-  try { ALSO = (await getDoc(doc(db, 'system', 'related'))).data()?.map?.[P.id] || []; } catch { /* no related data yet */ }
+  try { const rel = (await getDoc(doc(db, 'system', 'related'))).data(); ALSO = rel?.map?.[P.id] || []; setSales(rel?.sales); } catch { /* no related data yet */ }
   try { allProducts = (await getDocs(collection(db, 'products'))).docs.map(d => ({ ...d.data(), id: d.id })).filter(p => !hiddenFromShop(p)); writeProducts(allProducts); renderRelated(); }
   catch (e) { console.warn('products:', e); }
 }
@@ -161,7 +161,14 @@ function renderBadges() {
 }
 
 let ALSO = []; // product ids other customers bought together with this one (system/related, rebuilt daily by the Worker)
+/** Sibling products that share variantGroup ("เลเวล 20 / 40 / 60") as chips linking to each one; the current one is highlighted. */
+function renderVariants() {
+  const box = $('variant-chips'); if (!box) return;
+  const g = String(P.variantGroup || '').trim(), sibs = g ? [P, ...allProducts.filter(x => x.id !== P.id && String(x.variantGroup || '').trim() === g)] : [];
+  box.innerHTML = sibs.length < 2 ? '' : sibs.sort((a, b) => num(a.price) - num(b.price)).map(x => `<a href="product.html?id=${encodeURIComponent(x.id)}" class="px-3.5 py-1.5 rounded-full text-[13px] border ${x.id === P.id ? 'bg-ink text-gallery border-ink' : 'bg-mist text-slate border-hairline'}" style="${num(x.stock) <= 0 && x.id !== P.id ? 'opacity:.5' : ''}">${esc(x.variantLabel || x.name)} · ฿${money(num(x.price))}</a>`).join('');
+}
 function renderRelated() {
+  renderVariants();
   const rank = (p) => { const i = ALSO.indexOf(p.id); return i < 0 ? 99 : i; };
   const others = allProducts.filter(p => p.id !== P.id).sort((a, b) => rank(a) - rank(b) || (b.category === P.category) - (a.category === P.category)).slice(0, 4);
   const h = document.querySelector('#related-products-grid')?.parentElement.querySelector('h2'); if (h) h.textContent = others.some(p => ALSO.includes(p.id)) ? 'คนที่ซื้อสินค้านี้ซื้อคู่กับ' : 'ของที่น่าโดนต่อ';

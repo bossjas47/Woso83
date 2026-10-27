@@ -523,6 +523,7 @@
               <label class="block text-[11px] text-slate mb-1" for="cat-desc">คำอธิบายหมวดหมู่ (แสดงบนการ์ดหมวดหมู่ในหน้าร้าน ไม่บังคับ)</label>
               <textarea id="cat-desc" rows="3" maxlength="300" placeholder="เช่น ไอดีเลเวล 30+ พร้อมเล่น ส่งทันทีหลังชำระเงิน" class="w-full apple-input px-3.5 py-2 text-xs"></textarea>
             </div>
+            <div class="sm:col-span-12"><label class="block text-[11px] text-slate mb-1" for="cat-spec-fields">ช่องสเปกสำเร็จรูป (คั่นด้วยคอมมา เช่น Level, Rank, Skin) — ตอนเพิ่มสินค้าในหมวดนี้จะมีช่องให้กรอก ตัวกรอง/เปรียบเทียบอ่านค่าได้แม่น</label><input id="cat-spec-fields" type="text" maxlength="200" class="w-full apple-input px-3.5 py-2 text-xs"></div>
             <div id="cat-service-fields" class="hidden sm:col-span-12 grid sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-[11px] text-slate mb-1" for="cat-unit">หน่วยนับ</label>
@@ -881,6 +882,7 @@
 
           <div class="apple-card p-6 space-y-4">
             <h3 class="font-display font-semibold text-base">อื่น ๆ</h3>
+            <label class="flex items-center gap-2 text-sm"><input id="setting-auto-sort" type="checkbox"> เรียงสินค้าขายดี (30 วัน) ขึ้นก่อนอัตโนมัติในหน้าร้าน (ยังให้สินค้าแนะนำและสินค้าพร้อมส่งมาก่อน)</label>
             <div><label class="block text-[11px] text-slate mb-1" for="setting-koen-label">ชื่อหัวข้อค่าบนการ์ดไอดี</label><input id="setting-koen-label" type="text" maxlength="30" placeholder="Koen" class="w-full apple-input px-3.5 py-2 text-xs"></div>
             <div class="flex items-center justify-between gap-3 pt-2 border-t border-hairline"><span class="text-xs text-slate">รหัส PIN สำหรับเปิดหน้าหลังบ้าน</span><button type="button" onclick="promptResetPin()" class="apple-explore-pill px-4 py-2 text-xs text-launchOrange">เปลี่ยนรหัส PIN</button></div>
           </div>
@@ -1266,6 +1268,7 @@
           ></textarea>
         </div>
 
+        <div id="spec-fields" class="grid grid-cols-2 gap-2 empty:hidden"></div>
         <div>
           <label class="block text-xs font-medium text-slate mb-1">อุปกรณ์ที่จะได้รับ (บรรทัดละ 1 ข้อ):</label>
           <textarea
@@ -1332,6 +1335,10 @@
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-hide-at">ปิดขายอัตโนมัติเมื่อถึงเวลา:</label><input id="prod-hide-at" type="datetime-local" class="w-full apple-input px-3 py-2 text-xs"></div>
           </div>
           <label class="flex items-center gap-2 text-xs"><input id="prod-unlisted" type="checkbox"> ซ่อนจากหน้าร้าน — เข้าได้เฉพาะคนที่มีลิงก์สินค้า (สำหรับ VIP / ขายก่อนเปิดทั่วไป)</label>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-variant-group">กลุ่มตัวเลือก (สินค้าที่ใส่ชื่อกลุ่มเดียวกันจะมีปุ่มสลับในหน้าสินค้า):</label><input id="prod-variant-group" type="text" maxlength="40" placeholder="เช่น ไอดีไก่ชุด A" class="w-full apple-input px-3 py-2 text-xs"></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-variant-label">ชื่อบนปุ่มตัวเลือก:</label><input id="prod-variant-label" type="text" maxlength="24" placeholder="เช่น เลเวล 40" class="w-full apple-input px-3 py-2 text-xs"></div>
+          </div>
           <div id="bundle-fields" class="grid grid-cols-2 gap-3">
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-bundle-id">แถมไก่กระสุนจากสินค้า:</label><select id="prod-bundle-id" class="w-full apple-input px-3 py-2 text-xs"></select></div>
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-bundle-n">กองต่อ 1 ไอดี (โดยประมาณ ±10%):</label><input id="prod-bundle-n" type="number" min="1" step="1" class="w-full apple-input px-3 py-2 text-xs"></div>

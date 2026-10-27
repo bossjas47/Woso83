@@ -254,7 +254,19 @@ function handleCategoryChange(catId) {
   const cat = categoryOf(CATS, catId);
   if (cat) $('prod-type').value = cat.kind === 'service' ? 'service' : 'account';
   applyTypeUi();
+  renderSpecFields();
 }
+/** Ready-made spec boxes from the category's specFields. Idempotent: every value (typed box or free line) is folded back into one list of lines, then the lines that start with a field name move into its box. */
+function renderSpecFields() {
+  const box = $('spec-fields'), area = $('prod-specs'); if (!box || !area) return;
+  const labels = categoryOf(CATS, $('prod-category').value)?.specFields || [];
+  const lines = [...[...box.querySelectorAll('input')].filter(i => i.value.trim()).map(i => `${i.dataset.f}: ${i.value.trim()}`), ...area.value.split('\n').map(s => s.trim()).filter(Boolean)];
+  const own = {}; for (const l of labels) { const i = lines.findIndex(t => t.toLowerCase().startsWith(l.toLowerCase() + ':') || t.toLowerCase().startsWith(l.toLowerCase() + '：')); if (i >= 0) own[l] = lines.splice(i, 1)[0].replace(/^[^:：]*[:：]\s*/, ''); }
+  area.value = lines.join('\n');
+  box.innerHTML = labels.map(l => `<label class="text-[11px] text-slate">${adminEsc(l)}<input data-f="${adminEsc(l)}" value="${adminEsc(own[l] || '')}" class="w-full apple-input px-3 py-2 text-xs mt-1"></label>`).join('');
+  if ($('prod-type').value !== 'service') area.required = !labels.length; // all specs may live in the boxes
+}
+const specLines = () => [...[...$('spec-fields').querySelectorAll('input')].filter(i => i.value.trim()).map(i => `${i.dataset.f}: ${i.value.trim()}`), ...$('prod-specs').value.split('\n').map(s => s.trim()).filter(Boolean)];
 function applyTypeUi() {
   const srv = $('prod-type').value === 'service';
   const on = 'flex-1 py-1.5 px-3 rounded-xl text-xs font-medium transition-all bg-gallery text-ink shadow-sm border border-hairline/50 flex items-center justify-center gap-1.5';
@@ -345,7 +357,7 @@ function openProductModal(productId = null) {
   fillProductCategorySelect();
   $('prod-bundle-id').innerHTML = '<option value="">— ไม่แถม —</option>' + PRODUCTS.filter(x => x.isAmmo === true).map(x => `<option value="${adminEsc(x.id)}">${adminEsc(x.name)}</option>`).join('');
   const p = productId ? PRODUCTS.find(x => x.id === productId) : null;
-  $('product-crud-form').reset();
+  $('product-crud-form').reset(); $('spec-fields').innerHTML = ''; // boxes from the previous product must not leak into this one
   $('product-modal-heading').innerText = p ? 'แก้ไขสินค้า: ' + p.name : 'เพิ่มสินค้าใหม่';
   $('prod-edit-id').value = p?.id || '';
   if (p) {
@@ -366,6 +378,7 @@ function openProductModal(productId = null) {
     set('prod-rent-rate', p.rentHourPrice); set('prod-rent-min', p.rentMinHours); set('prod-rent-deposit', p.rentDeposit);
     set('prod-rent-packages', (p.rentPackages || []).map(k => `${k.hours} ${k.price}`).join('\n'));
     set('prod-sale-price', p.salePrice); set('prod-sale-from', msToLocal(p.saleFrom)); set('prod-sale-to', msToLocal(p.saleTo));
+    set('prod-variant-group', p.variantGroup); set('prod-variant-label', p.variantLabel);
     set('prod-drop-at', msToLocal(p.dropAt)); set('prod-cost', p.cost); set('prod-hide-at', msToLocal(p.hideAt)); $('prod-unlisted').checked = p.unlisted === true;
     set('prod-bundle-id', p.bundleAmmoId); set('prod-bundle-n', p.bundleAmmo);
     $('prod-type').value = isServiceProduct(p, CATS) ? 'service' : 'account';
@@ -377,7 +390,7 @@ function openProductModal(productId = null) {
     $('prod-type').value = categoryOf(CATS, $('prod-category').value)?.kind === 'service' ? 'service' : 'account';
   }
   updateImagePreview(p?.image || '');
-  applyTypeUi();
+  applyTypeUi(); renderSpecFields();
   $('product-form-modal').classList.remove('hidden'); $('product-form-modal').classList.add('flex');
 }
 function closeProductModal() { $('product-form-modal').classList.add('hidden'); $('product-form-modal').classList.remove('flex'); }
@@ -443,6 +456,7 @@ async function handleProductFormSubmit(e) {
     price: saleLive ? salePrice : farmModes ? Math.min(fId, fSelf) : price, image,
     salePrice: saleOk ? salePrice : deleteField(), saleFrom: saleOk && sFrom ? sFrom : deleteField(), saleTo: saleOk && sTo ? sTo : deleteField(),
     basePrice: saleLive ? (farmModes ? Math.min(fId, fSelf) : price) : deleteField(), saleOn: saleLive ? true : deleteField(),
+    variantGroup: $('prod-variant-group').value.trim() || deleteField(), variantLabel: $('prod-variant-label').value.trim() || deleteField(),
     cost: num($('prod-cost').value) > 0 ? num($('prod-cost').value) : deleteField(),
     hideAt: localToMs($('prod-hide-at').value) > Date.now() ? localToMs($('prod-hide-at').value) : deleteField(),
     unlisted: $('prod-unlisted').checked || deleteField(),
@@ -452,7 +466,7 @@ async function handleProductFormSubmit(e) {
     ...(isSrv ? { stock: Math.max(0, parseInt($('prod-stock').value, 10) || 0) } : editId ? {} : { stock: 0 }),
     gallery: galleryText ? galleryText.split('\n').map(s => formatUrl(s)).filter(Boolean) : (image ? [image] : []),
     tags: $('prod-tags').value.split(',').map(s => s.trim()).filter(Boolean), desc: $('prod-desc').value.trim(),
-    specs: $('prod-specs').value.split('\n').map(s => s.trim()).filter(Boolean),
+    specs: specLines(),
     productType: isSrv ? 'service' : 'account', featured: $('prod-featured').checked,
     serviceUnit: isSrv && $('prod-service-unit').value.trim() ? $('prod-service-unit').value.trim() : deleteField(),
     serviceMin: isSrv && Math.floor(num($('prod-service-min').value)) > 0 ? Math.floor(num($('prod-service-min').value)) : deleteField(),
@@ -753,7 +767,7 @@ function renderAdminCategories() {
 function editCategory(id) {
   const c = categoryOf(CATS, id); if (!c) return;
   const set = (k, v) => { $(k).value = v ?? ''; };
-  set('cat-edit-id', c.id); set('cat-name', c.name); set('cat-kind', c.kind); set('cat-image', c.image); set('cat-desc', c.desc); set('cat-badge', c.badge); $('cat-hidden').checked = c.hidden === true; set('cat-show-from', msToLocal(c.showFrom)); set('cat-show-to', msToLocal(c.showTo)); set('cat-unit', c.unit); set('cat-min', c.minQty); set('cat-order', c.order);
+  set('cat-edit-id', c.id); set('cat-name', c.name); set('cat-kind', c.kind); set('cat-image', c.image); set('cat-desc', c.desc); set('cat-badge', c.badge); set('cat-spec-fields', (c.specFields || []).join(', ')); $('cat-hidden').checked = c.hidden === true; set('cat-show-from', msToLocal(c.showFrom)); set('cat-show-to', msToLocal(c.showTo)); set('cat-unit', c.unit); set('cat-min', c.minQty); set('cat-order', c.order);
   toggleCategoryKind(); $('cat-name').focus();
 }
 function resetCategoryForm() { $('category-form').reset(); $('cat-edit-id').value = ''; toggleCategoryKind(); }
@@ -762,7 +776,7 @@ async function handleCategorySubmit(e) {
   e.preventDefault();
   const kind = $('cat-kind').value;
   const id = $('cat-edit-id').value || 'cat_' + Date.now().toString(36);
-  const data = { name: $('cat-name').value.trim(), kind, order: num($('cat-order').value), image: formatUrl($('cat-image').value) || deleteField(), desc: $('cat-desc').value.trim().slice(0, 300) || deleteField(), badge: $('cat-badge').value.trim().slice(0, 16) || deleteField(), hidden: $('cat-hidden').checked || deleteField(), showFrom: localToMs($('cat-show-from').value) || deleteField(), showTo: localToMs($('cat-show-to').value) || deleteField(), updatedAt: serverTimestamp() };
+  const data = { name: $('cat-name').value.trim(), kind, order: num($('cat-order').value), image: formatUrl($('cat-image').value) || deleteField(), desc: $('cat-desc').value.trim().slice(0, 300) || deleteField(), badge: $('cat-badge').value.trim().slice(0, 16) || deleteField(), specFields: (() => { const l = $('cat-spec-fields').value.split(',').map(x => x.trim().replace(/[:：]/g, '')).filter(Boolean).slice(0, 12); return l.length ? l : deleteField(); })(), hidden: $('cat-hidden').checked || deleteField(), showFrom: localToMs($('cat-show-from').value) || deleteField(), showTo: localToMs($('cat-show-to').value) || deleteField(), updatedAt: serverTimestamp() };
   if (kind === 'service') { data.unit = $('cat-unit').value.trim() || 'กอง'; data.minQty = Math.max(1, Math.floor(num($('cat-min').value)) || 1); }
   else { data.unit = deleteField(); data.minQty = deleteField(); }
   try { await setDoc(doc(db, 'categories', id), data, { merge: true }); audit($('cat-edit-id').value ? 'แก้หมวดหมู่' : 'สร้างหมวดหมู่', data.name); triggerToast('บันทึกหมวดหมู่แล้ว', 'success'); resetCategoryForm(); }
@@ -1354,6 +1368,7 @@ async function loadAdminSettings() {
   try { const s = await getDoc(doc(db, 'system_private', 'secrets')); if (s.exists()) secrets = s.data(); } catch (_) {}
   const set = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
   $('setting-ammo-closed').checked = d.ammoClosed === true; set('setting-ammo-closed-msg', d.ammoClosedMsg); set('setting-ammo-close-from', d.ammoCloseFrom); set('setting-ammo-close-to', d.ammoCloseTo);
+  $('setting-auto-sort').checked = d.autoSort === true;
   $('setting-shop-closed').checked = d.shopClosed === true; set('setting-shop-closed-msg', d.shopClosedMsg); set('setting-shop-reopen', d.shopReopenAt ? msToLocal(d.shopReopenAt) : ''); set('setting-combo-pct', d.comboPct || 0);
   $('setting-announce-on').checked = d.announcementEnabled === true;
   set('setting-announce-text', d.announcementText ?? d.marqueeText);
@@ -1435,6 +1450,7 @@ async function handleSaveSettings(e) {
   const n = (id) => Math.max(0, Math.floor(num(v(id))));
   const payload = {
     ammoClosed: $('setting-ammo-closed').checked, ammoClosedMsg: v('setting-ammo-closed-msg'), ammoCloseFrom: v('setting-ammo-close-from') && v('setting-ammo-close-to') ? v('setting-ammo-close-from') : '', ammoCloseTo: v('setting-ammo-close-from') && v('setting-ammo-close-to') ? v('setting-ammo-close-to') : '',
+    autoSort: $('setting-auto-sort').checked,
     shopClosed: $('setting-shop-closed').checked, shopClosedMsg: v('setting-shop-closed-msg'), shopReopenAt: localToMs(v('setting-shop-reopen')) || 0, comboPct: Math.min(50, Math.max(0, Math.floor(num(v('setting-combo-pct'))))),
     announcementEnabled: $('setting-announce-on').checked, announcementText: v('setting-announce-text'), announcementLink: v('setting-announce-link'),
     popupEnabled: $('setting-popup-on').checked, popupImages: v('setting-popup-images').split('\n').map(x => formatUrl(x.trim())).filter(Boolean).slice(0, 6),

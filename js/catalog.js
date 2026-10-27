@@ -1,8 +1,8 @@
 import { db } from "../firebase-config.js";
 import { readProducts, writeProducts } from "./products-cache.js";
-import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { ROOT, esc, icon, ICONS, onSettings, workerBase } from "./ui.js";
-import { productCardHtml, productSkeletonHtml, levelOf, hiddenFromShop } from "./card.js";
+import { productCardHtml, productSkeletonHtml, levelOf, hiddenFromShop, setSales, SALES } from "./card.js";
 import { watchCategories, categoryCardsHtml, catVisible, categoryOf, catIdOf, isServiceProduct, minQtyOf, unitOf, KIND_LABEL, NONE } from "./categories.js";
 
 /**
@@ -130,6 +130,8 @@ function renderTagRow() {
   if (row.dataset.sig !== html) { row.dataset.sig = html; row.innerHTML = html; }
 }
 
+const autoRank = (p) => S.settings.autoSort === true ? Number(SALES[p.id]) || 0 : 0; // admin switch: best sellers first inside the default order
+
 export function render() {
   const grid = document.getElementById('product-grid');
   const empty = document.getElementById('empty-state');
@@ -161,7 +163,7 @@ export function render() {
   if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเติมสต๊อก เดี๋ยวของมา แวะมาใหม่นะ', false); return; }
   if (browsing) {
     // products without a category are standalone: shown as cards right under the category cards
-    const free = S.products.filter(p => catIdOf(p, S.cats) === NONE).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.order || 0) - (b.order || 0));
+    const free = S.products.filter(p => catIdOf(p, S.cats) === NONE).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || autoRank(b) - autoRank(a) || (a.order || 0) - (b.order || 0));
     grid.innerHTML = free.map(cardFor).join('');
     if (countEl) countEl.textContent = `${S.cats.length} หมวดหมู่ · ${S.products.length} สินค้า`;
     return;
@@ -185,7 +187,7 @@ export function render() {
   else if (S.sort === 'price-desc') list.sort((a, b) => priceOf(b) - priceOf(a));
   else if (S.sort === 'stock-desc') list.sort((a, b) => stockOf(b) - stockOf(a));
   else if (S.sort === 'newest') list.sort((a, b) => ms(b) - ms(a));
-  else list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockOf(b) > 0) - (stockOf(a) > 0));
+  else list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockOf(b) > 0) - (stockOf(a) > 0) || autoRank(b) - autoRank(a));
 
   if (countEl) countEl.textContent = `แสดง ${list.length} รายการ · พร้อมส่ง ${list.filter(p => stockOf(p) > 0).length}`;
   if (!list.length) { showEmpty('ไม่พบสินค้าที่ตรงกับตัวกรอง', 'ลองเปลี่ยนหมวด งบ หรือคำค้นดู', true); return; }
@@ -239,6 +241,7 @@ export function mountCatalog(options = {}) {
     document.getElementById('f-sort').addEventListener('change', (e) => { S.sort = e.target.value; render(); });
   }
   render();
+  getDoc(doc(db, 'system', 'related')).then((s) => { setSales(s.data()?.sales); if (S.loaded) render(); }).catch(() => {});
 
   watchCategories((list) => { S.realCats = list; merge(); fillCategorySelect(); render(); opts.onProducts?.(S); });
   // Loot boxes show as products (in their category, or standalone when none); the card opens front/box.html?id=…

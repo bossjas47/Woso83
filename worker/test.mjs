@@ -661,10 +661,13 @@ assert.strictEqual(vr.headers.get('x-astraphex-worker'), '10'); console.log('ok 
   console.log('ok  restock sweep: announces and clears only in-stock watches');
 }
 {
-  const mk = (id, u, p) => [`orders/${id}`, { userId: u, productId: p, status: 'completed', paymentMethod: 'wallet' }];
+  const mk = (id, u, p) => [`orders/${id}`, { userId: u, productId: p, status: 'completed', paymentMethod: 'wallet', createdAt: new Date(NOW - 1000).toISOString() }];
   const w = world(Object.fromEntries([mk('o1', 'u1', 'A'), mk('o2', 'u1', 'B'), mk('o3', 'u2', 'A'), mk('o4', 'u2', 'B'), mk('o5', 'u3', 'A'), mk('o6', 'u3', 'C'), mk('o7', 'u4', 'A'), mk('o8', 'u4', 'x', ).map((v, i) => i ? { ...v, isAmmo: true } : v)]));
   await sweepRelated(env, { fetchFn: w.fetchFn, now: NOW });
   assert.deepStrictEqual(w.docs['system/related'].map, { A: ['B'], B: ['A'] }, 'only pairs seen at least twice; ammo ignored');
+  assert.deepStrictEqual(w.docs['system/related'].sales, { A: 4, B: 2, C: 1, x: 1 }, '30-day sales per product, ammo counted once');
+  const w2 = world({ 'orders/old': { userId: 'u1', productId: 'A', status: 'completed', paymentMethod: 'wallet', createdAt: new Date(NOW - 40 * 864e5).toISOString() } });
+  await sweepRelated(env, { fetchFn: w2.fetchFn, now: NOW }); assert.deepStrictEqual(w2.docs['system/related'].sales, {}, 'orders older than 30 days do not count');
   console.log('ok  related: co-purchase pairs need 2+ customers');
 }
 console.log('worker: all checks passed');

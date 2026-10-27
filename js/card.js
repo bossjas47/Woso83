@@ -5,6 +5,12 @@ import "./cart-store.js"; // registers window.quickAddCart for the card cart but
 /** Product card shared by the home and category pages. The whole card links to the product page. */
 export const productUrl = (id, buy = false) => `${ROOT}front/product.html?id=${encodeURIComponent(id)}${buy ? '&action=buy' : ''}`;
 
+/** Units sold in the last 30 days per product id (system/related.sales, rebuilt daily by the Worker). Feeds the "ขายดี" badge and the optional auto-sort. */
+export let SALES = {};
+export const setSales = (m) => { SALES = m && typeof m === 'object' ? m : {}; };
+/** "ใหม่" (created within 7 days) or "ขายดี" (3+ sold in 30 days) for the corner of a card; '' when neither. */
+export const autoBadge = (p) => (p?.createdAt?.toMillis?.() || 0) > Date.now() - 7 * 864e5 ? 'ใหม่' : Number(SALES[p?.id]) >= 3 ? 'ขายดี' : '';
+
 /** Left out of every list: "secret link" products, and products whose auto-close time has passed (the product page still opens by link). */
 export const hiddenFromShop = (p) => p?.unlisted === true || (Number(p?.hideAt) > 0 && Date.now() >= Number(p.hideAt));
 
@@ -52,7 +58,7 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
       <a href="${url}" class="relative block aspect-square rounded-[18px] overflow-hidden bg-mist" aria-label="${name}">
         <img ${imgAttrs(p.image || fallback, 320, 320)} alt=""
           class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${out ? 'grayscale opacity-70' : ''}">
-        ${p.featured ? `<span class="absolute top-2 left-2 badge badge-featured bg-gallery/95">${icon(ICONS.star, 'w-3 h-3', 2)}แนะนำ</span>` : ''}
+        ${p.featured ? `<span class="absolute top-2 left-2 badge badge-featured bg-gallery/95">${icon(ICONS.star, 'w-3 h-3', 2)}แนะนำ</span>` : autoBadge(p) ? `<span class="absolute top-2 left-2 badge badge-featured bg-gallery/95">${autoBadge(p)}</span>` : ''}
         <span class="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-gallery/90 backdrop-blur text-[11px] font-medium px-2 py-0.5 rounded-full ${isService || rent ? 'text-launchOrange' : 'text-[#0a7a3b]'}">${mode}</span>
       </a>
       ${cmp}

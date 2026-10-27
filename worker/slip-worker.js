@@ -747,9 +747,12 @@ export async function sweepRelated(env, { fetchFn = fetch, now = Date.now() } = 
   const sa = JSON.parse(env.SERVICE_ACCOUNT || '{}');
   if (!sa.project_id) return 0;
   const fs = fsClient(sa.project_id, await accessToken(sa, fetchFn, now), fetchFn);
+  const sales = {}, since = now - 30 * 864e5;
   const mine = new Map(); // shortcut: reads up to 1000 completed orders, not the whole history; page through them (or keep a counter doc) once the shop has more
   for (const o of await fs.query('', 'orders', [['status', 'EQUAL', 'completed']], { limit: 1000 })) {
-    const d = o.data; if (!d.userId || !d.productId || d.paymentMethod === 'prize' || d.isAmmo) continue;
+    const d = o.data;
+    if (d.productId && d.paymentMethod !== 'prize' && Date.parse(d.createdAt) >= since) sales[d.productId] = (sales[d.productId] || 0) + (d.isAmmo ? 1 : num(d.receiveQty) || num(d.quantity) || 1); // ammo orders count once, not per กอง
+    if (!d.userId || !d.productId || d.paymentMethod === 'prize' || d.isAmmo) continue;
     if (!mine.has(d.userId)) mine.set(d.userId, new Set());
     mine.get(d.userId).add(String(d.productId));
   }
@@ -757,7 +760,7 @@ export async function sweepRelated(env, { fetchFn = fetch, now = Date.now() } = 
   for (const set of mine.values()) { const ids = [...set].slice(0, 20); for (const a of ids) for (const b of ids) if (a !== b) ((co[a] ||= {})[b] = (co[a][b] || 0) + 1); }
   const map = {};
   for (const [a, row] of Object.entries(co)) { const top = Object.entries(row).filter(x => x[1] >= 2).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]); if (top.length) map[a] = top; }
-  await fs.commit([{ update: { name: fs.name('system/related'), fields: fs.fields({ map, at: now }) } }]);
+  await fs.commit([{ update: { name: fs.name('system/related'), fields: fs.fields({ map, sales, at: now }) } }]);
   return Object.keys(map).length;
 }
 
