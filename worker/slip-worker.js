@@ -62,7 +62,7 @@ async function verifyIdTokenInner(token, projectId, fetchFn, now) {
   const sec = now / 1000;
   if (!ok || claims.aud !== projectId || claims.iss !== `https://securetoken.google.com/${projectId}`
       || !(claims.exp > sec) || !(claims.iat <= sec + 60) || !claims.sub) throw fail('unauthenticated', 'กรุณาเข้าสู่ระบบใหม่');
-  return { uid: claims.sub, email: claims.email || '', name: claims.name || '', admin: claims.admin === true, perms: Array.isArray(claims.perms) ? claims.perms.map(String) : [] };
+  return { uid: claims.sub, email: claims.email || '', name: claims.name || '', admin: claims.admin === true, perms: Array.isArray(claims.perms) ? claims.perms.map(String) : [], creditCap: Math.max(0, Number(claims.creditCap) || 0) };
 }
 
 async function accessToken(sa, fetchFn, now) {
@@ -707,7 +707,7 @@ async function routeRentReturn({ user, data, fs, fetchFn, now, later }) {
 }
 
 /** Admin closes a returned / expired rental: deposit back or kept, and the ID goes back on the shelf (optionally with a new password). */
-const PERMS = ['orders', 'pay', 'products', 'promos', 'rentals', 'boxes', 'vault', 'users'];
+const PERMS = ['orders', 'pay', 'products', 'promos', 'rentals', 'boxes', 'vault', 'users', 'profit', 'price', 'credit'];
 async function routeAdminRent({ user, data, fs, now }) {
   if (!user.admin && !user.perms.includes('rentals')) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
   const id = rentalId(data);
@@ -850,17 +850,62 @@ async function routeAdminUser({ user, data, sa, fetchFn, now }) {
     update.password = String(data.password);
   }
   if (typeof data.disabled === 'boolean') { update.disableUser = data.disabled; if (data.disabled) update.validSince = String(Math.floor(now / 1000)); }
-  if (typeof data.admin === 'boolean' || Array.isArray(data.perms)) {
+  if (typeof data.admin === 'boolean' || Array.isArray(data.perms) || data.creditCap != null) {
     const look = await call('accounts:lookup', { localId: [uid] });
     let attrs = {};
     try { attrs = JSON.parse(look.users?.[0]?.customAttributes || '{}'); } catch (_) {}
     if (typeof data.admin === 'boolean') { if (data.admin) attrs.admin = true; else delete attrs.admin; }
     if (Array.isArray(data.perms)) { const p = PERMS.filter(x => data.perms.includes(x)); if (p.length) attrs.perms = p; else delete attrs.perms; }
+    if (data.creditCap != null) { const c = Math.min(1e6, Math.max(0, Math.floor(Number(data.creditCap) || 0))); if (c) attrs.creditCap = c; else delete attrs.creditCap; } // ฿ per day a 'credit' staff may add/remove
     update.customAttributes = JSON.stringify(attrs);
   }
   if (Object.keys(update).length === 1) return [{ ok: true }];
   const res = await call('accounts:update', update);
   return [{ ok: true, email: res.email || update.email || '' }];
+}
+
+// ---------- POST /admin/wallet ----------
+// Staff with the 'credit' permission adjust a customer's credit through here so the daily cap (claim creditCap, ฿ of |change| per Thai day) holds.
+// The owner/admin is uncapped. Staff can no longer write walletBalance from the browser (firestore.rules).
+async function routeAdminWallet({ user, data, fs, now }) {
+  const capped = !user.admin;
+  if (capped && !(user.perms.includes('credit') && user.creditCap > 0)) return [{ error: 'ไม่มีสิทธิ์ปรับเครดิต' }, 403];
+  const uid = String(data.uid || ''), mode = String(data.mode || ''), amt = r2(num(data.amount)), note = str(data.note, 120);
+  if (!/^[\w-]{2,128}$/.test(uid) || !['add', 'sub', 'set'].includes(mode) || !(amt >= 0) || (mode !== 'set' && !(amt > 0)) || amt > 1e7) return [{ error: 'ข้อมูลไม่ถูกต้อง' }, 400];
+  if (capped && uid === user.uid) return [{ error: 'ห้ามปรับเครดิตตัวเอง' }, 403];
+  const day = new Date(now + 7 * 3600e3).toISOString().slice(0, 10), key = `admin_credit/${user.uid}_${day}`;
+  return retry(async () => {
+    const tx = await fs.begin();
+    let committed = false;
+    try {
+      const [profile, tally] = await Promise.all([fs.get(`users/${uid}`, tx), capped ? fs.get(key, tx) : null]);
+      if (!profile) return [{ error: 'ไม่พบผู้ใช้' }, 404];
+      const before = r2(num(profile.walletBalance)), after = r2(mode === 'set' ? amt : mode === 'add' ? before + amt : before - amt);
+      if (after < 0) return [{ error: 'ยอดเงินติดลบไม่ได้' }, 400];
+      const used = r2(num(tally?.used)), cost = r2(Math.abs(after - before));
+      if (capped && used + cost > user.creditCap) return [{ error: `เกินเพดานวันนี้ (ใช้แล้ว ฿${money(used)} จาก ฿${money(user.creditCap)})` }, 403];
+      const w = [
+        { update: { name: fs.name(`users/${uid}`), fields: fs.fields({ walletBalance: after }) }, updateMask: { fieldPaths: ['walletBalance'] }, currentDocument: { exists: true } },
+        { update: { name: fs.name(`wallet_logs/${randomId()}`), fields: fs.fields({ uid, before, after, delta: r2(after - before), note, by: user.uid }) }, updateTransforms: [stamp('at')] }
+      ];
+      if (capped) w.push({ update: { name: fs.name(key), fields: fs.fields({ used: r2(used + cost) }) } });
+      await fs.commit(w, tx);
+      committed = true;
+      return [{ ok: true, balance: after, left: capped ? r2(user.creditCap - used - cost) : null }];
+    } finally { if (!committed) await fs.rollback(tx).catch(() => {}); }
+  });
+}
+
+// ---------- POST /admin/msg ----------
+// One-click push to the buyer of an order (the canned reply that was just saved as the order note).
+async function routeAdminMsg({ user, data, fs, fetchFn, now }) {
+  if (!user.admin && !user.perms.includes('orders') && !user.perms.includes('pay')) return [{ error: 'ไม่มีสิทธิ์' }, 403];
+  const id = String(data.orderId || ''), text = str(data.text, 200);
+  if (!/^[\w-]{1,64}$/.test(id) || !text) return [{ error: 'ข้อมูลไม่ถูกต้อง' }, 400];
+  const o = await fs.get(`orders/${id}`);
+  if (!o) return [{ error: 'ไม่พบออเดอร์' }, 404];
+  if (!o.userId) return [{ ok: true, sent: 0 }]; // guest order: nobody to push to
+  return [{ ok: true, sent: await pushTo(fs, fetchFn, o.userId, { title: `ข้อความจากทีมงาน · ${str(o.productName, 40)}`, body: text, url: '/front/account.html#orders', tag: `msg-${id}` }, now) }];
 }
 
 // ---------- POST /notify ----------
@@ -1695,7 +1740,7 @@ export async function handle(request, env, { fetchFn = fetch, now = Date.now(), 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply({ error: 'method not allowed' }, 405);
   const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
-  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/gift': routeBoxGift, '/box/gift/cancel': routeBoxGiftCancel, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/redeem': routeVaultRedeem, '/push/key': routePushKey, '/push/test': routePushTest, '/push/queue': routePushQueue, '/vault/team': routeVaultTeam, '/vault/team/mark': routeVaultMark, '/vault/invite': routeVaultInvite, '/vault/join': routeVaultJoin, '/ammo/quote': routeAmmoQuote, '/ammo/pay': routeAmmoPay, '/ammo/extend': routeAmmoExtend, '/ammo/claim': routeAmmoClaim, '/admin/claim': routeAdminClaim, '/admin/winback': routeAdminWinback, '/auction/bid': routeAuctionBid };
+  const routes = { '/': routeSlip, '/slip': routeSlip, '/buy': routeBuy, '/angpao': routeAngpao, '/cart': routeCart, '/rent': routeRent, '/rent/extend': routeRentExtend, '/rent/credentials': routeRentCredentials, '/rent/return': routeRentReturn, '/admin/rent': routeAdminRent, '/admin/user': routeAdminUser, '/notify': routeNotify, '/box/open': routeBoxOpen, '/box/gift': routeBoxGift, '/box/gift/cancel': routeBoxGiftCancel, '/box/claim': routeBoxClaim, '/vault/buy': routeVaultBuy, '/vault/redeem': routeVaultRedeem, '/push/key': routePushKey, '/push/test': routePushTest, '/push/queue': routePushQueue, '/vault/team': routeVaultTeam, '/vault/team/mark': routeVaultMark, '/vault/invite': routeVaultInvite, '/vault/join': routeVaultJoin, '/ammo/quote': routeAmmoQuote, '/ammo/pay': routeAmmoPay, '/ammo/extend': routeAmmoExtend, '/ammo/claim': routeAmmoClaim, '/admin/claim': routeAdminClaim, '/admin/winback': routeAdminWinback, '/admin/wallet': routeAdminWallet, '/admin/msg': routeAdminMsg, '/auction/bid': routeAuctionBid };
   const route = routes[path];
   if (!route) return reply({ error: 'not found' }, 404);
   const pending = [];

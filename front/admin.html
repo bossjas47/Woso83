@@ -464,6 +464,13 @@
           <p class="text-[10px] text-steel">CSV แก้ได้: ชื่อ, ราคา, ต้นทุน, แท็ก (คั่นด้วย |), สเปก (คั่นด้วย |) ของสินค้าที่มี id อยู่แล้วเท่านั้น · สินค้าที่กำลังลดราคา/กระสุน/บริการ/เช่า ข้ามช่องราคา</p>
         </div>
 
+        <div id="month-card" class="apple-card p-5 space-y-3">
+          <div class="flex flex-wrap items-center gap-2 text-xs"><p class="font-semibold text-sm mr-auto">รายงานกำไรสุทธิรายเดือน</p>
+            <input id="month-pick" type="month" onchange="monthReport()" aria-label="เดือน" class="apple-input px-2 py-1.5">
+            <label class="flex items-center gap-1.5">ค่าเช็คสลิป ฿/ใบ <input id="month-fee" type="number" min="0" step="0.01" onchange="saveSlipFee()" class="apple-input px-2 py-1.5 w-20"></label></div>
+          <div id="month-body" class="space-y-1.5 text-xs"></div>
+        </div>
+
         <div id="auction-admin" class="apple-card p-5 space-y-3">
           <p class="font-semibold text-sm">ประมูลไอดี <span class="text-slate font-normal text-xs">· ลูกค้าเห็นที่หน้า "ประมูลไอดี" · ผู้ชนะได้ไอดีหนึ่งตัวจากสต็อกของสินค้าที่เลือกตอนปิด</span></p>
           <form onsubmit="return createAuction(event)" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs items-end">
@@ -888,8 +895,20 @@
           </div>
 
           <div class="apple-card p-6 space-y-3">
-            <h3 class="font-display font-semibold text-base">ประวัติการแก้ไข (50 รายการล่าสุด)</h3>
-            <button type="button" onclick="loadAudit()" class="apple-explore-pill px-4 py-2 text-xs">โหลดประวัติ</button>
+            <h3 class="font-display font-semibold text-base">ข้อความสำเร็จรูปตอบลูกค้า</h3>
+            <p class="text-xs text-slate">1 บรรทัด = 1 ข้อความ (สูงสุด 20) · โผล่เป็นปุ่มในหน้าต่างหมายเหตุของออเดอร์ · เว้นว่าง = ใช้ชุดเริ่มต้น</p>
+            <textarea id="replies-text" rows="6" maxlength="4000" class="w-full apple-input p-3 text-xs"></textarea>
+            <button type="button" onclick="saveReplies()" class="apple-pricing-pill px-5 py-2 text-xs">บันทึก</button>
+          </div>
+          <div class="apple-card p-6 space-y-3">
+            <h3 class="font-display font-semibold text-base">ประวัติการแก้ไข (500 รายการล่าสุด)</h3>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" onclick="loadAudit()" class="apple-explore-pill px-4 py-2">โหลดประวัติ</button>
+              <input id="audit-by" oninput="renderAudit()" placeholder="ผู้ทำ (อีเมล)" aria-label="กรองตามผู้ทำ" class="apple-input px-2 py-1.5 w-36">
+              <input id="audit-q" oninput="renderAudit()" placeholder="ค้นหาการกระทำ/เป้าหมาย" aria-label="ค้นหา" class="apple-input px-2 py-1.5 w-44">
+              <input id="audit-from" type="date" onchange="renderAudit()" aria-label="ตั้งแต่วันที่" class="apple-input px-2 py-1.5"><span class="text-slate">ถึง</span><input id="audit-to" type="date" onchange="renderAudit()" aria-label="ถึงวันที่" class="apple-input px-2 py-1.5">
+              <button type="button" onclick="exportAuditCsv()" class="apple-explore-pill px-3 py-1.5">ส่งออก CSV</button><span id="audit-count" class="text-slate"></span>
+            </div>
             <div id="audit-list" class="space-y-2 text-xs"></div>
           </div>
           <div class="apple-card p-6 space-y-3">
@@ -1533,7 +1552,9 @@
       <p id="note-modal-order" class="text-xs text-slate mb-3"></p>
       <input type="hidden" id="note-order-id">
       <textarea id="note-text" rows="4" maxlength="500" placeholder="เช่น นัดเข้าเกม 21:00 น. / กำลังโยนของ 10/15 กอง" class="w-full apple-input p-3 text-sm"></textarea>
+      <div id="note-replies" class="flex flex-wrap gap-1.5 mt-2" aria-label="ข้อความสำเร็จรูป"></div>
       <p class="text-[11px] text-slate mt-1">ลูกค้าเห็นข้อความนี้ในหน้าออเดอร์ของฉัน</p>
+      <label class="flex items-center gap-2 text-xs mt-2"><input type="checkbox" id="note-push"> ส่งแจ้งเตือนถึงลูกค้าทันที</label>
       <div class="flex justify-end gap-2 mt-4"><button type="button" onclick="closeModal('note-modal')" class="apple-explore-pill px-5 py-2 text-xs">ยกเลิก</button><button type="submit" class="apple-pricing-pill px-6 py-2 text-xs">บันทึก</button></div>
     </form>
   </div>

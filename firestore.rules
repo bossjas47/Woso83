@@ -23,14 +23,20 @@ service cloud.firestore {
     // ---------- Catalogue ----------
     match /products/{productId} {
       allow read: if true;
-      allow write: if can('products');
+      // staff without the 'price' permission may edit everything except the price fields
+      allow create: if can('products') && (isAdmin() || hasPerm('price'));
+      allow delete: if can('products');
+      allow update: if can('products') && (isAdmin() || hasPerm('price')
+        || (request.resource.data.get('price', null) == resource.data.get('price', null)
+          && request.resource.data.get('basePrice', null) == resource.data.get('basePrice', null)
+          && request.resource.data.get('ammoRate', null) == resource.data.get('ammoRate', null)));
       allow update: if hasPerm('pay') && staffKeys(['stock', 'updatedAt']); // approving / cancelling an order moves stock
       // Game-ID credentials: admin / products / pay (an approved order hands one out); the Worker bypasses rules.
       match /stock_items/{itemId} { allow read, write: if can('products') || hasPerm('pay'); }
     }
     // Ammo-bundle quotes (ไก่กระสุน): written by the Worker only; admins read them to sort out paid-but-undelivered guests.
     match /ammo_quotes/{id} { allow read: if isAdmin(); allow write: if false; }
-    match /audit_logs/{id} { allow read: if isAdmin(); allow create: if signedIn() && (isAdmin() || hasPerm('products') || hasPerm('promos') || hasPerm('boxes')); allow update, delete: if false; }
+    match /audit_logs/{id} { allow read: if isAdmin(); allow create: if signedIn() && (isAdmin() || hasPerm('products') || hasPerm('promos') || hasPerm('boxes') || hasPerm('credit')); allow update, delete: if false; }
     match /ammo_claims/{id} { allow read: if isAdmin(); allow write: if false; }
 
     // Reviews: id = order id (one per order). Buyer files it as 'pending' for their own completed order; admin shows / hides / deletes.
@@ -166,12 +172,12 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vaultAlerts']) && request.resource.data.vaultAlerts == 0;
       allow write: if isAdmin();
       // delegated: wallet / contact fields (users, pay), vault days (vault); role, login and perms never
-      allow update: if (hasPerm('users') && staffKeys(['walletBalance', 'username', 'contactEmail', 'facebook', 'status', 'adminUpdatedAt']))
+      allow update: if (hasPerm('users') && staffKeys(['username', 'contactEmail', 'facebook', 'status', 'adminUpdatedAt']))
         || (hasPerm('pay') && staffKeys(['walletBalance']))
         || (hasPerm('vault') && staffKeys(['vaultUntil']));
     }
     match /wallet_logs/{id} {
-      allow read: if can('users') || (signedIn() && resource.data.uid == request.auth.uid);
+      allow read: if can('users') || hasPerm('credit') || (signedIn() && resource.data.uid == request.auth.uid);
       allow write: if can('users') || hasPerm('pay');
     }
 

@@ -19,7 +19,7 @@ const comboOn = () => { const l = items.map(it => info(it)).filter(d => d && !d.
 function info(it) {
   const p = PRODUCTS[it.productId];
   if (!p) return null;
-  const srv = isServiceProduct(p, CATS), mode = (p.farmModes || []).find(m => m.key === it.farmMode) || null;
+  const srv = isServiceProduct(p, CATS), mode = (p.farmModes || []).find(m => m.key === it.farmMode) || (srv ? (p.farmModes || [])[0] : null) || null; // no mode saved: the first one, same as the Worker
   const rate = mode ? num(mode.price) : srv ? (num(p.serviceRate) || num(p.price)) : num(p.price);
   const min = srv ? minQtyOf(p, CATS) : 1, max = srv ? 99999 : Math.max(0, Math.floor(num(p.stock)));
   return { p, srv, mode, rate, min, max, unit: unitOf(p, CATS), self: srv && mode?.key === 'self', out: num(p.stock) <= 0, total: lineTotal(Math.round(it.quantity * rate * 100) / 100) };
@@ -40,7 +40,7 @@ function render() {
     return `<article class="apple-card p-4 ${d.out ? 'opacity-60' : ''}">
       <div class="flex gap-3"><img ${imgAttrs(d.p.image || FALLBACK, 160, 160)} alt="" class="w-20 h-20 rounded-2xl object-cover bg-mist shrink-0">
         <div class="min-w-0 flex-1"><h2 class="text-[15px] font-semibold leading-snug line-clamp-2">${esc(d.p.name)}</h2>
-          <p class="text-xs text-slate mt-0.5">${esc(d.mode ? d.mode.label + ' · ' : '')}${baht(d.rate)}${d.srv ? ' / ' + esc(d.unit) : ''}</p>
+          ${(d.p.farmModes || []).length > 1 ? `<select onchange="cartMode(${i}, this.value)" aria-label="รูปแบบบริการ" class="apple-input px-2 py-1 text-xs mt-1">${d.p.farmModes.map(m => `<option value="${esc(m.key)}" ${m.key === d.mode?.key ? 'selected' : ''}>${esc(m.label)} · ${baht(m.price)}</option>`).join('')}</select>` : ''}<p class="text-xs text-slate mt-0.5">${esc((d.p.farmModes || []).length > 1 ? '' : d.mode ? d.mode.label + ' · ' : '')}${baht(d.rate)}${d.srv ? ' / ' + esc(d.unit) : ''}</p>
           ${d.out ? '<p class="text-xs text-launchOrange mt-1">สินค้าหมด (ไม่รวมในยอด)</p>' : `<div class="flex items-center justify-between mt-2"><div class="flex items-center bg-mist rounded-full p-0.5"><button onclick="cartQty(${i},-1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="ลด">−</button><span class="w-10 text-center font-semibold">${it.quantity}</span><button onclick="cartQty(${i},1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="เพิ่ม">+</button></div><p class="font-heading font-semibold">${baht(d.total)}</p></div>`}
         </div><button onclick="cartRemove(${i})" aria-label="ลบ" class="self-start text-slate text-xl leading-none px-1">×</button></div>
       ${!d.out && d.srv ? (d.self ? `<div class="grid gap-2 mt-3"><input data-k="${esc(key(it))}" data-f="contact" value="${esc(f.contact || '')}" maxlength="200" placeholder="ชื่อในเกม / UID" class="apple-input px-4 py-2.5 text-sm"><input data-k="${esc(key(it))}" data-f="time" value="${esc(f.time || '')}" maxlength="200" placeholder="เวลาที่พร้อมเข้าเกม" class="apple-input px-4 py-2.5 text-sm"></div>`
@@ -59,13 +59,21 @@ function cartQty(i, d) {
   it.quantity = Math.min(x.max || 1, Math.max(x.min, it.quantity + d));
   render(); persist();
 }
+/** Switch the play mode of a line; if the cart already has that product in the new mode the two lines merge. */
+function cartMode(i, key) {
+  const it = items[i]; if (!it) return;
+  it.farmMode = key;
+  const twin = items.find((x, n) => n !== i && x.productId === it.productId && (x.farmMode || '') === key);
+  if (twin) { twin.quantity += it.quantity; items.splice(i, 1); }
+  render(); persist();
+}
 function cartRemove(i) { items.splice(i, 1); render(); persist(); }
 
 async function cartPay() {
   if (paying) return;
   const lines = live(), body = [];
   for (const { it, d } of lines) {
-    const f = form[key(it)] || {}, line = { productId: it.productId, quantity: it.quantity, farmMode: it.farmMode || null, expectedAmount: d.total };
+    const f = form[key(it)] || {}, line = { productId: it.productId, quantity: it.quantity, farmMode: d.mode?.key || it.farmMode || null, expectedAmount: d.total };
     if (d.srv) {
       if (form.facebook.trim().length < 2) { toast('กรุณากรอกชื่อหรือลิงก์ Facebook', 'error'); document.getElementById('cart-facebook')?.focus(); return; }
       line.buyerFacebook = form.facebook.trim();
@@ -111,4 +119,4 @@ let unsub = null;
     render();
   });
 })();
-Object.assign(window, { cartQty, cartRemove, cartPay });
+Object.assign(window, { cartQty, cartRemove, cartPay, cartMode });

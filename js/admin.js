@@ -33,13 +33,13 @@ document.querySelectorAll('.admin-table').forEach(table => {
 });
 
 /** Per-person permissions (custom claim `perms`); admins can do everything. Mirrors firestore.rules + the Worker. */
-const PERM_LABEL = { orders: 'ทำคิวงานบริการ (เริ่มงาน/ส่งมอบ/หมายเหตุ)', pay: 'ยืนยันชำระ ยกเลิก/คืนเงิน ดูสลิป เติมเงิน (ทุกออเดอร์)', products: 'สินค้า สต็อก หมวดหมู่', promos: 'โค้ดส่วนลด และโปรเติมเงิน', rentals: 'ไอดีเช่า', boxes: 'กล่องสุ่ม', vault: 'โปรแกรมไอดีไก่', users: 'ผู้ใช้ (ดู/ปรับเครดิต/ข้อมูลติดต่อ)' };
+const PERM_LABEL = { orders: 'ทำคิวงานบริการ (เริ่มงาน/ส่งมอบ/หมายเหตุ)', pay: 'ยืนยันชำระ ยกเลิก/คืนเงิน ดูสลิป เติมเงิน (ทุกออเดอร์)', products: 'สินค้า สต็อก หมวดหมู่', promos: 'โค้ดส่วนลด และโปรเติมเงิน', rentals: 'ไอดีเช่า', boxes: 'กล่องสุ่ม', vault: 'โปรแกรมไอดีไก่', users: 'ผู้ใช้ (ดู/ข้อมูลติดต่อ)', credit: 'ปรับเครดิตลูกค้า (ตั้งเพดาน ฿/วัน ด้านล่าง)', price: 'แก้ราคาสินค้า', profit: 'ดูต้นทุน/กำไร/รายงานรายเดือน' };
 let ADMIN = false, PERMS = new Set();
 const can = (p) => ADMIN || PERMS.has(p);
 const STAFF_ONLY_QUEUE = () => !ADMIN && !can('pay'); // can work service jobs but not handle money
-const TAB_OK = { dashboard: () => ADMIN, settings: () => ADMIN, products: () => can('products'), categories: () => can('products'), orders: () => can('orders') || can('pay'), topups: () => can('pay'), rentals: () => can('rentals'), boxes: () => can('boxes'), vault: () => can('vault'), users: () => can('users'), promos: () => can('promos') };
+const TAB_OK = { dashboard: () => ADMIN, settings: () => ADMIN, products: () => can('products'), categories: () => can('products'), orders: () => can('orders') || can('pay'), topups: () => can('pay'), rentals: () => can('rentals'), boxes: () => can('boxes'), vault: () => can('vault'), users: () => can('users') || can('credit'), promos: () => can('promos') };
 const tabOk = (t) => (TAB_OK[t] || (() => false))();
-let REVIEWS_P = [], ACLAIMS = [], AQUOTES = [], PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
+let REPLIES = [], REVIEWS_P = [], ACLAIMS = [], AQUOTES = [], PRODUCTS = [], CATS = [], ORDERS = [], TOPUPS = [], USERS = [], TPROMOS = [], RENTALS = [], STATS = {}, SETTINGS = {};
 let rentalFilter = 'todo';
 let me = null;
 
@@ -160,6 +160,7 @@ function startListeners() {
   const warn = (what) => (e) => { console.warn(what, e); triggerToast(`โหลด${what}ไม่สำเร็จ`, 'error'); };
   if (can('products') || can('boxes') || can('promos')) onSnapshot(collection(db, 'products'), (s) => { PRODUCTS = s.docs.map(d => ({ ...d.data(), id: d.id })); renderAdminProducts(); renderAuctionsAdmin(); renderProfit(); updateAdminMetrics(); renderAdminCategories(); renderDashboard(); if (ADMIN && Object.keys(SETTINGS).length) renderSpotlightRows(); }, warn('สินค้า'));
   if (can('products') || can('boxes') || can('promos')) watchCategories((list) => { CATS = list; renderAdminCategories(); fillProductCategorySelect(); renderAdminProducts(); });
+  if (can('profit')) getDoc(doc(db, 'system_settings', 'finance')).then(d => { if ($('month-fee')) { $('month-fee').value = num(d.data()?.slipFee) || ''; monthReport(); } }).catch(() => {});
   if (can('pay')) onSnapshot(collection(db, 'orders'), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); renderBadges(); renderWinback(); renderProfit(); }, warn('ออเดอร์'));
   if (can('pay')) onSnapshot(collection(db, 'topup_transactions'), (s) => { TOPUPS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminTopups(); renderBadges(); }, warn('รายการเติมเงิน'));
   if (can('rentals')) onSnapshot(collection(db, 'rentals'), (s) => { RENTALS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminRentals(); renderBadges(); }, warn('การเช่า'));
@@ -167,6 +168,7 @@ function startListeners() {
   if (can('promos')) onSnapshot(collection(db, 'topup_promos'), (s) => { TPROMOS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => num(a.minAmount) - num(b.minAmount)); renderTopupPromos(); });
   if (ADMIN) onSnapshot(query(collection(db, 'ammo_quotes'), where('status', 'in', ['open', 'paid_undelivered', 'refunded_credit'])), (s) => { AQUOTES = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDashboard(); }, warn('รายการกันไอดี'));
   if (can('products')) onSnapshot(collection(db, 'auctions'), (s) => { AUCTIONS = s.docs.map(d => ({ id: d.id, ...d.data() })); renderAuctionsAdmin(); }, warn('ประมูล'));
+  if (can('orders') || can('pay')) onSnapshot(doc(db, 'system', 'replies'), (d) => { REPLIES = Array.isArray(d.data()?.list) ? d.data().list : []; if (ADMIN && $('replies-text')) $('replies-text').value = REPLIES.join('\n'); }, warn('ข้อความสำเร็จรูป'));
   if (ADMIN) onSnapshot(query(collection(db, 'reviews'), where('status', '==', 'pending'), limit(50)), (s) => { REVIEWS_P = s.docs.map(d => ({ id: d.id, ...d.data() })); renderReviewsDash(); }, warn('รีวิว'));
   if (ADMIN) onSnapshot(query(collection(db, 'ammo_claims'), where('status', '==', 'open')), (s) => { ACLAIMS = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDashboard(); }, warn('รายการเคลม'));
   onSnapshot(doc(db, 'stats', 'public'), (s) => { STATS = s.exists() ? s.data() : {}; renderStatHints(); });
@@ -360,6 +362,9 @@ function openProductModal(productId = null) {
   $('product-crud-form').reset(); $('spec-fields').innerHTML = ''; // boxes from the previous product must not leak into this one
   $('product-modal-heading').innerText = p ? 'แก้ไขสินค้า: ' + p.name : 'เพิ่มสินค้าใหม่';
   $('prod-edit-id').value = p?.id || '';
+  if (!p && !can('price')) return triggerToast('ไม่มีสิทธิ์ตั้งราคาสินค้าใหม่', 'error');
+  ['prod-price', 'prod-sale-price', 'prod-ammo-rate'].forEach(id => { const el = $(id); if (el) el.disabled = !can('price'); });
+  $('prod-cost')?.closest('div')?.classList.toggle('hidden', !can('profit'));
   if (p) {
     const set = (id, v) => { $(id).value = v ?? ''; };
     set('prod-name', p.name); set('prod-koen', p.koen); set('prod-koen-label', p.koenLabel); set('prod-price', p.saleOn ? p.basePrice : p.price); set('prod-stock', p.stock ?? 0);
@@ -399,12 +404,29 @@ function closeProductModal() { $('product-form-modal').classList.add('hidden'); 
 const audit = (action, target, detail = '') => setDoc(doc(collection(db, 'audit_logs')), { at: serverTimestamp(), by: me?.email || me?.uid || '', action, target: String(target || '').slice(0, 120), detail: String(detail).slice(0, 600) }).catch(e => console.warn('audit:', e));
 const AUDIT_FIELDS = ['name', 'price', 'category', 'active', 'isAmmo', 'ammoRate', 'ammoMin', 'ammoMaxIds', 'ammoLowStock', 'ammoDiscType', 'ammoDiscValue', 'ammoDiscFrom', 'ammoDiscTo', 'ammoTiers', 'ammoTiersFrom', 'ammoTiersTo', 'requireLogin'];
 const auditVal = (v) => v?._methodName === 'deleteField' || v == null || v === '' ? '-' : JSON.stringify(v);
+let AUDIT = [];
 async function loadAudit() {
   const box = $('audit-list'); box.innerHTML = '<p class="text-slate">กำลังโหลด…</p>';
   try {
-    const rows = (await getDocs(query(collection(db, 'audit_logs'), orderBy('at', 'desc'), limit(50)))).docs.map(d => d.data());
-    box.innerHTML = rows.length ? rows.map(r => `<div class="rounded-xl bg-mist px-3 py-2"><p><b>${adminEsc(r.action)}</b> ${adminEsc(r.target)} <span class="text-slate">· ${adminEsc(r.by)} · ${adminEsc(fmtDate(r.at))}</span></p>${r.detail ? `<p class="text-slate break-words">${adminEsc(r.detail)}</p>` : ''}</div>`).join('') : '<p class="text-slate">ยังไม่มีประวัติ</p>';
+    AUDIT = (await getDocs(query(collection(db, 'audit_logs'), orderBy('at', 'desc'), limit(500)))).docs.map(d => d.data());
+    renderAudit();
   } catch (e) { console.warn(e); box.innerHTML = '<p class="text-red-500">โหลดไม่สำเร็จ (ตรวจว่า Publish firestore.rules ใหม่แล้ว)</p>'; }
+}
+/** The loaded audit rows after the actor / text / date filters (dates are Thai-local days, inclusive). */
+function auditFiltered() {
+  const v = (id) => ($(id)?.value || '').trim().toLowerCase(), by = v('audit-by'), q = v('audit-q');
+  const from = $('audit-from')?.value ? new Date($('audit-from').value + 'T00:00:00').getTime() : 0, to = $('audit-to')?.value ? new Date($('audit-to').value + 'T23:59:59').getTime() : Infinity;
+  return AUDIT.filter(r => { const t = tsMs(r.at); return t >= from && t <= to && (!by || String(r.by).toLowerCase().includes(by)) && (!q || `${r.action} ${r.target} ${r.detail}`.toLowerCase().includes(q)); });
+}
+function renderAudit() {
+  const box = $('audit-list'), rows = auditFiltered();
+  $('audit-count').textContent = `${rows.length}/${AUDIT.length} รายการ`;
+  box.innerHTML = rows.length ? rows.slice(0, 200).map(r => `<div class="rounded-xl bg-mist px-3 py-2"><p><b>${adminEsc(r.action)}</b> ${adminEsc(r.target)} <span class="text-slate">· ${adminEsc(r.by)} · ${adminEsc(fmtDate(r.at))}</span></p>${r.detail ? `<p class="text-slate break-words">${adminEsc(r.detail)}</p>` : ''}</div>`).join('') + (rows.length > 200 ? '<p class="text-slate">แสดง 200 รายการแรก — ส่งออก CSV เพื่อดูทั้งหมด</p>' : '') : '<p class="text-slate">ไม่พบรายการ</p>';
+}
+function exportAuditCsv() {
+  const rows = [['เวลา', 'ผู้ทำ', 'การกระทำ', 'เป้าหมาย', 'รายละเอียด'], ...auditFiltered().map(r => [fmtDate(r.at), r.by, r.action, r.target, r.detail])];
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' })), download: `audit-${new Date().toISOString().slice(0, 10)}.csv` });
+  a.click(); URL.revokeObjectURL(a.href);
 }
 /** Everything needed to rebuild the shop: categories, settings, products and ALL their stock rows (IDs + passwords). */
 async function exportBackup() {
@@ -457,7 +479,7 @@ async function handleProductFormSubmit(e) {
     salePrice: saleOk ? salePrice : deleteField(), saleFrom: saleOk && sFrom ? sFrom : deleteField(), saleTo: saleOk && sTo ? sTo : deleteField(),
     basePrice: saleLive ? (farmModes ? Math.min(fId, fSelf) : price) : deleteField(), saleOn: saleLive ? true : deleteField(),
     variantGroup: $('prod-variant-group').value.trim() || deleteField(), variantLabel: $('prod-variant-label').value.trim() || deleteField(),
-    cost: num($('prod-cost').value) > 0 ? num($('prod-cost').value) : deleteField(),
+    ...(can('profit') ? { cost: num($('prod-cost').value) > 0 ? num($('prod-cost').value) : deleteField() } : {}),
     hideAt: localToMs($('prod-hide-at').value) > Date.now() ? localToMs($('prod-hide-at').value) : deleteField(),
     unlisted: $('prod-unlisted').checked || deleteField(),
     dropAt: !isSrv && localToMs($('prod-drop-at')?.value) > Date.now() ? localToMs($('prod-drop-at').value) : deleteField(),
@@ -631,17 +653,22 @@ function renderDashboard() {
   $('dash-top').innerHTML = top.length ? top.map(([n, x], k) => `<div class="flex justify-between gap-3"><span class="truncate">${k + 1}. ${adminEsc(n)}</span><span class="shrink-0 text-slate">${x.n} รายการ · <b class="text-ink">฿${money(x.v)}</b></span></div>`).join('') : '<p class="text-slate">ยังไม่มีข้อมูล</p>';
   // to-do
   const low = PRODUCTS.filter(p => !isServiceProduct(p, CATS) && num(p.stock) <= 3).sort((a, b) => num(a.stock) - num(b.stock));
-  const todo = [
-    [ORDERS.filter(o => o.status === 'pending_payment').length, 'ออเดอร์รอตรวจการชำระเงิน', 'orders'],
-    [TOPUPS.filter(t => t.status === 'pending').length, 'รายการเติมเงินรอตรวจ', 'topups'],
-    [RENTALS.filter(r => r.status === 'returned' || r.status === 'expired').length, 'การเช่ารอตรวจ (เปลี่ยนรหัส/คืนมัดจำ)', 'rentals'],
-    [ACLAIMS.length, 'คำขอเคลมไอดีไก่กระสุน (อยู่ในแผงไก่กระสุนด้านล่าง)', 'dashboard'],
-    [REVIEWS_P.length, 'รีวิวรออนุมัติ (อยู่ด้านล่าง)', 'dashboard']
-  ].filter(x => x[0]);
-  $('dash-todo').innerHTML = todo.map(([n, t, tab]) => `<button type="button" onclick="switchAdminTab('${tab}')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span>${t}</span><b class="text-launchOrange">${n}</b></button>`).join('')
+  // "วันนี้ต้องทำ": every pending pile with its oldest item's age; piles past their SLA come first, then the oldest
+  const nowMs = Date.now(), oldest = (rows, f = (x) => x.createdAt) => rows.length ? Math.min(...rows.map(x => tsMs(f(x)) || nowMs)) : nowMs;
+  const piles = [ // [rows, label, tab, SLA hours, timestamp getter]
+    [ORDERS.filter(o => o.status === 'pending_payment'), 'ออเดอร์รอตรวจการชำระเงิน', 'orders', 2],
+    [TOPUPS.filter(t => t.status === 'pending'), 'รายการเติมเงินรอตรวจ', 'topups', 1],
+    [ORDERS.filter(o => o.productType === 'service' && o.status === 'processing'), 'งานบริการที่ยังไม่ส่งมอบ', 'orders', 24],
+    [ACLAIMS, 'คำขอเคลมไอดีไก่กระสุน (แผงด้านล่าง)', 'dashboard', 12],
+    [RENTALS.filter(r => r.status === 'returned' || r.status === 'expired'), 'การเช่ารอตรวจ (เปลี่ยนรหัส/คืนมัดจำ)', 'rentals', 6, (r) => r.endMs],
+    [REVIEWS_P, 'รีวิวรออนุมัติ (แผงด้านล่าง)', 'dashboard', 48]
+  ].filter(x => x[0].length).map(([rows, t, tab, sla, f]) => { const age = (nowMs - oldest(rows, f)) / 36e5; return { n: rows.length, t, tab, age, late: age > sla }; })
+    .sort((x, y) => y.late - x.late || y.age - x.age);
+  const ageTxt = (h) => h < 1 ? '<1 ชม.' : h < 48 ? `${Math.floor(h)} ชม.` : `${Math.floor(h / 24)} วัน`;
+  const todo = piles;
+  $('dash-todo').innerHTML = piles.map(x => `<button type="button" onclick="switchAdminTab('${x.tab}')" class="w-full flex justify-between gap-3 rounded-xl bg-mist px-3 py-2 text-left"><span>${x.t}<span class="${x.late ? 'text-red-500 font-semibold' : 'text-slate'}"> · เก่าสุด ${ageTxt(x.age)}${x.late ? ' · เกินเวลา' : ''}</span></span><b class="text-launchOrange">${x.n}</b></button>`).join('')
     + low.slice(0, 6).map(p => `<button type="button" onclick="switchAdminTab('products')" class="w-full flex justify-between rounded-xl bg-mist px-3 py-2 text-left"><span class="truncate">สต็อกเหลือน้อย: ${adminEsc(p.name)}</span><b class="${num(p.stock) <= 0 ? 'text-red-500' : 'text-launchOrange'}">${num(p.stock)}</b></button>`).join('')
     || '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
-  if (!todo.length && !low.length) $('dash-todo').innerHTML = '<p class="text-slate">ไม่มีเรื่องค้าง</p>';
   renderAmmoDash(day0, D);
 }
 function renderReviewsDash() {
@@ -985,17 +1012,32 @@ async function clearGamePassword(orderId) {
   try { await updateDoc(doc(db, 'orders', orderId), { gamePassword: deleteField(), gamePasswordClearedAt: serverTimestamp() }); triggerToast('ลบรหัสเกมแล้ว', 'success'); }
   catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
 }
+const DEFAULT_REPLIES = ['รับเรื่องแล้ว กำลังตรวจสอบให้ครับ', 'ขอเวลาดำเนินการเพิ่มเล็กน้อย จะอัปเดตให้เร็วที่สุดครับ', 'ตรวจสอบแล้ว ปัญหาเกิดจากข้อมูลไม่ตรง รบกวนส่งข้อมูลใหม่อีกครั้งครับ', 'ไม่สามารถเคลมได้ เนื่องจากไม่เข้าเงื่อนไขการรับประกัน', 'ดำเนินการเรียบร้อยแล้ว ขอบคุณที่ใช้บริการครับ'];
+const useReply = (i) => { $('note-text').value = (REPLIES.length ? REPLIES : DEFAULT_REPLIES)[i] || ''; };
+async function saveReplies() {
+  const list = $('replies-text').value.split('\n').map(x => x.trim().slice(0, 200)).filter(Boolean).slice(0, 20);
+  try { await setDoc(doc(db, 'system', 'replies'), { list }); audit('ข้อความสำเร็จรูป', '', `${list.length} ข้อความ`); triggerToast('บันทึกข้อความสำเร็จรูปแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
+}
 function openNote(orderId) {
   const o = ORDERS.find(x => x.id === orderId); if (!o) return;
   $('note-order-id').value = orderId;
   $('note-modal-order').textContent = `${o.orderNumber || orderId} · ${o.productName}`;
   $('note-text').value = o.adminNote || '';
+  $('note-push').checked = false;
+  const rs = REPLIES.length ? REPLIES : DEFAULT_REPLIES;
+  $('note-replies').innerHTML = rs.map((t, i) => `<button type="button" onclick="useReply(${i})" class="apple-explore-pill px-2.5 py-1 text-[11px] text-left">${adminEsc(t.slice(0, 40))}${t.length > 40 ? '…' : ''}</button>`).join('');
   openModal('note-modal'); $('note-text').focus();
 }
 async function saveOrderNote(e) {
   e.preventDefault();
   const id = $('note-order-id').value, text = $('note-text').value.trim();
-  try { await updateDoc(doc(db, 'orders', id), { adminNote: text || deleteField(), adminNoteAt: serverTimestamp() }); closeModal('note-modal'); triggerToast('บันทึกหมายเหตุแล้ว', 'success'); }
+  try {
+    await updateDoc(doc(db, 'orders', id), { adminNote: text || deleteField(), adminNoteAt: serverTimestamp() });
+    const push = $('note-push').checked && text; closeModal('note-modal');
+    if (push) { const r = await callWorker('/admin/msg', { orderId: id, text }).catch(() => null); triggerToast(r ? (r.sent ? 'บันทึกและส่งแจ้งเตือนลูกค้าแล้ว' : 'บันทึกแล้ว (ลูกค้ายังไม่ได้เปิดรับแจ้งเตือน)') : 'บันทึกแล้ว แต่ส่งแจ้งเตือนไม่สำเร็จ', r ? 'success' : 'error'); }
+    else triggerToast('บันทึกหมายเหตุแล้ว', 'success');
+  }
   catch (err) { triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
 async function viewSlip(id) {
@@ -1114,7 +1156,9 @@ function copyProductLink(id) {
 
 /** Sales history and profit per product from the orders already loaded (paid orders only; cost = prod-cost x units). */
 function renderProfit() {
-  const box = $('profit-list'); if (!box || !can('pay')) return;
+  const card = $('profit-card'); if (card) card.classList.toggle('hidden', !can('profit'));
+  const box = $('profit-list'); if (!box || !can('profit')) return;
+  monthReport();
   const by = {};
   for (const o of ORDERS.filter(PAID)) {
     if (!o.productId) continue;
@@ -1126,6 +1170,41 @@ function renderProfit() {
   const tot = rows.filter(r => r.profit !== null).reduce((s, r) => s + r.profit, 0);
   box.innerHTML = (rows.some(r => r.profit !== null) ? `<p class="text-slate">กำไรรวมสินค้าที่ใส่ต้นทุน: <b class="text-ink">฿${money(tot, 0)}</b></p>` : '') + (rows.map(r => `<details class="rounded-xl bg-mist px-3 py-2"><summary class="cursor-pointer flex gap-3 items-center"><b class="truncate mr-auto">${adminEsc(r.p.name)}</b><span class="text-slate">ขาย ${money(r.units, 0)}</span><span>฿${money(r.rev, 0)}</span><span style="min-width:84px;text-align:right;color:${r.profit === null ? '#86868b' : r.profit >= 0 ? '#0a7a3b' : '#d70015'}">${r.profit === null ? 'ไม่มีต้นทุน' : (r.profit >= 0 ? '+' : '−') + '฿' + money(Math.abs(r.profit), 0)}</span></summary>
     <div class="mt-2 space-y-1 text-slate">${r.orders.slice(0, 15).map(o => `<p>${adminEsc(fmtDate(o.createdAt))} · ${adminEsc(buyerName(o))} · ${adminEsc(o.orderNumber || '')} · ฿${money(num(o.amount))}</p>`).join('')}${r.orders.length > 15 ? `<p>… อีก ${r.orders.length - 15} ออเดอร์</p>` : ''}</div></details>`).join('') || '<p class="text-slate">ยังไม่มียอดขาย</p>');
+}
+
+/** Monthly P&L from the loaded feeds. Month = Thai calendar month; compares with the month before. Pure over ORDERS/RENTALS/TOPUPS/PRODUCTS/box opens. */
+export function monthStats(ym, slipFee = 0) {
+  const [y, m] = ym.split('-').map(Number), th = 7 * 36e5;
+  const from = Date.UTC(y, m - 1, 1) - th, to = Date.UTC(y, m, 1) - th, inM = (v) => { const t = tsMs(v); return t >= from && t < to; };
+  const cost = (id, units) => num(PRODUCTS.find(x => x.id === id)?.cost) * units;
+  const paid = ORDERS.filter(o => PAID(o) && inM(o.createdAt)), rentals = RENTALS.filter(r => inM(r.createdAt));
+  const opens = (window.getBoxOpens?.() || []).filter(b => inM(b.createdAt)), tops = TOPUPS.filter(t => t.status === 'completed' && inM(t.completedAt || t.createdAt));
+  const r = { orders: paid.length, rentals: rentals.length, opens: opens.length };
+  r.revenue = paid.reduce((a, o) => a + num(o.amount), 0) + rentals.reduce((a, x) => a + num(x.price), 0) + opens.reduce((a, b) => a + num(b.price), 0);
+  r.cogs = paid.reduce((a, o) => a + cost(o.productId, o.isAmmo ? num(o.ammoTotal) : num(o.receiveQty) || num(o.quantity) || 1), 0);
+  r.discounts = paid.reduce((a, o) => a + num(o.discount) + num(o.rankDiscount) + num(o.comboDiscount), 0);
+  r.slips = tops.filter(t => t.verifiedVia === 'easyslip').length; r.slipFees = r.slips * slipFee;
+  r.bonus = tops.reduce((a, t) => a + num(t.bonusCredit), 0); // free credit handed out on top-ups
+  r.boxPayout = opens.reduce((a, b) => a + (b.kind === 'credit' ? num(b.amount) : b.kind === 'account' ? cost(b.productId, 1) : b.kind === 'service' ? cost(b.productId, num(b.qty) || 1) : 0), 0);
+  r.boxProfit = opens.reduce((a, b) => a + num(b.price), 0) - r.boxPayout;
+  r.net = r.revenue - r.cogs - r.slipFees - r.bonus - r.boxPayout;
+  return r;
+}
+let SLIP_FEE = 0;
+function monthReport() {
+  const box = $('month-body'); if (!box || !can('profit')) return;
+  const inp = $('month-pick'); if (!inp.value) inp.value = new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 7);
+  const [y, m] = inp.value.split('-').map(Number), prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+  SLIP_FEE = num($('month-fee').value);
+  const a = monthStats(inp.value, SLIP_FEE), b = monthStats(prev, SLIP_FEE);
+  const row = (label, k, sign = 1, strong = false) => { const d = b[k] ? Math.round((a[k] - b[k]) / Math.abs(b[k]) * 100) : null; return `<div class="flex justify-between gap-3 ${strong ? 'font-semibold border-t border-hairline pt-1.5' : ''}"><span>${label}</span><span>${sign < 0 ? '−' : ''}฿${money(Math.abs(a[k]), 0)} <span class="text-slate font-normal">${d === null ? '' : `(${d >= 0 ? '+' : ''}${d}% vs เดือนก่อน ฿${money(b[k], 0)})`}</span></span></div>`; };
+  const noCost = PRODUCTS.some(p => num(p.cost) <= 0) ? '<p class="text-[11px] text-slate">สินค้าที่ไม่ได้ใส่ต้นทุนนับต้นทุนเป็น ฿0 กำไรจะสูงกว่าจริง</p>' : '';
+  box.innerHTML = row('รายได้ (ออเดอร์ + เช่า + กล่องสุ่ม)', 'revenue') + row('ต้นทุนสินค้า', 'cogs', -1) + row(`ค่าเช็คสลิป (${a.slips} ใบ)`, 'slipFees', -1) + row('โบนัสเติมเงินที่แจกฟรี', 'bonus', -1) + row('ของรางวัลกล่องสุ่มที่จ่ายออก', 'boxPayout', -1)
+    + row('กำไรสุทธิ', 'net', 1, true) + '<div class="pt-1.5 text-slate space-y-1">' + row('ส่วนลดที่ให้ลูกค้า (หักจากรายได้แล้ว)', 'discounts') + row('กำไรกล่องสุ่ม (ค่าเปิด − ของรางวัล)', 'boxProfit') + '</div>' + noCost
+    + `<p class="text-[11px] text-slate">${a.orders} ออเดอร์ · ${a.rentals} เช่า · ${a.opens} ครั้งเปิดกล่อง (กล่องสุ่มดูย้อนหลังได้ 200 ครั้งล่าสุด)</p>`;
+}
+async function saveSlipFee() {
+  try { await setDoc(doc(db, 'system_settings', 'finance'), { slipFee: num($('month-fee').value) }, { merge: true }); monthReport(); } catch (e) { console.warn(e); triggerToast('บันทึกค่าเช็คสลิปไม่สำเร็จ', 'error'); }
 }
 
 const csvCell = (v) => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }; // a leading = + - @ would run as an Excel formula
@@ -1248,6 +1327,7 @@ function openUserModal(uid) {
   $('um-title-color').innerHTML = Object.entries(TITLE_COLORS).map(([k, c]) => `<option value="${k}" ${u.titleColor === k ? 'selected' : ''}>${c[2]}</option>`).join('');
   $('um-role').value = u.role === 'admin' ? 'admin' : 'user';
   $('um-perms').innerHTML = Object.entries(PERM_LABEL).map(([k, t]) => `<label class="flex items-start gap-2 py-1"><input type="checkbox" value="${k}" ${(u.perms || []).includes(k) ? 'checked' : ''}> <span>${adminEsc(t)}</span></label>`).join('');
+  $('um-perms').insertAdjacentHTML('beforeend', `<label class="flex items-center gap-2 py-1 col-span-full"><span>เพดานปรับเครดิต ฿/วัน (ของคนนี้)</span><input id="um-credit-cap" type="number" min="0" step="100" value="${num(u.creditCap) || ''}" class="apple-input px-2 py-1 w-28"></label>`);
   syncPermBox();
   document.querySelectorAll('#um-pane-info input[id^="um-"], #um-pane-info select').forEach(el => { if (['um-username', 'um-password', 'um-role', 'um-status', 'um-title', 'um-title-color'].includes(el.id) || el.closest('#um-perms-wrap')) el.disabled = !ADMIN; });
   $('um-status').value = u.status === 'suspended' ? 'suspended' : 'active';
@@ -1288,6 +1368,8 @@ async function saveUserInfo(e) {
   const perms = role === 'admin' ? [] : [...document.querySelectorAll('#um-perms input:checked')].map(i => i.value);
   const oldPerms = Array.isArray(u.perms) ? u.perms : [];
   if (perms.join() !== oldPerms.join()) authChange.perms = perms;
+  const creditCap = perms.includes('credit') ? Math.max(0, Math.floor(num($('um-credit-cap')?.value))) : 0;
+  if (creditCap !== num(u.creditCap)) authChange.creditCap = creditCap;
   const newRole = role === 'admin' ? 'admin' : perms.length ? 'staff' : 'user';
   if ((status === 'suspended') !== (u.status === 'suspended')) authChange.disabled = status === 'suspended';
   const btn = $('um-save'); btn.disabled = true;
@@ -1299,7 +1381,7 @@ async function saveUserInfo(e) {
     }
     await updateDoc(doc(db, 'users', umUid), {
       username: username || u.username || '', contactEmail: $('um-contact-email').value.trim(), facebook: $('um-facebook').value.trim(),
-      ...(ADMIN ? { role: newRole, status, perms, title: $('um-title').value.trim().slice(0, 24), titleColor: $('um-title-color').value, ...(loginEmail ? { email: loginEmail } : {}) } : {}), adminUpdatedAt: serverTimestamp()
+      ...(ADMIN ? { role: newRole, status, perms, creditCap, title: $('um-title').value.trim().slice(0, 24), titleColor: $('um-title-color').value, ...(loginEmail ? { email: loginEmail } : {}) } : {}), adminUpdatedAt: serverTimestamp()
     });
     $('um-password').value = '';
     triggerToast(Object.keys(authChange).length && !workerUrl() ? 'บันทึกข้อมูลแล้ว (การล็อกอินยังไม่เปลี่ยน เพราะยังไม่ได้ตั้ง Worker)' : 'บันทึกข้อมูลผู้ใช้แล้ว', 'success');
@@ -1314,6 +1396,12 @@ async function saveUserWallet(e) {
   if (!(amt >= 0) || (mode !== 'set' && !(amt > 0))) return triggerToast('กรุณาใส่จำนวนเงิน', 'error');
   const btn = $('um-wsave'); btn.disabled = true;
   try {
+    if (!ADMIN) { // staff: the Worker enforces the daily cap
+      const r = await callWorker('/admin/wallet', { uid: umUid, mode, amount: amt, note });
+      $('um-balance').textContent = `฿${money(r.balance)}`; $('um-amount').value = ''; $('um-wnote').value = '';
+      triggerToast(`ปรับยอดเงินแล้ว (คงเหลือ ฿${money(r.balance)} · เหลือเพดานวันนี้ ฿${money(r.left)})`, 'success');
+      return loadWalletLogs();
+    }
     const after = await runTransaction(db, async (txn) => {
       const ref = doc(db, 'users', umUid);
       const s = await txn.get(ref);
@@ -1328,7 +1416,7 @@ async function saveUserWallet(e) {
     $('um-amount').value = ''; $('um-wnote').value = '';
     triggerToast(`ปรับยอดเงินแล้ว (คงเหลือ ฿${money(after)})`, 'success');
     loadWalletLogs();
-  } catch (err) { triggerToast(err.message === 'NEG' ? 'ยอดเงินติดลบไม่ได้' : 'ปรับยอดไม่สำเร็จ', 'error'); }
+  } catch (err) { triggerToast(err.message === 'NEG' ? 'ยอดเงินติดลบไม่ได้' : (!ADMIN && err.message) || 'ปรับยอดไม่สำเร็จ', 'error'); }
   finally { btn.disabled = false; }
 }
 async function loadWalletLogs() {
@@ -1533,7 +1621,7 @@ Object.assign(window, {
   moderateReview, ammoPreview, openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,
   updateImagePreview, filterAdminProducts, toggleFeatured, handleCategoryChange, updateServiceSummary, syncServiceRateToPrice, setServiceUnitPreset,
   applyServiceTemplate, editCategory, resetCategoryForm, toggleCategoryKind, handleCategorySubmit, deleteCategory,
-  exportOrdersCsv, resolveAmmoClaim, loadAudit, exportBackup, renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
+  exportOrdersCsv, resolveAmmoClaim, loadAudit, renderAudit, exportAuditCsv, useReply, saveReplies, monthReport, saveSlipFee, monthStats, exportBackup, renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
   renderAdminTopups, approveTopup, rejectTopup, saveTopupPromo, editTopupPromo, resetTopupPromo, deleteTopupPromo,
   renderAdminUsers, grantVault, openUserModal, userModalTab, saveUserInfo, saveUserWallet,
   handleSaveSettings, uploadQr, removeQr, testWebhook, closeModal,

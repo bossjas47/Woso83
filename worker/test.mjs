@@ -670,4 +670,23 @@ assert.strictEqual(vr.headers.get('x-astraphex-worker'), '10'); console.log('ok 
   await sweepRelated(env, { fetchFn: w2.fetchFn, now: NOW }); assert.deepStrictEqual(w2.docs['system/related'].sales, {}, 'orders older than 30 days do not count');
   console.log('ok  related: co-purchase pairs need 2+ customers');
 }
+{
+  const staff = await idToken({ sub: 'stf', perms: ['credit'], creditCap: 500 }), noCap = await idToken({ sub: 'stf2', perms: ['credit'] }), plain = await idToken({ sub: 'stf3', perms: ['orders'], creditCap: 500 });
+  const w = world({ 'users/u2': { username: 'friend', walletBalance: 100 }, 'orders/o1': { userId: 'u2', productName: 'ไอดี', status: 'processing' } });
+  const adj = async (tok, body) => run(w, await req({ uid: 'u2', note: 't', ...body }, tok, '/admin/wallet'));
+  let r = await adj(staff, { mode: 'add', amount: 300 }); assert.strictEqual(r.ok, true); assert.strictEqual(r.balance, 400); assert.strictEqual(r.left, 200);
+  assert.strictEqual(w.docs['users/u2'].walletBalance, 400);
+  const lg = Object.values(w.docs).find(d => d.note === 't'); assert.strictEqual(lg.by, 'stf'); assert.strictEqual(lg.delta, 300);
+  r = await adj(staff, { mode: 'sub', amount: 250 }); assert.strictEqual(r.http, 403, 'cap is per day, over it is refused'); assert.strictEqual(w.docs['users/u2'].walletBalance, 400);
+  r = await adj(staff, { mode: 'sub', amount: 200 }); assert.strictEqual(r.ok, true); assert.strictEqual(r.left, 0);
+  r = await adj(noCap, { mode: 'add', amount: 1 }); assert.strictEqual(r.http, 403, 'credit perm without a cap does nothing');
+  r = await adj(plain, { mode: 'add', amount: 1 }); assert.strictEqual(r.http, 403);
+  r = await adj(adminTok, { mode: 'add', amount: 99999 }); assert.strictEqual(r.ok, true, 'admin uncapped');
+  r = await adj(adminTok, { mode: 'sub', amount: 1e7 }); assert.strictEqual(r.http, 400, 'would go negative');
+  r = await run(w, await req({ uid: 'stf', mode: 'add', amount: 1 }, staff, '/admin/wallet')); assert.strictEqual(r.http, 403, 'cannot top up self');
+  r = await run(w, await req({ orderId: 'o1', text: 'ขอเวลาเพิ่ม' }, staff, '/admin/msg')); assert.strictEqual(r.http, 403);
+  r = await run(w, await req({ orderId: 'o1', text: 'ขอเวลาเพิ่ม' }, await idToken({ sub: 'stf4', perms: ['orders'] }), '/admin/msg')); assert.strictEqual(r.ok, true);
+  r = await run(w, await req({ orderId: 'nope', text: 'x' }, adminTok, '/admin/msg')); assert.strictEqual(r.http, 404);
+  console.log('ok  admin wallet: per-day cap, no cap = no access, admin uncapped, self blocked; /admin/msg perms');
+}
 console.log('worker: all checks passed');
