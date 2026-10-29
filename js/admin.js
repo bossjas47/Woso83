@@ -8,6 +8,7 @@ import { watchCategories, catVisible, KIND_LABEL, categoryOf, isServiceProduct, 
 import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
 import { rankTable, rankOf, rankBadge, rankIcon, titleBadge, TITLE_COLORS } from "./rank.js";
 import { ammoRateOf } from "./ammo-rate.js";
+import { dragSort } from "./back/dragsort.js";
 import { QUICK_ICONS, quickOf, safeHref } from "./home-quick.js";
 
 /**
@@ -211,14 +212,18 @@ function renderAdminProducts(list = null) {
   const tbody = $('admin-products-table-body');
   if (!tbody) return;
   const q = ($('admin-product-search')?.value || '').toLowerCase();
-  const rows = (list || PRODUCTS).filter(p => !q || String(p.name).toLowerCase().includes(q) || String(categoryOf(CATS, p.category)?.name || '').toLowerCase().includes(q) || (p.tags || []).some(t => String(t).toLowerCase().includes(q)));
+  const catSel = $('admin-product-cat');
+  if (catSel) { const cur = catSel.value; catSel.innerHTML = '<option value="">ทุกหมวด</option><option value="__rent">ไอดีเช่า</option>' + CATS.map(c => `<option value="${adminEsc(c.id)}">${adminEsc(c.name)}</option>`).join(''); catSel.value = [...catSel.options].some(o => o.value === cur) ? cur : ''; }
+  const cf = catSel?.value || '', isRent = (p) => num(p.rentHourPrice) > 0 || (p.rentPackages || []).length > 0, ord = (p) => num(p.order) > 0 ? num(p.order) : 1e12;
+  const drag = !q; // a search shows only part of the list, so reordering is switched off while it is active
+  const rows = [...(list || PRODUCTS)].sort((a, b) => ord(a) - ord(b)).filter(p => (!cf || (cf === '__rent' ? isRent(p) : p.category === cf)) && (!q || String(p.name).toLowerCase().includes(q) || String(categoryOf(CATS, p.category)?.name || '').toLowerCase().includes(q) || (p.tags || []).some(t => String(t).toLowerCase().includes(q))));
   $('admin-products-empty')?.classList.toggle('hidden', rows.length > 0);
   tbody.innerHTML = rows.map(p => {
     const out = num(p.stock) <= 0;
     const id = adminEsc(JSON.stringify(p.id));
     const srv = isServiceProduct(p, CATS);
-    return `<tr class="border-b border-hairline">
-      <td class="py-3 px-4"><div class="w-14 h-10 rounded-lg overflow-hidden bg-mist border border-hairline"><img src="${adminEsc(p.image)}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'"></div></td>
+    return `<tr class="border-b border-hairline" ${drag ? `draggable="true" data-prod="${adminEsc(p.id)}" title="ลากเพื่อจัดลำดับ"` : ''}>
+      <td class="py-3 px-4"><div class="flex items-center gap-2">${drag ? '<span class="grip" aria-hidden="true">⋮⋮</span>' : ''}<div class="w-14 h-10 rounded-lg overflow-hidden bg-mist border border-hairline"><img src="${adminEsc(p.image)}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'"></div></div></td>
       <td class="py-3 px-4"><div class="font-medium text-ink text-xs line-clamp-1">${p.featured ? '<span class="text-pricingBlue">★</span> ' : ''}${adminEsc(p.name)}</div><div class="text-[11px] text-slate line-clamp-1">${adminEsc(p.desc || '-')}</div></td>
       <td class="py-3 px-4"><span class="inline-block bg-mist border border-hairline px-2 py-0.5 rounded-full text-[10px] text-slate">${adminEsc(categoryOf(CATS, p.category)?.name || 'ไม่มีหมวดหมู่')}</span>
         <div class="text-[10px] text-slate mt-0.5">${srv ? `บริการ · ขั้นต่ำ ${minQtyOf(p, CATS)} ${adminEsc(unitOf(p, CATS))}` : (num(p.rentHourPrice) > 0 || (p.rentPackages || []).length) ? 'ไอดีเช่า' : 'ไอดีเกม'}</div></td>
@@ -362,6 +367,7 @@ function openProductModal(productId = null) {
   $('product-crud-form').reset(); $('spec-fields').innerHTML = ''; // boxes from the previous product must not leak into this one
   $('product-modal-heading').innerText = p ? 'แก้ไขสินค้า: ' + p.name : 'เพิ่มสินค้าใหม่';
   $('prod-edit-id').value = p?.id || '';
+  $('prod-adv').open = !!p;
   if (!p && !can('price')) return triggerToast('ไม่มีสิทธิ์ตั้งราคาสินค้าใหม่', 'error');
   ['prod-price', 'prod-sale-price', 'prod-ammo-rate'].forEach(id => { const el = $(id); if (el) el.disabled = !can('price'); });
   $('prod-cost')?.closest('div')?.classList.toggle('hidden', !can('profit'));
@@ -523,10 +529,11 @@ async function deleteAdminProduct(id) {
 function openStockModalQuick() { const p = PRODUCTS.find(x => !isServiceProduct(x, CATS)); p ? openStockModal(p.id) : triggerToast('ยังไม่มีสินค้าประเภทไอดีเกม', 'error'); }
 
 // ---- bulk stock ----
-let currentStockProductId = null, parsedStockItems = [], stockExisting = new Set(); // usernames already on the shelf (available / reserved) of the open product
+let SHELF = { at: 0, byPid: new Map() }, STOCK_ITEMS = [];
+let currentStockProductId = null, parsedStockItems = [], stockExisting = new Set(), stockOther = new Map(); // usernames already on the shelf (available / reserved) of the open product
 const stockIsAmmo = () => PRODUCTS.find(x => x.id === currentStockProductId)?.isAmmo === true;
 function parseStockLines(text, ammo = stockIsAmmo()) {
-  const items = [], seen = new Set(); let dup = false, bad = 0, inDb = 0;
+  const items = [], seen = new Set(); let dup = false, bad = 0, inDb = 0, inOther = 0;
   text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
     let u, p, a = 0;
     if (ammo) { // email|pass|ammo (also ":" or spaces between the three parts)
@@ -540,20 +547,56 @@ function parseStockLines(text, ammo = stockIsAmmo()) {
     }
     if (seen.has(u.toLowerCase())) { dup = true; return; }
     if (stockExisting.has(u.toLowerCase())) { inDb++; return; }
+    if (stockOther.has(u.toLowerCase())) { inOther++; return; }
     seen.add(u.toLowerCase()); items.push(ammo ? { username: u, password: p, ammo: a } : { username: u, password: p });
   });
-  return { items, hasDuplicates: dup, bad, inDb };
+  return { items, hasDuplicates: dup, bad, inDb, inOther };
 }
 function handleStockTextareaInput(val) {
-  const { items, hasDuplicates, bad, inDb } = parseStockLines(val);
+  const { items, hasDuplicates, bad, inDb, inOther } = parseStockLines(val);
   parsedStockItems = items;
   const ammo = items.reduce((t, it) => t + (it.ammo || 0), 0);
-  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดอ่านไม่ได้ (ข้าม)` : ''}${inDb ? ` · ${inDb} ไอดีซ้ำกับในคลัง (ข้าม)` : ''}`;
+  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดอ่านไม่ได้ (ข้าม)` : ''}${inDb ? ` · ${inDb} ไอดีซ้ำกับในคลัง (ข้าม)` : ''}${inOther ? ` · ${inOther} ไอดีซ้ำกับสินค้าอื่น (ข้าม)` : ''}`;
   $('btn-add-stock-label').textContent = `บันทึกและนำเข้าสต็อก (${items.length} ชิ้น)`;
   $('stock-duplicate-warning').classList.toggle('hidden', !hasDuplicates);
 }
+/** Every ID still on a shelf (available / reserved), per product. One query per product, cached 2 minutes; force = fresh read. */
+async function scanShelf(force = false) {
+  if (!force && Date.now() - SHELF.at < 12e4) return SHELF.byPid;
+  const byPid = new Map();
+  await Promise.all(PRODUCTS.filter(p => !isServiceProduct(p, CATS)).map(async p => {
+    const rows = (await getDocs(query(collection(db, 'products', p.id, 'stock_items'), where('status', 'in', ['available', 'reserved'])))).docs.map(d => ({ id: d.id, ...d.data() }));
+    byPid.set(p.id, rows);
+  }));
+  SHELF = { at: Date.now(), byPid };
+  return byPid;
+}
+/** What the product's stock number should be, by the same rule the stock modal uses. */
+const realStock = (p, rows) => p.isAmmo === true ? rows.reduce((t, r) => t + num(r.ammo), 0) : rows.filter(r => r.status === 'available').length;
+function otherShelf(excludePid) {
+  const m = new Map();
+  for (const [pid, rows] of SHELF.byPid) if (pid !== excludePid) rows.forEach(r => { const u = String(r.username || '').toLowerCase(); if (u && !m.has(u)) m.set(u, pid); });
+  return m;
+}
+async function checkStockAll() {
+  const box = $('stock-audit'); box.classList.remove('hidden'); box.innerHTML = '<p class="text-slate text-xs">กำลังตรวจ…</p>';
+  try {
+    const by = await scanShelf(true), bad = PRODUCTS.filter(p => by.has(p.id)).map(p => ({ p, real: realStock(p, by.get(p.id)) })).filter(x => num(x.p.stock) !== x.real);
+    window.__stockBad = bad;
+    box.innerHTML = bad.length ? `<div class="flex flex-wrap items-center gap-2 mb-2"><p class="font-semibold text-sm mr-auto">สต็อกไม่ตรง ${bad.length} สินค้า</p><button type="button" onclick="fixStockAll()" class="apple-pricing-pill px-4 py-1.5 text-xs">ซ่อมทั้งหมดให้ตรงกับไอดีจริง</button></div>`
+      + bad.map(({ p, real }) => `<div class="flex justify-between gap-3 rounded-xl bg-mist px-3 py-2 text-xs"><span class="truncate">${adminEsc(p.name)}</span><span class="shrink-0">แสดง ${num(p.stock)} · จริง <b>${real}</b></span></div>`).join('')
+      : `<p class="text-xs text-emerald-600 font-semibold">สต็อกตรงกับไอดีจริงทุกสินค้า (${by.size} สินค้า)</p>`;
+  } catch (e) { console.warn(e); box.innerHTML = '<p class="text-xs text-red-500">ตรวจไม่สำเร็จ</p>'; }
+}
+async function fixStockAll() {
+  const bad = window.__stockBad || []; if (!bad.length) return;
+  try {
+    for (let i = 0; i < bad.length; i += 400) { const b = writeBatch(db); bad.slice(i, i + 400).forEach(({ p, real }) => b.update(doc(db, 'products', p.id), { stock: real })); await b.commit(); }
+    audit('ซ่อมสต็อกให้ตรง', '', `${bad.length} สินค้า`); triggerToast(`ซ่อมสต็อก ${bad.length} สินค้าแล้ว`, 'success'); window.__stockBad = []; checkStockAll();
+  } catch (e) { console.warn(e); triggerToast('ซ่อมไม่สำเร็จ', 'error'); }
+}
 function openStockModal(id) {
-  currentStockProductId = id; stockExisting = new Set();
+  currentStockProductId = id; stockExisting = new Set(); stockOther = new Map(); STOCK_ITEMS = []; $('stock-search').value = '';
   $('bulk-stock-textarea').value = ''; handleStockTextareaInput('');
   const p = PRODUCTS.find(x => x.id === id);
   $('stock-modal-prod-title').textContent = p?.name || id;
@@ -575,7 +618,7 @@ async function submitBulkStockImport() {
       batch.update(prodRef, { stock: increment(chunk.reduce((t, it) => t + (it.ammo || 1), 0)) });
       await batch.commit();
     }
-    audit('นำเข้าสต็อก', PRODUCTS.find(x => x.id === currentStockProductId)?.name || currentStockProductId, `${parsedStockItems.length} ไอดี`);
+    SHELF.at = 0; audit('นำเข้าสต็อก', PRODUCTS.find(x => x.id === currentStockProductId)?.name || currentStockProductId, `${parsedStockItems.length} ไอดี`);
     triggerToast(`นำเข้าไอดี ${parsedStockItems.length} รายการแล้ว`, 'success');
     $('bulk-stock-textarea').value = ''; handleStockTextareaInput('');
     loadAvailableStockItems(currentStockProductId);
@@ -598,8 +641,44 @@ async function loadAvailableStockItems(id) {
     updateDoc(doc(db, 'products', id), { stock: real }).catch(() => {});
   }
   if (ammo) items.sort((a, b) => num(b.ammo) - num(a.ammo));
-  tbody.innerHTML = items.map((it, i) => `<tr><td class="py-2.5 px-3 text-slate w-8">${i + 1}.</td><td class="py-2.5 px-3 font-semibold select-all">${adminEsc(it.username)}${ammo ? ` <span class="text-slate font-normal">· ${num(it.ammo)} กอง${it.status === 'reserved' && num(it.reservedUntil) > Date.now() ? ' · <span class="text-launchOrange">ลูกค้ากำลังจ่าย</span>' : ''}</span>` : ''}</td><td class="py-2.5 px-3 text-slate">••••••••</td>
+  STOCK_ITEMS = items; renderStockList();
+  scanShelf().then(() => { if (currentStockProductId === id) { stockOther = otherShelf(id); handleStockTextareaInput($('bulk-stock-textarea').value); } }).catch(e => console.warn('shelf:', e));
+}
+/** Rows of the open product, filtered by the search box. Reserved ammo IDs (a customer is paying) cannot be selected. */
+function renderStockList() {
+  const ammo = stockIsAmmo(), q = $('stock-search').value.trim().toLowerCase(), id = currentStockProductId;
+  const rows = STOCK_ITEMS.filter(it => !q || String(it.username).toLowerCase().includes(q));
+  const held = (it) => it.status === 'reserved' && num(it.reservedUntil) > Date.now();
+  $('stock-items-list-body').innerHTML = rows.map((it, i) => `<tr><td class="py-2.5 px-3 w-8">${held(it) ? '' : `<input type="checkbox" class="stock-pick" value="${adminEsc(it.id)}" onchange="syncStockPick()" aria-label="เลือก ${adminEsc(it.username)}">`}</td><td class="py-2.5 px-3 font-semibold select-all">${adminEsc(it.username)}${ammo ? ` <span class="text-slate font-normal">· ${num(it.ammo)} กอง${held(it) ? ' · <span class="text-launchOrange">ลูกค้ากำลังจ่าย</span>' : ''}</span>` : ''}</td><td class="py-2.5 px-3 text-slate">••••••••</td>
     <td class="py-2.5 px-3 text-right"><button onclick='deleteSingleStockItem(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))}, ${ammo ? num(it.ammo) : 1})' class="text-red-500 text-[11px] hover:underline">ลบออก</button></td></tr>`).join('');
+  $('stock-items-empty').classList.toggle('hidden', rows.length > 0);
+  $('stock-pick-all').checked = false; syncStockPick();
+}
+const stockPicks = () => [...document.querySelectorAll('#stock-items-list-body .stock-pick:checked')].map(c => c.value);
+function syncStockPick() { const n = stockPicks().length; $('stock-del-picked').textContent = `ลบที่เลือก (${n})`; $('stock-del-picked').disabled = !n; }
+function toggleStockPickAll(on) { document.querySelectorAll('#stock-items-list-body .stock-pick').forEach(c => { c.checked = on; }); syncStockPick(); }
+/** Delete the given stock rows of the open product and take their count off the product's stock number (chunks of 400 writes). */
+async function removeStockRows(rows, what) {
+  const pid = currentStockProductId, ammo = stockIsAmmo(); if (!pid || !rows.length) return;
+  try {
+    for (let i = 0; i < rows.length; i += 399) {
+      const part = rows.slice(i, i + 399), b = writeBatch(db);
+      part.forEach(it => b.delete(doc(db, 'products', pid, 'stock_items', it.id)));
+      b.update(doc(db, 'products', pid), { stock: increment(-part.reduce((t, it) => t + (ammo ? num(it.ammo) : 1), 0)) });
+      await b.commit();
+    }
+    SHELF.at = 0; audit(what, PRODUCTS.find(x => x.id === pid)?.name || pid, `${rows.length} ไอดี`);
+    triggerToast(`${what} ${rows.length} ไอดีแล้ว`, 'success');
+    loadAvailableStockItems(pid);
+  } catch (e) { console.warn(e); triggerToast('ลบไม่สำเร็จ', 'error'); }
+}
+const stockDeletable = () => STOCK_ITEMS.filter(it => !(it.status === 'reserved' && num(it.reservedUntil) > Date.now()));
+function deleteStockPicked() { const ids = new Set(stockPicks()), rows = STOCK_ITEMS.filter(it => ids.has(it.id)); if (rows.length && confirm(`ลบไอดีที่เลือก ${rows.length} ตัวออกจากคลัง?`)) removeStockRows(rows, 'ลบไอดีที่เลือก'); }
+function clearStockAll() {
+  const rows = stockDeletable(), name = PRODUCTS.find(x => x.id === currentStockProductId)?.name || '';
+  if (!rows.length) return triggerToast('ไม่มีไอดีให้เคลียร์', 'error');
+  if ((prompt(`เคลียร์สต็อกทั้งหมดของ "${name}" (${rows.length} ไอดี) ย้อนกลับไม่ได้\nพิมพ์คำว่า เคลียร์ เพื่อยืนยัน`) || '').trim() !== 'เคลียร์') return;
+  removeStockRows(rows, 'เคลียร์สต็อกทั้งหมด');
 }
 async function deleteSingleStockItem(pid, itemId, n = 1) {
   if (!confirm('นำไอดีนี้ออกจากคลัง?')) return;
@@ -608,7 +687,7 @@ async function deleteSingleStockItem(pid, itemId, n = 1) {
     b.delete(doc(db, 'products', pid, 'stock_items', itemId));
     b.update(doc(db, 'products', pid), { stock: increment(-n) });
     await b.commit();
-    audit('ลบไอดีออกจากสต็อก', PRODUCTS.find(x => x.id === pid)?.name || pid, itemId);
+    SHELF.at = 0; audit('ลบไอดีออกจากสต็อก', PRODUCTS.find(x => x.id === pid)?.name || pid, itemId);
     triggerToast('ลบไอดีออกจากคลังแล้ว', 'success');
     loadAvailableStockItems(pid);
   } catch (e) { triggerToast('ลบไม่สำเร็จ', 'error'); }
@@ -774,23 +853,10 @@ function renderAdminCategories() {
       <td class="py-3 px-4 text-right whitespace-nowrap"><button onclick='editCategory(${id})' class="apple-explore-pill px-3 py-1 text-[11px]">แก้ไข</button> <button onclick='deleteCategory(${id})' class="apple-explore-pill px-3 py-1 text-[11px] text-red-500 border-red-200">ลบ</button></td></tr>`;
   }).join('') : `<tr><td colspan="5" class="py-12 text-center text-slate">ยังไม่มีหมวดหมู่ · สินค้าทั้งหมดจะแสดงในหน้าร้านตามปกติ</td></tr>`;
 }
-/** Drag a category row to a new place: every row gets order = position × 10 in one batch. */
-(() => {
-  let from = null;
-  const body = () => $('admin-categories-table-body');
-  document.addEventListener('dragstart', (e) => { const tr = e.target.closest?.('tr[data-cat]'); if (tr) { from = tr.dataset.cat; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', from); } });
-  document.addEventListener('dragover', (e) => { if (from && e.target.closest?.('tr[data-cat]')) e.preventDefault(); });
-  document.addEventListener('drop', async (e) => {
-    const tr = e.target.closest?.('tr[data-cat]'); if (!from || !tr || !body()?.contains(tr)) return;
-    e.preventDefault(); const to = tr.dataset.cat, moved = from; from = null;
-    if (to === moved) return;
-    const ids = [...body().querySelectorAll('tr[data-cat]')].map(r => r.dataset.cat).filter(id => id !== moved);
-    ids.splice(ids.indexOf(to) + (body().querySelector(`tr[data-cat="${moved}"]`).compareDocumentPosition(tr) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : 0), 0, moved);
-    try { const b = writeBatch(db); ids.forEach((id, i) => b.update(doc(db, 'categories', id), { order: (i + 1) * 10 })); await b.commit(); triggerToast('จัดลำดับหมวดหมู่แล้ว', 'success'); }
-    catch (err) { console.warn(err); triggerToast('จัดลำดับไม่สำเร็จ', 'error'); }
-  });
-  document.addEventListener('dragend', () => { from = null; });
-})();
+/** Drag rows to reorder: categories, products (while no text search is active). Boxes do the same in js/back/boxes.js. */
+dragSort('admin-categories-table-body', 'data-cat', 'categories', triggerToast);
+dragSort('admin-products-table-body', 'data-prod', 'products', triggerToast);
+
 function editCategory(id) {
   const c = categoryOf(CATS, id); if (!c) return;
   const set = (k, v) => { $(k).value = v ?? ''; };
@@ -1498,8 +1564,12 @@ function renderSpotlightRows(d = SETTINGS) {
   $('sp-on').checked = sp.on === true; $('sp-kicker').value = sp.kicker || ''; $('sp-interval').value = sp.interval || '';
   const items = sp.items || [];
   const opts = (sel) => '<option value="">— ไม่เลือก —</option>' + PRODUCTS.map(p => `<option value="${adminEsc(p.id)}" ${p.id === sel ? 'selected' : ''}>${adminEsc(p.name)}</option>`).join('');
-  $('sp-rows').innerHTML = [0, 1, 2, 3, 4].map(i => `<div class="grid sm:grid-cols-2 gap-2"><select id="sp-pid-${i}" aria-label="สินค้า ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs">${opts(items[i]?.id)}</select>
-    <input id="sp-tag-${i}" value="${adminEsc(items[i]?.tagline)}" maxlength="80" placeholder="ข้อความโปรย ${i + 1}" aria-label="ข้อความโปรย ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs"></div>`).join('');
+  $('sp-rows').innerHTML = [0, 1, 2, 3, 4].map(i => `<div class="sp-row"><select id="sp-pid-${i}" aria-label="สินค้า ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs">${opts(items[i]?.id)}</select>
+    <input id="sp-tag-${i}" value="${adminEsc(items[i]?.tagline)}" maxlength="80" placeholder="ข้อความโปรย ${i + 1}" aria-label="ข้อความโปรย ${i + 1}" class="w-full apple-input px-2.5 py-1.5 text-xs">${i ? `<button type="button" onclick="spUp(${i})" title="เลื่อนขึ้น" aria-label="เลื่อนขึ้น" class="apple-explore-pill px-2.5 py-1 text-xs">↑</button>` : '<span style="width:38px"></span>'}</div>`).join('');
+}
+/** Swap spotlight row i with the one above it (the order here is the order on the home page). */
+function spUp(i) {
+  for (const k of ['sp-pid-', 'sp-tag-']) { const a = $(k + i), b = $(k + (i - 1)), t = a.value; a.value = b.value; b.value = t; }
 }
 async function saveSpotlight() {
   const items = [0, 1, 2, 3, 4].map(i => ({ id: $(`sp-pid-${i}`).value, tagline: $(`sp-tag-${i}`).value.trim().slice(0, 80) })).filter(x => x.id);
@@ -1621,7 +1691,7 @@ Object.assign(window, {
   moderateReview, ammoPreview, openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,
   updateImagePreview, filterAdminProducts, toggleFeatured, handleCategoryChange, updateServiceSummary, syncServiceRateToPrice, setServiceUnitPreset,
   applyServiceTemplate, editCategory, resetCategoryForm, toggleCategoryKind, handleCategorySubmit, deleteCategory,
-  exportOrdersCsv, resolveAmmoClaim, loadAudit, renderAudit, exportAuditCsv, useReply, saveReplies, monthReport, saveSlipFee, monthStats, exportBackup, renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
+  exportOrdersCsv, resolveAmmoClaim, checkStockAll, fixStockAll, renderStockList, syncStockPick, toggleStockPickAll, deleteStockPicked, clearStockAll, loadAudit, renderAudit, exportAuditCsv, useReply, spUp, saveReplies, monthReport, saveSlipFee, monthStats, exportBackup, renderAdminOrders, refreshOrders, approveOrder, startWork, finishServiceOrder, cancelOrder, clearGamePassword, openNote, saveOrderNote, viewSlip,
   renderAdminTopups, approveTopup, rejectTopup, saveTopupPromo, editTopupPromo, resetTopupPromo, deleteTopupPromo,
   renderAdminUsers, grantVault, openUserModal, userModalTab, saveUserInfo, saveUserWallet,
   handleSaveSettings, uploadQr, removeQr, testWebhook, closeModal,

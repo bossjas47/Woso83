@@ -130,6 +130,7 @@ function renderTagRow() {
   if (row.dataset.sig !== html) { row.dataset.sig = html; row.innerHTML = html; }
 }
 
+const ordRank = (p) => (p.order > 0 ? p.order : 1e12); // hand-dragged position in the back office wins over everything else
 const autoRank = (p) => S.settings.autoSort === true ? Number(SALES[p.id]) || 0 : 0; // admin switch: best sellers first inside the default order
 
 export function render() {
@@ -163,7 +164,7 @@ export function render() {
   if (!S.products.length) { if (countEl) countEl.textContent = '0 รายการ'; if (cardsEl) cardsEl.classList.add('hidden'); showEmpty('ยังไม่มีสินค้าในร้าน', 'แอดมินกำลังเติมสต๊อก เดี๋ยวของมา แวะมาใหม่นะ', false); return; }
   if (browsing) {
     // products without a category are standalone: shown as cards right under the category cards
-    const free = S.products.filter(p => catIdOf(p, S.cats) === NONE).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || autoRank(b) - autoRank(a) || (a.order || 0) - (b.order || 0));
+    const free = S.products.filter(p => catIdOf(p, S.cats) === NONE).sort((a, b) => ordRank(a) - ordRank(b) || (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || autoRank(b) - autoRank(a));
     grid.innerHTML = free.map(cardFor).join('');
     if (countEl) countEl.textContent = `${S.cats.length} หมวดหมู่ · ${S.products.length} สินค้า`;
     return;
@@ -187,7 +188,7 @@ export function render() {
   else if (S.sort === 'price-desc') list.sort((a, b) => priceOf(b) - priceOf(a));
   else if (S.sort === 'stock-desc') list.sort((a, b) => stockOf(b) - stockOf(a));
   else if (S.sort === 'newest') list.sort((a, b) => ms(b) - ms(a));
-  else list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockOf(b) > 0) - (stockOf(a) > 0) || autoRank(b) - autoRank(a));
+  else list.sort((a, b) => ordRank(a) - ordRank(b) || (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (stockOf(b) > 0) - (stockOf(a) > 0) || autoRank(b) - autoRank(a));
 
   if (countEl) countEl.textContent = `แสดง ${list.length} รายการ · พร้อมส่ง ${list.filter(p => stockOf(p) > 0).length}`;
   if (!list.length) { showEmpty('ไม่พบสินค้าที่ตรงกับตัวกรอง', 'ลองเปลี่ยนหมวด งบ หรือคำค้นดู', true); return; }

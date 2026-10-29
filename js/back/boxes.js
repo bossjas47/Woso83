@@ -2,6 +2,9 @@ import { db } from "../../firebase-config.js";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { esc, num, money, toast, openModal, closeModal, fmtDate, compressImage } from "../ui.js";
 import { isServiceProduct } from "../categories.js";
+import { dragSort } from "./dragsort.js";
+import { toast as say } from "../ui.js";
+dragSort('admin-boxes-body', 'data-box', 'boxes', (m, t) => say(m, t));
 
 /**
  * Back office: loot boxes (กล่องสุ่ม). boxes/{id} holds the box and its prize list; every open is written by the Worker
@@ -48,8 +51,8 @@ export function renderAdminBoxes() {
     const prizes = Array.isArray(b.prizes) ? b.prizes : [];
     const avg = averageValue(prizes), price = num(b.price);
     const pct = price > 0 ? Math.round(avg / price * 100) : 0;
-    return `<tr class="border-b border-hairline">
-      <td class="py-3 px-4"><p class="font-semibold">${esc(b.name)}</p>${b.desc ? `<p class="text-[11px] text-slate">${esc(b.desc)}</p>` : ''}</td>
+    return `<tr class="border-b border-hairline" draggable="true" data-box="${esc(b.id)}" title="ลากเพื่อจัดลำดับ">
+      <td class="py-3 px-4"><p class="font-semibold"><span class="grip" aria-hidden="true">⋮⋮</span>${esc(b.name)}</p>${b.desc ? `<p class="text-[11px] text-slate">${esc(b.desc)}</p>` : ''}</td>
       <td class="py-3 px-4 font-mono font-semibold">฿${money(price)}</td>
       <td class="py-3 px-4 text-slate">${prizes.length} รายการ</td>
       <td class="py-3 px-4 font-mono">฿${money(avg)} <span class="text-[11px] ${pct > 100 ? 'text-red-500 font-semibold' : 'text-slate'}">(${pct}% ของราคากล่อง)</span></td>

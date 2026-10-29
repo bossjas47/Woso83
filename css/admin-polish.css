@@ -1,0 +1,48 @@
+/* Back office look: clean Apple-style. Inter for Latin + digits, IBM Plex Sans Thai for Thai (Inter has no Thai glyphs, so the browser falls through). */
+.admin-page { font-family: 'Inter', 'IBM Plex Sans Thai', 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.admin-page h1, .admin-page h2, .admin-page h3, .admin-page h4, .admin-page .font-display, .admin-page .font-heading { font-family: inherit; letter-spacing: -0.01em; font-weight: 600; }
+/* the old sizes were too small and pale to read comfortably */
+.admin-page .text-xs { font-size: 13px; line-height: 1.5; }
+.admin-page .text-\[11px\] { font-size: 12px; }
+.admin-page .text-\[10px\] { font-size: 11.5px; }
+.admin-page .text-slate { color: #5f5f66; }
+.admin-page .text-steel { color: #75757c; }
+
+/* cards: softer border + a hint of depth */
+.admin-page .apple-card { border-radius: 22px; border-color: #e6e6eb; box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 10px 28px -16px rgba(0, 0, 0, .12) !important; }
+.admin-page .modal-card { border-radius: 24px; }
+#product-form-modal > .apple-card { max-width: 760px; }
+
+/* tables */
+.admin-page .admin-table th { background: #fafafc; color: #5f5f66; font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; padding-top: 12px; padding-bottom: 12px; border-bottom: 1px solid #e6e6eb; }
+.admin-page .admin-table td { font-size: 13px; vertical-align: middle; border-bottom-color: #efeff3; }
+.admin-page .admin-table tr:hover td { background: #fafafc; }
+.admin-page .admin-table tr:last-child td { border-bottom: 0; }
+
+/* buttons + fields */
+.admin-page .apple-pricing-pill, .admin-page .apple-explore-pill { font-size: 13px; font-weight: 500; letter-spacing: 0; min-height: 32px; justify-content: center; }
+.admin-page .apple-explore-pill { border-color: #d2d2d7; background: #fff; }
+.admin-page .apple-input { border-radius: 12px; border-color: #d2d2d7; background: #fff; font-size: 13.5px; }
+.admin-page textarea.apple-input { border-radius: 14px; line-height: 1.55; }
+.admin-page .apple-input-rounded { font-size: 13.5px; }
+.admin-page label.block, .admin-page label.text-slate { font-weight: 500; color: #4a4a50; }
+.admin-page .bg-mist { background: #f5f5f7; }
+
+/* dashboard numbers */
+.admin-page #dash-cards .text-2xl { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.admin-page #dash-cards .apple-card { padding: 18px; }
+
+/* drag to reorder */
+.admin-page tr[draggable=true] { cursor: grab; }
+.admin-page tr[draggable=true]:active { cursor: grabbing; }
+.admin-page tr.drag-over td { box-shadow: inset 0 2px 0 #0071e3; }
+.admin-page .grip { display: inline-block; margin-right: 8px; color: #a1a1a6; letter-spacing: -2px; font-size: 14px; user-select: none; }
+.admin-page .sp-row { display: flex; gap: 8px; align-items: center; }
+.admin-page .sp-row > select, .admin-page .sp-row > input { flex: 1; min-width: 0; }
+
+/* product form: advanced options folded away, save bar always in reach */
+.admin-page details.adv > summary { cursor: pointer; list-style: none; padding: 12px 16px; border-radius: 14px; background: #f5f5f7; font-weight: 600; font-size: 13px; color: #1d1d1f; }
+.admin-page details.adv > summary::-webkit-details-marker { display: none; }
+.admin-page details.adv > summary::before { content: '›'; display: inline-block; margin-right: 8px; transition: transform .2s; }
+.admin-page details.adv[open] > summary::before { transform: rotate(90deg); }
+#product-crud-form > div:last-child { position: sticky; bottom: 0; background: #fff; padding-bottom: 12px; margin-bottom: -12px; z-index: 2; }

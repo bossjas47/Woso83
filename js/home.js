@@ -16,7 +16,7 @@ function onProducts(S) {
   stockTotal = S.products.reduce((sum, p) => sum + (p.isAmmo ? 0 : stockOf(p)), 0); // ammo stock is in กอง, not IDs
   PRODUCTS = S.products; S.products.forEach(p => p.image && PRODUCT_IMAGES.set(p.id, p.image)); renderRecent();
   renderStats();
-  const featured = S.products.filter(p => p.featured === true);
+  const featured = S.products.filter(p => p.featured === true).sort((a, b) => (a.order > 0 ? a.order : 1e12) - (b.order > 0 ? b.order : 1e12));
   document.getElementById('featured-section').classList.toggle('hidden', !featured.length);
   document.getElementById('featured-grid').innerHTML = featured.slice(0, 6).map(cardFor).join('');
   renderSpotlight();

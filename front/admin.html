@@ -10,7 +10,7 @@
   <!-- Apple System Font Stack & Google Fonts Prompt / Outfit Fallback -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" crossorigin>
@@ -174,6 +174,7 @@
   </style>
   <link rel="stylesheet" href="../css/transition.css">
   <link rel="stylesheet" href="../css/polish.css">
+  <link rel="stylesheet" href="../css/admin-polish.css">
   <script src="../js/transition.js" defer></script>
 </head>
 <body class="admin-page selection:bg-pricingBlue/20 selection:text-ink min-h-screen pb-24">
@@ -407,11 +408,14 @@
             <button onclick="openStockModalQuick()" class="w-full apple-explore-pill py-1.5 text-[11px] flex items-center justify-center gap-1.5 text-pricingBlue border-pricingBlue/30 hover:bg-pricingBlue/5">
               <span><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg></span> จัดการสต็อกสินค้า
             </button>
+            <button type="button" onclick="checkStockAll()" class="w-full apple-explore-pill py-1.5 text-[11px]">ตรวจสต็อกไม่ตรง</button>
           </div>
         </div>
 
         <!-- Filter & Search Bar -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 apple-card p-4 sm:px-6">
+          <div class="flex w-full sm:w-auto items-center gap-2">
+          <select id="admin-product-cat" onchange="filterAdminProducts()" aria-label="กรองตามหมวด" class="apple-input px-3 py-2 text-xs shrink-0"><option value="">ทุกหมวด</option></select>
           <div class="relative w-full sm:w-80">
             <input
               id="admin-product-search"
@@ -424,11 +428,16 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
           </div>
+          </div>
 
           <div class="text-xs text-slate">
             <svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 00-4-10z"/></svg> กดปุ่ม <strong class="text-pricingBlue font-medium"><svg class="w-[1.1em] h-[1.1em] inline-block align-[-0.15em]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg> สต็อก</strong> ที่แถวสินค้าเพื่อเติมไอดีหลายชิ้นในคลิกเดียว
           </div>
         </div>
+
+        <p class="text-[11px] text-slate -mt-2 px-1">ลากแถวเพื่อจัดลำดับที่แสดงในร้าน (ใช้ได้เมื่อไม่ได้พิมพ์ค้นหา) · สินค้าที่ลากแล้วขึ้นก่อน · ที่เหลือเรียงอัตโนมัติ</p>
+
+        <div id="stock-audit" class="hidden apple-card p-4 space-y-2"></div>
 
         <!-- Products Table -->
         <div class="apple-card overflow-hidden">
@@ -984,6 +993,12 @@
           <span class="text-[10px] text-steel font-mono">ZERO-TRUST VAULT</span>
         </div>
 
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <input id="stock-search" type="search" oninput="renderStockList()" placeholder="ค้นหาไอดีในคลัง" aria-label="ค้นหาไอดีในคลัง" class="apple-input px-3 py-1.5 flex-1 min-w-[140px]">
+          <label class="flex items-center gap-1.5"><input id="stock-pick-all" type="checkbox" onchange="toggleStockPickAll(this.checked)"> เลือกทั้งหมด</label>
+          <button type="button" id="stock-del-picked" onclick="deleteStockPicked()" disabled class="apple-explore-pill px-3 py-1.5 text-red-500 border-red-200">ลบที่เลือก (0)</button>
+          <button type="button" onclick="clearStockAll()" class="apple-explore-pill px-3 py-1.5 text-red-500 border-red-200">เคลียร์สต็อกทั้งหมด</button>
+        </div>
         <div class="max-h-56 overflow-y-auto rounded-2xl border border-hairline bg-mist divide-y divide-hairline">
           <table class="w-full text-left text-xs font-mono">
             <tbody id="stock-items-list-body">
@@ -1340,6 +1355,7 @@
           </div>
         </div>
 
+        <details id="prod-adv" class="adv"><summary>ตัวเลือกขั้นสูง · โปรโมชั่น ต้นทุน แพ็กเกจ ข้อมูลหน้าสินค้า</summary><div class="space-y-4 mt-3">
         <div id="promo-config-box" class="space-y-3 p-4 rounded-2xl bg-mist">
           <p class="text-xs font-semibold">ลดราคาตามเวลา (Flash sale) · แพ็กรวมไก่กระสุน</p>
           <div class="grid grid-cols-3 gap-3">
@@ -1395,6 +1411,8 @@
             <textarea id="prod-warranty" rows="2" class="w-full apple-input p-2.5 text-xs leading-relaxed"></textarea>
           </div>
         </div>
+
+        </div></details>
 
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-hairline">
           <button type="button" onclick="closeProductModal()" class="apple-explore-pill px-5 py-2 text-xs">
