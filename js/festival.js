@@ -8,9 +8,15 @@ import { safeHref } from "./home-quick.js";
  */
 const COUNT = { low: 22, mid: 42, high: 72 };
 const COLORS = ['#3d8bff', '#5fb4ff', '#8a5cff', '#b28cff'];
-let cur = '', cv = null, ctx = null, raf = 0, sparks = [], sprites = [], W = 0, H = 0, last = 0, onResize = null, onVis = null;
+const HALLOWEEN = ['🎃', '🦇', '👻', '🕸️', '🍬']; // theme 'halloween': emoji drift down instead of blue sparks rising
+let theme = '', cur = '', cv = null, ctx = null, raf = 0, sparks = [], sprites = [], W = 0, H = 0, last = 0, onResize = null, onVis = null;
 
 function sprite(color) {
+  if (theme === 'halloween') { // emoji drawn once into a small canvas
+    const s = document.createElement('canvas'); s.width = s.height = 48;
+    const g = s.getContext('2d'); g.font = '36px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(color, 24, 26);
+    return s;
+  }
   const s = document.createElement('canvas'); s.width = s.height = 32;
   const g = s.getContext('2d'), r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
   r.addColorStop(0, '#ffffff'); r.addColorStop(0.18, color); r.addColorStop(1, 'rgba(0,0,0,0)');
@@ -18,8 +24,8 @@ function sprite(color) {
   return s;
 }
 const spark = (anyY) => ({
-  x: Math.random() * W, y: anyY ? Math.random() * H : H + 20, size: 6 + Math.random() * 14,
-  vy: 18 + Math.random() * 42, sway: 10 + Math.random() * 24, ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 1.4,
+  x: Math.random() * W, y: anyY ? Math.random() * H : theme === 'halloween' ? -30 : H + 20, size: theme === 'halloween' ? 18 + Math.random() * 16 : 6 + Math.random() * 14,
+  vy: (theme === 'halloween' ? -1 : 1) * (18 + Math.random() * 42), sway: 10 + Math.random() * 24, ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 1.4,
   life: 0, max: 5 + Math.random() * 7, img: sprites[(Math.random() * sprites.length) | 0]
 });
 
@@ -32,17 +38,18 @@ function size() {
 
 function frame(t) {
   raf = requestAnimationFrame(frame);
+  if (last && t - last < 30) return; // ~30 fps is plenty for drifting particles and halves the full-screen canvas cost
   const dt = Math.min(0.05, (t - (last || t)) / 1000); last = t;
   ctx.clearRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = theme === 'halloween' ? 'source-over' : 'lighter';
   for (let i = 0; i < sparks.length; i++) {
     const s = sparks[i];
     s.life += dt; s.y -= s.vy * dt; s.ph += s.sp * dt;
-    if (s.y < -30 || s.life > s.max) { sparks[i] = spark(false); continue; }
+    if (s.y < -40 || s.y > H + 40 || s.life > s.max) { sparks[i] = spark(false); continue; }
     // fade in, flicker, fade out
     const a = Math.min(1, s.life / 0.8, (s.max - s.life) / 1.5) * (0.55 + 0.45 * Math.sin(s.ph * 3));
     if (a <= 0) continue;
-    ctx.globalAlpha = a * 0.85;
+    ctx.globalAlpha = theme === 'halloween' ? Math.min(1, a * 1.3) : a * 0.85;
     ctx.drawImage(s.img, s.x + Math.sin(s.ph) * s.sway - s.size / 2, s.y - s.size / 2, s.size, s.size);
   }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
@@ -54,7 +61,7 @@ function startSparks(density) {
   cv.className = 'fx-canvas'; cv.setAttribute('aria-hidden', 'true');
   document.body.appendChild(cv);
   ctx = cv.getContext('2d');
-  if (!sprites.length) sprites = COLORS.map(sprite);
+  if (!sprites.length) sprites = (theme === 'halloween' ? HALLOWEEN : COLORS).map(sprite);
   size();
   const n = Math.round((COUNT[density] || COUNT.mid) * (W < 640 ? 0.55 : 1));
   sparks = Array.from({ length: n }, () => spark(true));
@@ -67,7 +74,7 @@ function startSparks(density) {
 function stopSparks() {
   if (!cv) return;
   cancelAnimationFrame(raf); removeEventListener('resize', onResize); document.removeEventListener('visibilitychange', onVis);
-  cv.remove(); cv = ctx = null; sparks = [];
+  cv.remove(); cv = ctx = null; sparks = []; sprites = [];
 }
 
 function systemWindow(f) {
@@ -93,8 +100,9 @@ function systemWindow(f) {
 /** Called by shell.js on every settings change. */
 export function applyFestival(f, isHome) {
   const on = f?.on === true && !(f.until > 0 && Date.now() > f.until);
-  if (cv && cur !== f.density) stopSparks();
-  cur = f?.density;
+  const th = f?.theme === 'halloween' ? 'halloween' : '';
+  if (cv && (cur !== f?.density || theme !== th)) stopSparks();
+  cur = f?.density; theme = th;
   if (!on || matchMedia('(prefers-reduced-motion: reduce)').matches) stopSparks(); else startSparks(f.density);
   if (on && isHome && String(f.msg || '').trim()) setTimeout(() => systemWindow(f), 1200);
 }

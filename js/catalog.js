@@ -12,7 +12,7 @@ import { watchCategories, categoryCardsHtml, catVisible, categoryOf, catIdOf, is
  */
 export const FALLBACK_IMG = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
 
-const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', q: '', budget: 'all', sort: 'default', tag: '', lvl: 0, settings: {} };
+const S = { cats: [], products: [], real: [], boxes: [], realCats: [], loaded: false, failed: false, cat: 'all', game: '', q: '', budget: 'all', sort: 'default', tag: '', lvl: 0, settings: {} };
 let opts = { urlSync: false, onProducts: null };
 
 export const priceOf = (p) => { const v = Number(p?.price); if (v > 0) return v; const r = Number(p?.serviceRate); return r > 0 ? r : 0; };
@@ -115,6 +115,7 @@ function writeUrl() {
   const url = new URL(location.href);
   S.cat === 'all' ? url.searchParams.delete('cat') : url.searchParams.set('cat', S.cat);
   S.q.trim() ? url.searchParams.set('q', S.q.trim()) : url.searchParams.delete('q');
+  S.game ? url.searchParams.set('game', S.game) : url.searchParams.delete('game');
   history.replaceState({}, '', url);
 }
 
@@ -133,6 +134,22 @@ function renderTagRow() {
 const ordRank = (p) => (p.order > 0 ? p.order : 1e12); // hand-dragged position in the back office wins over everything else
 const autoRank = (p) => S.settings.autoSort === true ? Number(SALES[p.id]) || 0 : 0; // admin switch: best sellers first inside the default order
 
+/** Game picker (settings.games, set in the back office): shown from 2 games up. Products without a game belong to the first one. */
+const gamesOf = () => (Array.isArray(S.settings?.games) ? S.settings.games : []);
+const gameOf = (p) => p.game || gamesOf()[0]?.key || '';
+function renderGameChips() {
+  const games = gamesOf();
+  let box = document.getElementById('game-chips');
+  if (games.length < 2) { box?.remove(); if (S.game) S.game = ''; return; }
+  if (!box) {
+    box = document.createElement('div'); box.id = 'game-chips'; box.className = 'flex flex-wrap gap-2 mb-4';
+    const anchor = document.getElementById('category-cards') || document.getElementById('product-grid');
+    anchor.parentElement.insertBefore(box, anchor);
+  }
+  box.innerHTML = [['', 'ทุกเกม'], ...games.map(g => [g.key, g.name])].map(([k, n]) => `<button type="button" onclick="filterGame(${esc(JSON.stringify(k))})" aria-pressed="${(S.game || '') === k}" class="px-4 py-2 rounded-full text-[14px] border ${(S.game || '') === k ? 'bg-ink text-gallery border-ink' : 'bg-gallery border-hairline hover:bg-mist'}">${esc(n)}</button>`).join('');
+}
+function filterGame(k) { S.game = k || ''; writeUrl(); render(); }
+
 export function render() {
   const grid = document.getElementById('product-grid');
   const empty = document.getElementById('empty-state');
@@ -141,6 +158,7 @@ export function render() {
   const countEl = document.getElementById('catalog-count-label');
   if (!grid) return;
   syncControls();
+  renderGameChips();
   renderTagRow();
   if (!S.loaded) { grid.innerHTML = productSkeletonHtml(6); return; }
 
@@ -154,7 +172,7 @@ export function render() {
   };
   empty?.classList.add('hidden');
 
-  const browsing = S.cat === 'all' && !S.tag && !S.lvl && !S.q.trim() && S.budget === 'all' && S.sort === 'default' && S.cats.length > 0;
+  const browsing = !S.game && S.cat === 'all' && !S.tag && !S.lvl && !S.q.trim() && S.budget === 'all' && S.sort === 'default' && S.cats.length > 0;
   if (cardsEl) { cardsEl.classList.toggle('hidden', !browsing); if (browsing) cardsEl.innerHTML = categoryCardsHtml(S.cats.filter(c => catVisible(c)), S.products); }
   backEl?.classList.toggle('hidden', browsing || S.cats.length === 0);
   const note = document.getElementById('cat-desc-note'), curCat = categoryOf(S.cats, S.cat);
@@ -172,6 +190,7 @@ export function render() {
 
   const q = S.q.toLowerCase().trim();
   const list = S.products.filter(p => {
+    if (S.game && gameOf(p) !== S.game) return false;
     if (S.cat !== 'all' && (S.cat === NONE ? catIdOf(p, S.cats) !== NONE : p.category !== S.cat)) return false;
     if (q && !String(p.name || '').toLowerCase().includes(q) && !(p.tags || []).some(t => String(t).toLowerCase().includes(q)) && !String(p.desc || '').toLowerCase().includes(q)) return false;
     if (S.tag && !(p.tags || []).some(t => String(t).toLowerCase() === S.tag.toLowerCase())) return false;
@@ -198,11 +217,11 @@ export function render() {
 // ---------- actions (inline handlers) ----------
 function filterCategory(id) { S.cat = id || 'all'; writeUrl(); render(); document.getElementById('catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 function clearFilter(key) { if (key === 'cat') S.cat = 'all'; if (key === 'budget') S.budget = 'all'; if (key === 'sort') S.sort = 'default'; if (key === 'q') S.q = ''; writeUrl(); render(); }
-function clearSearchAndFilters() { S.cat = 'all'; S.q = ''; S.budget = 'all'; S.sort = 'default'; S.tag = ''; S.lvl = 0; writeUrl(); closeFilterPanel(); render(); }
+function clearSearchAndFilters() { S.game = ''; S.cat = 'all'; S.q = ''; S.budget = 'all'; S.sort = 'default'; S.tag = ''; S.lvl = 0; writeUrl(); closeFilterPanel(); render(); }
 function closeFilterPanel() { document.getElementById('filter-panel')?.classList.add('hidden'); document.getElementById('filter-toggle')?.setAttribute('aria-expanded', 'false'); }
 window.setTag = (t) => { S.tag = S.tag === t ? '' : t; render(); };
 window.setLevel = (n) => { S.lvl = S.lvl === n ? 0 : n; render(); };
-Object.assign(window, { filterCategory, clearFilter, clearSearchAndFilters, closeFilterPanel });
+Object.assign(window, { filterGame, filterCategory, clearFilter, clearSearchAndFilters, closeFilterPanel });
 
 function merge() {
   const boxes = S.boxes.map(b => ({ id: 'box_' + b.id, boxId: b.id, isBox: true, name: String(b.name || 'กล่องสุ่ม'), desc: b.desc || '', price: Number(b.price) || 0, image: b.image || ROOT + 'assets/box.svg',
@@ -215,7 +234,7 @@ export function mountCatalog(options = {}) {
   opts = { ...opts, ...options };
   if (opts.urlSync) {
     const sp = new URLSearchParams(location.search);
-    S.cat = sp.get('cat') || 'all';
+    S.cat = sp.get('cat') || 'all'; S.game = sp.get('game') || '';
     S.q = sp.get('q') || '';
   }
   const bar = document.getElementById('filter-bar');

@@ -45,7 +45,7 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
   const money2 = (v) => Number(v).toLocaleString('th-TH', { maximumFractionDigits: 2 });
   const ammoCut = p.isAmmo && ammoRateOf(p, 0) < ammoListRate(p) ? { list: ammoListRate(p), now: ammoRateOf(p, 0) } : null; // discount running now: list price struck through (same rule as the product and home pages)
   const waiting = Number(p.dropAt) > Date.now(); // timed drop not open yet
-  const cartable = !waiting && !rent && !p.isAmmo; // services with play modes go in with the first mode; the cart page can switch it
+  const cartable = !waiting && !rent && !p.topup; // ammo goes in as a กอง count; the cart page sends it to the product page to hold and pay // services with play modes go in with the first mode; the cart page can switch it
   const cartMode = isService && Array.isArray(p.farmModes) && p.farmModes.length ? String(p.farmModes[0].key || '') : '';
   const low = !isService && !p.isAmmo && stock > 0 && stock <= 3;
   const url = p.href || productUrl(p.id);
@@ -76,7 +76,7 @@ export function productCardHtml({ p, isService, unit, min, price, stock, koen, c
           ${isService && min > 1 ? `<p class="text-[11px] text-slate mt-1">ขั้นต่ำ ${min} ${esc(unit)}</p>` : ''}
           ${out
             ? `<span class="mt-3 flex items-center justify-center w-full h-12 rounded-full bg-control text-steel text-[15px] font-semibold">${isService ? 'คิวเต็ม' : rent ? 'ไม่มีไอดีว่าง' : 'สินค้าหมด'}</span>`
-            : `<div class="mt-3 flex gap-2"><a href="${productUrl(p.id, true)}" class="apple-pricing-pill flex-1 min-w-0 h-12 text-[16px] font-semibold">${rent ? 'เช่าเลย' : 'สั่งซื้อ'}${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>${cartable ? `<button type="button" onclick="quickAddCart(this, ${esc(JSON.stringify(p.id))}, ${min}, ${esc(JSON.stringify(cartMode))})" data-max="${isService ? 99999 : stock}" data-id="${esc(p.id)}" data-name="${name}" class="card-cart${cartIds.has(p.id) ? ' added' : ''}" aria-label="${cartIds.has(p.id) ? 'นำออกจากตะกร้า' : 'เพิ่มลงตะกร้า'} ${name}">${icon(CART_D, 'w-5 h-5', 2)}</button>` : ''}</div>`}
+            : `<div class="mt-3 flex gap-2"><a href="${productUrl(p.id, true)}" class="apple-pricing-pill flex-1 min-w-0 h-12 text-[16px] font-semibold">${rent ? 'เช่าเลย' : 'สั่งซื้อ'}${icon(ICONS.arrow, 'w-4 h-4', 2.2)}</a>${cartable ? `<button type="button" onclick="quickAddCart(this, ${esc(JSON.stringify(p.id))}, ${p.isAmmo ? Math.max(1, Math.floor(Number(p.ammoMin)) || 1) : min}, ${esc(JSON.stringify(cartMode))})" data-max="${isService ? 99999 : stock}" data-id="${esc(p.id)}" data-name="${name}" class="card-cart${cartIds.has(p.id) ? ' added' : ''}" aria-label="${cartIds.has(p.id) ? 'นำออกจากตะกร้า' : 'เพิ่มลงตะกร้า'} ${name}">${icon(CART_D, 'w-5 h-5', 2)}</button>` : ''}</div>`}
         </div>
       </div>
     </article>`;

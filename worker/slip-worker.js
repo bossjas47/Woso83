@@ -20,6 +20,9 @@
 // Variables (Worker > Settings > Variables and Secrets):
 //   SERVICE_ACCOUNT  secret  the Firebase service-account JSON, pasted as text
 //   EASYSLIP_KEY     secret  EasySlip API key                         (only for automatic slip checks)
+//   SLIP_PROVIDER    text    'byshop' = check slips with ByShop instead of EasySlip (default: EasySlip)
+//   BYSHOP_KEY       secret  ByShop API key (keyapi)                   (only when SLIP_PROVIDER = byshop)
+//   RECEIVER_BANK    text    optional bank code of the shop account, e.g. 004 (ByShop only: checked against receiver.bank_code)
 //   TRUEMONEY_PHONE  secret  shop's TrueMoney wallet number, e.g. 0812345678 (turns on ซองอั่งเปา /angpao)
 //   RECEIVER_MATCH   text    shop account name / digits on the slip    (only for automatic slip checks)
 //   ALLOWED_ORIGIN   text    optional, your site origin, e.g. https://astraphex.panderx.xyz (default: any)
@@ -195,11 +198,13 @@ const RANK_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Duchess', 'Duke', 'E
 const randomId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 20);
 
 // ---------- Discord ----------
+/** Shop name from settings (admin can rename the shop); SHOP is the default. */
+const shopName = async (fs) => str((await fs.get('system/settings').catch(() => null))?.shopName, 40) || SHOP;
 async function discord(fs, fetchFn, embed) {
   const secrets = await fs.get('system_private/secrets').catch(() => null);
   const url = secrets?.discordWebhook;
   if (!/^https:\/\/(discord(app)?\.com)\/api\/webhooks\//.test(String(url || ''))) return false;
-  const res = await fetchFn(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: SHOP, embeds: [{ color: 0x00e5ff, timestamp: new Date().toISOString(), ...embed }] }) });
+  const res = await fetchFn(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: await shopName(fs), embeds: [{ color: 0x00e5ff, timestamp: new Date().toISOString(), ...embed }] }) });
   return res.ok;
 }
 const money = (x) => num(x).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -222,6 +227,39 @@ async function checkSlip({ fetchFn, key, receiver, payload, amount, now }) {
   return { ok: true, transRef: String(s.transRef) };
 }
 
+/** ByShop (https://byshop.me/api/check_slip): form POST { keyapi, qrcode_text }. Answers { status: 1, check_slip: 1 if the slip was used before, amount, slip_time, receiver: { acc_no (masked), bank_code }, sender } or { status != 1, massage_th }.
+ *  A network / non-JSON answer throws, so the caller treats it as "checker down" like EasySlip. */
+const bangkokMs = (s) => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(String(s)) ? String(s) : String(s).trim().replace(' ', 'T') + '+07:00');
+/** Shop account vs the (usually masked, e.g. xxx-x-x1234-x) account number on the slip: same length = every visible digit equal; otherwise every visible run of 3+ digits is inside the shop number and at least 4 digits show. A name in RECEIVER_MATCH is matched against the whole receiver object. */
+function receiverMatches(rcv, match) {
+  if (norm(JSON.stringify(rcv)).includes(norm(match))) return true;
+  const shop = String(match).replace(/\D/g, ''), shown = String(rcv?.acc_no ?? '').replace(/[\s-]/g, '');
+  if (shop.length < 6 || !shown) return false;
+  if (shown.length === shop.length) return [...shown].every((c, i) => !/\d/.test(c) || c === shop[i]) && (shown.match(/\d/g) || []).length >= 4;
+  const runs = shown.match(/\d{3,}/g) || [];
+  return runs.join('').length >= 4 && runs.every(r => shop.includes(r));
+}
+async function checkSlipByshop({ fetchFn, key, bank, receiver, payload, amount, now }) {
+  const res = await fetchFn('https://byshop.me/api/check_slip', { method: 'POST', body: new URLSearchParams({ keyapi: key, qrcode_text: payload }) });
+  const d = await res.json().catch(() => null);
+  if (!res.ok || !d) throw new Error(`byshop ${res.status}`);
+  if (Number(d.status) !== 1) return { ok: false, message: str(d.massage_th || d.message_th || d.message) || 'ตรวจสลิปไม่ผ่าน' };
+  if (Number(d.check_slip) === 1) return { ok: false, message: 'สลิปนี้ถูกใช้แล้ว' };
+  const got = Number(String(d.amount).replace(/,/g, ''));
+  if (!Number.isFinite(got) || Math.round(got * 100) !== Math.round(amount * 100)) return { ok: false, message: 'ยอดในสลิปไม่ตรงกับที่ระบุ' };
+  if (bank && String(d.receiver?.bank_code) !== String(bank)) return { ok: false, message: 'บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของร้าน' };
+  if (!receiverMatches(d.receiver, receiver)) return { ok: false, message: 'บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของร้าน' };
+  const at = bangkokMs(d.slip_time);
+  if (!Number.isFinite(at)) return { ok: false, message: 'อ่านเวลาในสลิปไม่ได้' };
+  if (now - at > MAX_SLIP_AGE_MS) return { ok: false, message: 'สลิปเก่าเกินไป' };
+  // ByShop returns no bank reference: the SHA-256 of the QR text (stable per slip) is the one-time key in slip_refs
+  const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload)))].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+  return { ok: true, transRef: 'bs_' + h };
+}
+const byshop = (env) => env.SLIP_PROVIDER === 'byshop';
+const slipKey = (env) => (byshop(env) ? env.BYSHOP_KEY : env.EASYSLIP_KEY);
+const verifySlip = (env, a) => (byshop(env) ? checkSlipByshop({ ...a, key: env.BYSHOP_KEY, bank: env.RECEIVER_BANK }) : checkSlip({ ...a, key: env.EASYSLIP_KEY }));
+
 export async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   const amount = Number(data.amount);
   const payload = String(data.payload || '');
@@ -231,7 +269,7 @@ export async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   const buy = data.purpose === 'buy' ? (data.buy || {}) : null;
   if (buy) { const bad = validateBuy(buy); if (bad) return [{ error: bad }, 400]; }
   const settings = await fs.get('system/settings');
-  if (!(settings && settings.slipAutoVerify === true) || !env.EASYSLIP_KEY || !env.RECEIVER_MATCH) return [{ status: 'rejected', message: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาติดต่อแอดมิน' }];
+  if (!(settings && settings.slipAutoVerify === true) || !slipKey(env) || !env.RECEIVER_MATCH) return [{ status: 'rejected', message: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ กรุณาติดต่อแอดมิน' }];
 
   const profile = await fs.get(`users/${user.uid}`);
   if (profile?.status === 'suspended') return [{ status: 'rejected', message: 'บัญชีนี้ถูกระงับการใช้งาน' }];
@@ -240,7 +278,7 @@ export async function routeSlip({ user, data, fs, env, fetchFn, now, later }) {
   await fs.commit([{ update: { name: fs.name(`slip_attempts/${user.uid}`), fields: fs.fields({ at: now }) } }]);
 
   let check;
-  try { check = await checkSlip({ fetchFn, key: env.EASYSLIP_KEY, receiver: env.RECEIVER_MATCH, payload, amount, now }); }
+  try { check = await verifySlip(env, { fetchFn, receiver: env.RECEIVER_MATCH, payload, amount, now }); }
   catch (e) {
     console.warn('slip api:', e);
     if (buy) return [{ status: 'rejected', message: 'ระบบตรวจสลิปขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่' }];
@@ -315,8 +353,15 @@ async function buyOnce({ user, d, fs, now, combo = 0, override = 0 }) {
     const mode = modes.find(m => m.key === d.farmMode) || (modes.length ? modes[0] : null);
     const rate = override > 0 ? override : mode ? num(mode.price) : isService ? (num(product.serviceRate) || num(product.price)) : num(product.price);
     if (!(rate > 0)) return [{ error: 'สินค้านี้ยังไม่ได้ตั้งราคา' }, 400];
-    const self = isService && mode?.key === 'self';
-    if (isService) {
+    // game top-up (product.topup): a queued service where the buyer gives only a Player ID (checked against product.topupRegex); the team tops up by hand
+    const topup = isService && product.topup === true;
+    const self = isService && (topup || mode?.key === 'self');
+    if (topup) {
+      const pid = str(d.buyerContact);
+      let ok = pid.length >= 3;
+      if (ok && product.topupRegex) { try { ok = new RegExp(String(product.topupRegex).slice(0, 200)).test(pid); } catch (_) { /* bad pattern set by the admin: length check only */ } }
+      if (!ok) return [{ error: 'Player ID ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' }, 400];
+    } else if (isService) {
       if (str(d.buyerFacebook).length < 2) return [{ error: 'กรุณากรอกชื่อหรือลิงก์ Facebook' }, 400];
       if (self && (!str(d.buyerContact) || !str(d.playTime))) return [{ error: 'กรุณากรอกชื่อในเกมและเวลาที่พร้อม' }, 400];
       if (!self && (!str(d.gameEmail).includes('@') || !String(d.gamePassword || ''))) return [{ error: 'กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม' }, 400];
@@ -370,6 +415,7 @@ async function buyOnce({ user, d, fs, now, combo = 0, override = 0 }) {
       paymentMethod: 'wallet', paymentProof: 'เครดิตในบัญชี', userEmail: user.email, userId: user.uid,
       ...(isService ? { buyerFacebook: str(d.buyerFacebook) } : str(d.buyerEmail) ? { buyerEmail: str(d.buyerEmail) } : {}),
       ...(self ? { buyerContact: str(d.buyerContact), playTime: str(d.playTime) } : {}),
+      ...(topup ? { topup: true, game: str(product.game) } : {}),
       ...(isService && !self ? { gameEmail: str(d.gameEmail), gamePassword: String(d.gamePassword || '').slice(0, 200), buyerContact: str(d.gameEmail) } : {}),
       ...(modes.length ? { farmMode: mode.key } : {}),
       ...(bundle ? { bundleAmmo: bundle.total } : {}),
@@ -913,7 +959,7 @@ async function routeNotify({ user, data, fs, fetchFn, now }) {
   const kind = String(data.kind || '');
   if (kind === 'test') {
     if (!user.admin) return [{ error: 'เฉพาะผู้ดูแลระบบ' }, 403];
-    const ok = await discord(fs, fetchFn, { title: 'ทดสอบการแจ้งเตือน', description: `การแจ้งเตือนจาก ${SHOP} ใช้งานได้แล้ว` });
+    const ok = await discord(fs, fetchFn, { title: 'ทดสอบการแจ้งเตือน', description: `การแจ้งเตือนจาก ${await shopName(fs)} ใช้งานได้แล้ว` });
     return ok ? [{ ok: true }] : [{ error: 'ส่งไม่สำเร็จ ตรวจสอบ Discord Webhook URL ในหน้าตั้งค่า แล้วกดบันทึกก่อนทดสอบ' }, 400];
   }
   const id = String(data.id || '');
@@ -1162,7 +1208,7 @@ export async function routePushQueue({ user, data, fs, fetchFn, now }) {
   return [{ ok: true, sent }];
 }
 const routePushTest = async ({ user, fs, fetchFn, now }) => {
-  const sent = await pushTo(fs, fetchFn, user.uid, { title: 'Nugget Hub', body: 'แจ้งเตือนทำงานแล้ว 🎉', url: '/front/vault.html' }, now);
+  const sent = await pushTo(fs, fetchFn, user.uid, { title: await shopName(fs), body: 'แจ้งเตือนทำงานแล้ว 🎉', url: '/front/vault.html' }, now);
   return sent ? [{ ok: true, sent }] : [{ error: 'ไม่พบเครื่องที่เปิดแจ้งเตือน กด "เปิดแจ้งเตือนบนเครื่องนี้" ก่อน' }, 404];
 };
 
@@ -1613,11 +1659,11 @@ async function routeAmmoPay({ user, data, fs, env, fetchFn, now, later, ip }) {
 
   if (method === 'slip') {
     const settings = await fs.get('system/settings');
-    if (!(settings?.slipAutoVerify === true) || !env.EASYSLIP_KEY || !env.RECEIVER_MATCH) return [{ error: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ' }, 503];
+    if (!(settings?.slipAutoVerify === true) || !slipKey(env) || !env.RECEIVER_MATCH) return [{ error: 'ร้านยังไม่เปิดระบบตรวจสลิปอัตโนมัติ' }, 503];
     const payload = String(data.payload || '');
     if (payload.length < 20 || payload.length > 2000) return [{ error: 'ไม่พบ QR ที่อ่านได้บนสลิป' }, 400];
     let check;
-    try { check = await checkSlip({ fetchFn, key: env.EASYSLIP_KEY, receiver: env.RECEIVER_MATCH, payload, amount: q.amount, now }); }
+    try { check = await verifySlip(env, { fetchFn, receiver: env.RECEIVER_MATCH, payload, amount: q.amount, now }); }
     catch (e) { console.warn('slip api:', e); return [{ error: 'ระบบตรวจสลิปขัดข้องชั่วคราว กรุณาลองใหม่' }, 502]; }
     if (!check.ok) return [{ error: check.message }, 400];
     const lock = { update: { name: fs.name(`slip_refs/${check.transRef}`), fields: fs.fields({ uid: user?.uid || '', amount: q.amount, quoteId: qid }) }, updateTransforms: [stamp('at')], currentDocument: { exists: false } };

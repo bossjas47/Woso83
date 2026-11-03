@@ -3,7 +3,19 @@ import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/fireb
 
 /** Shared helpers for every customer page (toast, money, copy, images, store settings, worker calls). */
 
-export const SHOP_NAME = 'Nugget Hub';
+export let SHOP_NAME = 'Nugget Hub'; // live binding: set from settings.shopName (admin › ตั้งค่า › เกมในร้าน)
+/** Swap the shop name already printed on this page (title, meta tags, alt/aria text, text nodes) for the new one. Pages ship with the default name; new text rendered later reads SHOP_NAME. */
+export function applyShopName(raw) {
+  const name = String(raw || '').trim().slice(0, 40) || 'Nugget Hub', from = SHOP_NAME;
+  if (name === from) return;
+  SHOP_NAME = name;
+  try { localStorage.setItem('shop-name', name); } catch (_) { /* storage off: the name shows after settings load */ }
+  const re = (s) => s.split(from).join(name);
+  document.title = re(document.title);
+  document.querySelectorAll('meta[content], [alt], [aria-label]').forEach(e => { for (const a of ['content', 'alt', 'aria-label']) { const v = e.getAttribute(a); if (v && v.includes(from)) e.setAttribute(a, re(v)); } });
+  if (document.body) for (const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); w.nextNode();) if (w.currentNode.nodeValue.includes(from)) w.currentNode.nodeValue = re(w.currentNode.nodeValue);
+}
+try { applyShopName(localStorage.getItem('shop-name')); } catch (_) { /* first visit: default until settings arrive */ }
 export const ROOT = new URL('../', import.meta.url).href; // site root, works from / and /front/
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -120,6 +132,7 @@ export function onSettings(cb) {
     settingsStarted = true;
     onSnapshot(doc(db, 'system', 'settings'), (snap) => {
       settingsCache = snap.exists() ? snap.data() : {};
+      applyShopName(settingsCache.shopName);
       settingsSubs.forEach(f => { try { f(settingsCache); } catch (e) { console.warn(e); } });
     }, (e) => { console.warn('settings:', e); settingsCache = {}; settingsSubs.forEach(f => f(settingsCache)); });
   }

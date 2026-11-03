@@ -2,7 +2,7 @@ import { db, auth } from "../firebase-config.js";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, serverTimestamp, limit, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { loadCategories, isServiceProduct, minQtyOf, unitOf, categoryOf } from "./categories.js";
-import { esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, workerBase, callWorker, readSlipQr, fixImageUrl, sizedImage } from "./ui.js";
+import { SHOP_NAME, esc, num, baht, money, toast, icon, ICONS, onSettings, getSettings, workerBase, callWorker, readSlipQr, fixImageUrl, sizedImage } from "./ui.js";
 import { deliveryBadge, productCardHtml, isRentProduct, saleLeftHtml, dropLeftHtml, hiddenFromShop, setSales } from "./card.js";
 import { mountPromptPay, promptpayReady } from "./pay.js";
 import { evaluatePromo } from "./promo.js";
@@ -102,7 +102,7 @@ async function loadReviews() {
 function render() {
   const srv = isSrv();
   const unit = unitOf(P, CATS);
-  document.title = `${P.name} — Nugget Hub`;
+  document.title = `${P.name} — ${SHOP_NAME}`;
   $('breadcrumb-product-name').textContent = P.name;
   $('breadcrumb-category').textContent = categoryOf(CATS, P.category)?.name || (srv ? 'งานบริการ' : 'ไอดีเกม');
   $('product-title-heading').textContent = P.name;
@@ -130,14 +130,20 @@ function render() {
     + plain.map(t => `<div class="flex items-start gap-3"><span class="w-5 h-5 mt-0.5 rounded-full bg-appleBlue/10 text-appleBlue flex items-center justify-center shrink-0">${icon(ICONS.check, 'w-3 h-3', 3)}</span><span class="text-[15px]">${esc(t)}</span></div>`).join('');
   const lines = [[ICONS.queue, P.serviceHours], ...String(P.infoLines || '').split('\n').map(t => [null, t.trim()])].filter(l => l[1]);
   $('info-lines').innerHTML = lines.map(([ic, t]) => `<p class="flex gap-2 text-slate">${ic ? icon(ic, 'w-5 h-5 shrink-0', 1.8) : '<span>•</span>'}<span>${esc(t)}</span></p>`).join('');
-  $('product-howto').textContent = P.howTo || (srv ? 'จ่ายเสร็จ ทีมจะทัก Facebook ไปนัดเวลา สถานะงานดูได้ที่ "ออเดอร์ของฉัน"' : 'จ่ายด้วยเครดิต ไอดีขึ้นใน "ออเดอร์ของฉัน" ทันที ถ้าจ่ายพร้อมเพย์ ไอดีขึ้นหลังสลิปผ่าน');
+  $('product-howto').textContent = P.howTo || (P.topup === true ? 'จ่ายเสร็จ ทีมจะเติมเข้า ID ที่คุณกรอก ดูสถานะที่ "ออเดอร์ของฉัน"' : srv ? 'จ่ายเสร็จ ทีมจะทัก Facebook ไปนัดเวลา สถานะงานดูได้ที่ "ออเดอร์ของฉัน"' : 'จ่ายด้วยเครดิต ไอดีขึ้นใน "ออเดอร์ของฉัน" ทันที ถ้าจ่ายพร้อมเพย์ ไอดีขึ้นหลังสลิปผ่าน');
   $('product-warranty').textContent = P.warrantyText || 'หากมีปัญหาเกี่ยวกับสินค้า ติดต่อทีมงานพร้อมเลขที่ออเดอร์';
 
   // buyer fields: services ask Facebook instead of e-mail
   $('buyer-block').classList.toggle('hidden', !srv); // game IDs show up in "my orders": nothing to ask
   $('email-field').classList.add('hidden');
-  $('facebook-field').classList.toggle('hidden', !srv);
-  $('buyer-hint').textContent = srv ? 'ทีมงานใช้ Facebook ติดต่อเพื่อนัดเวลาทำงาน' : 'ใช้สำหรับติดต่อเรื่องไอดีที่ซื้อ ทีมงานจะไม่ขอรหัสผ่านอีเมลของคุณ';
+  $('facebook-field').classList.toggle('hidden', !srv || P.topup === true);
+  $('btn-add-cart')?.classList.toggle('hidden', P.topup === true); // the cart has no Player ID field
+  if (P.topup === true) { // game top-up: only the Player ID is asked
+    $('play-time-field').classList.add('hidden');
+    document.querySelector('label[for="buyer-contact"]').textContent = P.topupLabel || 'Player ID';
+    $('buyer-contact').placeholder = P.topupLabel || 'Player ID';
+  }
+  $('buyer-hint').textContent = P.topup === true ? 'ตรวจ Player ID ให้ถูกต้อง เติมแล้วย้อนกลับไม่ได้' : srv ? 'ทีมงานใช้ Facebook ติดต่อเพื่อนัดเวลาทำงาน' : 'ใช้สำหรับติดต่อเรื่องไอดีที่ซื้อ ทีมงานจะไม่ขอรหัสผ่านอีเมลของคุณ';
 
   qty = minQtyOf(P, CATS);
   $('order-quantity-input').value = qty;
@@ -251,8 +257,9 @@ function renderFarmModes() {
     <span class="block text-sm font-semibold">${esc(m.label)}</span><span class="block text-lg font-heading font-semibold mt-1">฿${num(m.price).toLocaleString('th-TH')}<span class="text-xs text-slate font-normal"> / ${esc(unit)}</span></span></button>`).join('');
   const srv = isSrv();
   const self = srv && modes.length && farmMode === 'self';
-  $('service-extra-fields').classList.toggle('hidden', !(srv && !self));
-  $('self-fields').classList.toggle('hidden', !self);
+  const tp = P.topup === true;
+  $('service-extra-fields').classList.toggle('hidden', !(srv && !self) || tp);
+  $('self-fields').classList.toggle('hidden', !(self || tp));
   $('farm-mode-note').textContent = farmMode === 'self' ? 'คุณล็อกอินเล่นเอง ทีมนัดเวลาแล้วชวนเข้าห้อง ไม่ต้องให้รหัส' : farmMode === 'with_id' ? 'ฝากอีเมลกับรหัสเกม ทีมล็อกอินไปจัดให้ งานเสร็จลบรหัสทิ้งทันที' : '';
 }
 function selectFarmMode(key) { farmMode = key; renderFarmModes(); renderValuePacks(); recalc(); }
@@ -435,7 +442,8 @@ function switchProductPaymentTab(m, auto = false) {
 // ---------- Cart ----------
 async function addProductToCart() {
   if (!P || submitting) return;
-  if (!user) { toast('กรุณาเข้าสู่ระบบก่อนใส่ตะกร้า', 'error'); setTimeout(() => { location.href = 'login.html?mode=login'; }, 900); return; }
+  await auth.authStateReady(); user = auth.currentUser;
+  if (!user) { toast('กรุณาเข้าสู่ระบบก่อนใส่ตะกร้า', 'error'); setTimeout(() => { location.href = `login.html?mode=login&next=${encodeURIComponent(location.pathname + location.search)}`; }, 900); return; }
   if (num(P.stock) <= 0) { toast('สินค้านี้หมดแล้ว', 'error'); return; }
   try {
     await addToCart(user.uid, { productId: P.id, quantity: qty, farmMode }, maxQty());
@@ -457,6 +465,11 @@ function collectBuyer() {
     gamePassword: $('game-password').value
   };
   const fail = (m, id) => { toast(m, 'error'); $(id)?.focus(); return null; };
+  if (P.topup === true) { // Player ID only, same pattern the Worker checks
+    let ok = b.buyerContact.length >= 3;
+    if (ok && P.topupRegex) { try { ok = new RegExp(P.topupRegex).test(b.buyerContact); } catch (_) { /* bad admin pattern: length check only */ } }
+    return ok ? { ...b, self: true, srv: true } : fail(`${P.topupLabel || 'Player ID'} ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง`, 'buyer-contact');
+  }
   if (srv && b.buyerFacebook.length < 2) return fail('กรุณากรอกชื่อหรือลิงก์ Facebook', 'buyer-facebook');
   if (srv && !self && (!b.gameEmail.includes('@') || !b.gamePassword)) return fail('กรุณากรอกอีเมลและรหัสผ่านบัญชีเกม', b.gameEmail.includes('@') ? 'game-password' : 'game-email');
   if (self && (!b.buyerContact || !b.playTime)) return fail('กรุณากรอกชื่อในเกม / UID และเวลาที่พร้อมเข้าเกม', b.buyerContact ? 'play-time' : 'buyer-contact');

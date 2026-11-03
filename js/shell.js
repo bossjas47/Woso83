@@ -68,7 +68,7 @@ function renderHeader() {
   const navItem = (key, label, href) => `<a href="${href}" class="${ACTIVE === key ? 'text-ink font-semibold' : 'text-slate hover:text-ink'} transition-colors">${label}</a>`;
   h.innerHTML = `
     <nav class="max-w-[1200px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4" aria-label="เมนูหลัก">
-      <a href="${L.home}" class="flex items-center gap-2.5 shrink-0" aria-label="${SHOP_NAME} หน้าหลัก">
+      <a href="${L.home}" class="flex items-center gap-2.5 shrink-0" aria-label="${esc(SHOP_NAME)} หน้าหลัก">
         <img src="${LOGO}" alt="" width="34" height="34" class="w-[34px] h-[34px] object-contain">
         <span class="font-heading font-bold text-[17px] tracking-tight text-ink">Nugget <span class="text-brandTeal">Hub</span></span>
       </a>
@@ -129,7 +129,7 @@ function renderFooter() {
         <div class="flex flex-wrap gap-2">${c.length ? c.map(contactBtn).join('') : '<p class="text-slate">ร้านยังไม่ได้ใส่ช่องทางติดต่อ</p>'}</div>
       </div>
     </div>
-    <div class="border-t border-hairline"><p class="max-w-[1200px] mx-auto px-4 sm:px-6 py-5 text-xs text-slate">© ${new Date().getFullYear()} ${SHOP_NAME} · การซื้อขายไอดีและไอเท็มอาจขัดต่อข้อกำหนดของผู้พัฒนาเกม</p></div>`;
+    <div class="border-t border-hairline"><p class="max-w-[1200px] mx-auto px-4 sm:px-6 py-5 text-xs text-slate">© ${new Date().getFullYear()} ${esc(SHOP_NAME)} · การซื้อขายไอดีและไอเท็มอาจขัดต่อข้อกำหนดของผู้พัฒนาเกม</p></div>`;
 }
 
 const contactBtn = (c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-gallery border border-hairline rounded-full pl-2 pr-4 py-1.5 text-sm font-medium text-ink hover:border-steel transition">

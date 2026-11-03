@@ -30,10 +30,14 @@ onAuthStateChanged(auth, (u) => {
 });
 // cards are drawn after load and again on every product update: repaint the buttons when new ones appear (childList only, so painting itself never retriggers it)
 let t = null;
-new MutationObserver(() => { clearTimeout(t); t = setTimeout(paint, 60); }).observe(document.documentElement, { childList: true, subtree: true });
+new MutationObserver((ms) => { // only when a cart button was added; timers, toasts and the spotlight rotate DOM all the time
+  if (!ms.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.matches('.card-cart') || n.querySelector('.card-cart'))))) return;
+  clearTimeout(t); t = setTimeout(paint, 60);
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 /** Cart button on product cards (card.js): one unit, no mode. Guests go to login and come back. A card already in the cart: the tap removes it. */
 window.quickAddCart = async (btn, id, qty = 1, mode = '') => {
+  await auth.authStateReady(); // before this resolves currentUser is null even for a logged-in user, and the guest redirect looked like a logout
   const u = auth.currentUser;
   if (!u) { location.href = `${ROOT}front/login.html?mode=login&next=${encodeURIComponent(location.pathname + location.search)}`; return; }
   if (btn.disabled) return;

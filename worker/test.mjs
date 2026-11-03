@@ -25,11 +25,14 @@ const PAYLOAD = '00020101021230' + '0'.repeat(30);
 const slipBody = (over = {}) => ({ success: true, data: { transRef: 'REF1', amount: { amount: 500 }, date: new Date(NOW - 3600e3).toISOString(), receiver: { bank: { short: 'SCB' }, account: { name: { th: 'นาย ร้านทดสอบ' } } }, ...over } });
 
 const twOk = (amt = '500.00') => ({ status: { code: 'SUCCESS', message: 'ok', data: { voucher: { voucher_id: 'V123', amount_baht: amt }, my_ticket: { amount_baht: amt, update_date: 1700000000000 }, owner_profile: {}, redeemer_profile: {}, tickets: [] } } });
+const bkk = (ms) => new Date(ms + 7 * 36e5).toISOString().slice(0, 19).replace('T', ' '); // slip_time as ByShop prints it: Bangkok clock, no zone
+const byshopBody = (o = {}) => ({ status: 1, check_slip: 0, amount: '500.00', slip_time: bkk(NOW - 60e3), receiver: { acc_no: 'xxx-x-x4567-x', bank_code: '004' }, sender: { name: 'นาย ทดสอบ' }, ...o });
 /** In-memory Firestore REST + the other Google / third-party endpoints the Worker calls. */
 function world(seed = {}) {
   const docs = { 'system/settings': { slipAutoVerify: true }, 'topup_promos/p500': { minAmount: 500, type: 'fixed', value: 25 }, 'topup_promos/p1000': { minAmount: 1000, type: 'percent', value: 8 }, ...structuredClone(seed) };
-  const log = { easyslip: [], commits: [], discord: [], idt: [], tw: [] };
+  const log = { easyslip: [], byshop: [], commits: [], discord: [], idt: [], tw: [] };
   let slip = slipBody();
+  let bs = null; // ByShop answer, see byshopBody()
   let tw = { status: 200, body: twOk() };
   const res = (o, status = 200) => ({ ok: status < 300, status, json: async () => o });
   const match = (d, f) => {
@@ -44,6 +47,7 @@ function world(seed = {}) {
     let body = {}; try { body = opt.body ? JSON.parse(opt.body) : {}; } catch (_) {}
     if (u.includes('/jwk/')) return res({ keys: [jwk] });
     if (u.includes('oauth2.googleapis.com')) return res({ access_token: 'AT' });
+    if (u.includes('byshop.me')) { log.byshop.push({ keyapi: opt.body.get('keyapi'), qr: opt.body.get('qrcode_text') }); return res(bs || byshopBody()); }
     if (u.includes('easyslip.com')) { log.easyslip.push({ auth: opt.headers.authorization, body }); return res(slip); }
     if (u.includes('gift.truemoney.com')) { log.tw.push({ url: u, body }); return res(tw.body, tw.status); }
     if (u.includes('discord.com/api/webhooks')) { log.discord.push(body); return res({}, 204); }
@@ -87,7 +91,7 @@ function world(seed = {}) {
     if (!(path in docs)) return res({}, 404);
     return res({ fields: encodeFields(docs[path]) });
   };
-  return { docs, log, fetchFn, setSlip: (s) => { slip = s; }, setTw: (status, body) => { tw = { status, body }; } };
+  return { docs, log, fetchFn, setSlip: (s) => { slip = s; }, setByshop: (o) => { bs = o; }, setTw: (status, body) => { tw = { status, body }; } };
 }
 const env = { SERVICE_ACCOUNT: SA, EASYSLIP_KEY: 'EK', RECEIVER_MATCH: 'ร้านทดสอบ' };
 const req = async (body = { amount: 500, payload: PAYLOAD }, token, path = '/') => new Request('https://w.test' + path, { method: 'POST', headers: { authorization: `Bearer ${token ?? await idToken()}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -136,6 +140,29 @@ for (const [seed, e] of [[{ 'system/settings': { slipAutoVerify: false } }, env]
 w = world();
 for (const body of [{ amount: 5, payload: PAYLOAD }, { amount: 500.555, payload: PAYLOAD }, { amount: 500, payload: 'x' }]) assert.strictEqual((await run(w, await req(body))).http, 400);
 console.log('ok  slip: bad amount / payload -> 400');
+
+// ByShop as the slip checker (SLIP_PROVIDER=byshop)
+const envB = { SERVICE_ACCOUNT: SA, SLIP_PROVIDER: 'byshop', BYSHOP_KEY: 'BK', RECEIVER_MATCH: '1234545670', RECEIVER_BANK: '004' };
+w = world(); r = await run(w, await req(), envB);
+assert.strictEqual(r.status, 'completed'); assert.strictEqual(w.docs['users/u1'].walletBalance, 525);
+assert.strictEqual(w.log.byshop[0].keyapi, 'BK'); assert.strictEqual(w.log.byshop[0].qr, PAYLOAD); assert.strictEqual(w.log.easyslip.length, 0);
+assert.ok(Object.keys(w.docs).some(k => /^slip_refs\/bs_[0-9a-f]{40}$/.test(k)));
+r = await run(w, await req(), envB, NOW + 20000); assert.strictEqual(r.status, 'rejected'); assert.strictEqual(w.docs['users/u1'].walletBalance, 525); // our own one-time key stops a repeat
+console.log('ok  byshop: slip accepted once, key sent as keyapi, repeat of the same QR rejected');
+for (const [label, o, msg] of [
+  ['used', { check_slip: 1 }, 'ถูกใช้แล้ว'], ['amount', { amount: '499.00' }, 'ยอด'], ['bank', { receiver: { acc_no: 'xxx-x-x4567-x', bank_code: '014' } }, 'บัญชีผู้รับ'],
+  ['account', { receiver: { acc_no: 'xxx-x-x9999-x', bank_code: '004' } }, 'บัญชีผู้รับ'], ['old', { slip_time: bkk(NOW - 3 * 864e5 - 36e5) }, 'เก่า'],
+  ['invalid', { status: 0, massage_th: 'ไม่พบข้อมูลสลิป' }, 'ไม่พบข้อมูลสลิป'], ['no time', { slip_time: 'garbage' }, 'เวลา']
+]) {
+  w = world(); w.setByshop(byshopBody(o)); r = await run(w, await req(), envB);
+  assert.strictEqual(r.status, 'rejected', label); assert.ok(String(r.message).includes(msg), label + ': ' + r.message); assert.strictEqual(w.docs['users/u1']?.walletBalance ?? 0, 0, label);
+}
+w = world(); w.setByshop(byshopBody({ slip_time: bkk(NOW - 3 * 864e5 + 36e5), receiver: { acc_no: '1234545670', bank_code: '004' } })); r = await run(w, await req(), envB);
+assert.strictEqual(r.status, 'completed'); // 1 h inside the age limit (Bangkok clock read as +07:00) and an unmasked account number
+console.log('ok  byshop: used / wrong amount / bank / account / too old / invalid / bad time rejected; unmasked account and Bangkok clock accepted');
+w = world(); r = await run(w, await req(), { ...envB, BYSHOP_KEY: '' }); assert.strictEqual(r.status, 'rejected'); assert.strictEqual(w.log.byshop.length, 0);
+{ const w2 = world(); const down = await handle(await req(), envB, { fetchFn: (u, o) => String(u).includes('byshop') ? Promise.reject(new Error('down')) : w2.fetchFn(u, o), now: NOW, ctx: { waitUntil() {} } }); assert.strictEqual((await down.json()).status, 'queued'); }
+console.log('ok  byshop: no key -> not enabled; checker down -> queued for manual approval');
 
 // ======================= POST /buy =======================
 const shop = (extra = {}) => ({
@@ -197,6 +224,16 @@ assert.strictEqual(w.docs['products/srv1'].stock, 80); assert.strictEqual(w.docs
 console.log('ok  buy: service paid, queued (waiting), password kept for the job but not echoed back, sale counted at finish');
 assert.strictEqual((await run(w, await srv({ quantity: 10 }))).http, 400);
 assert.strictEqual((await run(w, await srv({ buyerFacebook: '' }))).http, 400); console.log('ok  buy: service below minimum / without Facebook -> 400');
+
+// game top-up: a queued service where only the Player ID is asked, checked against topupRegex
+const tu = (body) => req({ productId: 'tu1', quantity: 1, buyerContact: '123456789', ...body }, undefined, '/buy');
+w = world(shop({ 'products/tu1': { name: 'ROV 100 คูปอง', price: 100, stock: 99999, category: 'c_srv', productType: 'service', serviceMin: 1, topup: true, game: 'rov', topupRegex: '^[0-9]{6,12}$' } }));
+r = await run(w, await tu({ expectedAmount: 100 }));
+assert.strictEqual(r.status, 'processing');
+const to = Object.entries(w.docs).find(([k]) => k.startsWith('orders/'))[1];
+assert.strictEqual(to.buyerContact, '123456789'); assert.strictEqual(to.topup, true); assert.strictEqual(to.game, 'rov'); assert.strictEqual(w.docs['users/u1'].walletBalance, 900);
+assert.strictEqual((await run(w, await tu({ buyerContact: 'abc' }))).http, 400); assert.strictEqual((await run(w, await tu({ buyerContact: '' }))).http, 400);
+console.log('ok  buy: top-up needs only a valid Player ID (no Facebook / password), queued with game + Player ID');
 
 // ======================= POST /admin/user =======================
 w = world();

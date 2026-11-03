@@ -878,11 +878,19 @@
             <div id="sp-rows" class="space-y-2"></div>
           </div>
 
+          <div class="apple-card p-6 space-y-3">
+            <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">ชื่อร้านและเกมในร้าน</h3><button type="button" onclick="saveGames()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึก</button></div>
+            <div><label class="block text-[11px] text-slate mb-1" for="shop-name">ชื่อร้าน (เว้นว่าง = Nugget Hub)</label><input id="shop-name" type="text" maxlength="40" placeholder="Nugget Hub" class="w-full apple-input px-3.5 py-2 text-xs"></div>
+            <p class="text-[11px] text-slate -mt-1">1 บรรทัดต่อ 1 เกม รูปแบบ <code>รหัส|ชื่อเกม</code> เช่น <code>ab|Arena Breakout</code> เกมแรกคือเกมของสินค้าเดิมทุกชิ้น ตั้งแต่ 2 เกมขึ้นไป หน้าร้านจะมีแถบเลือกเกม แล้วเลือกเกมให้สินค้าในหน้าแก้สินค้า</p>
+            <textarea id="games-list" rows="4" maxlength="1500" placeholder="ab|Arena Breakout&#10;rov|ROV&#10;ff|Free Fire&#10;df|Delta Force" class="w-full apple-input p-3 text-xs font-mono"></textarea>
+          </div>
+
           <div class="apple-card p-6 space-y-4">
             <div class="flex items-center justify-between gap-3"><h3 class="font-display font-semibold text-base">เทศกาลพิเศษ: Shadow System</h3><button type="button" onclick="saveFestival()" class="apple-pricing-pill px-4 py-1.5 text-xs">บันทึกเทศกาล</button></div>
             <p class="text-[11px] text-slate -mt-2">ประกายสีน้ำเงิน-ม่วงลอยขึ้นทุกหน้า และหน้าต่างแจ้งเตือนแบบ System ครั้งแรกที่ลูกค้าเข้าเว็บ · หยุดเองเมื่อแท็บไม่ได้เปิดดู และปิดให้คนที่ตั้งลดการเคลื่อนไหว</p>
             <label class="flex items-center gap-2 text-sm"><input id="fx-on" type="checkbox"> เปิดเทศกาล</label>
             <div class="grid sm:grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-slate mb-1" for="fx-theme">ธีมอนุภาค</label><select id="fx-theme" class="w-full apple-input px-3.5 py-2 text-xs"><option value="">ประกายน้ำเงิน (ค่าเดิม)</option><option value="halloween">ฮาโลวีน 🎃🦇👻</option></select></div>
               <div><label class="block text-[11px] text-slate mb-1" for="fx-density">ความหนาแน่นประกาย</label><select id="fx-density" class="w-full apple-input px-3.5 py-2 text-xs"><option value="low">น้อย</option><option value="mid">กลาง</option><option value="high">มาก</option></select></div>
               <div><label class="block text-[11px] text-slate mb-1" for="fx-until">ปิดอัตโนมัติเมื่อ (ไม่บังคับ)</label><input id="fx-until" type="datetime-local" class="w-full apple-input px-3.5 py-2 text-xs"></div>
             </div>
@@ -976,6 +984,8 @@
           </div>
         </div>
 
+        <div id="stock-cost-box"><label class="block text-xs font-medium text-ink mb-1.5" for="stock-cost">ต้นทุนต่อไอดี ฿ (ไม่บังคับ · ใช้กับทุกไอดีที่วางรอบนี้)</label><input id="stock-cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="เช่น 35" class="w-full apple-input px-3.5 py-2.5 text-xs"><p class="text-[11px] text-slate mt-1.5">ระบบถัวเฉลี่ยเข้าต้นทุนของสินค้า (ใช้คำนวณกำไรในหน้ากำไร) และจดไว้ที่ไอดีแต่ละตัว</p></div>
+
         <button
           id="btn-confirm-add-stock"
           onclick="submitBulkStockImport()"
@@ -999,6 +1009,7 @@
           <button type="button" id="stock-del-picked" onclick="deleteStockPicked()" disabled class="apple-explore-pill px-3 py-1.5 text-red-500 border-red-200">ลบที่เลือก (0)</button>
           <button type="button" onclick="clearStockAll()" class="apple-explore-pill px-3 py-1.5 text-red-500 border-red-200">เคลียร์สต็อกทั้งหมด</button>
         </div>
+        <div id="stock-dist" class="hidden rounded-2xl bg-mist px-3 py-2.5 text-[11px] text-slate leading-relaxed"></div>
         <div class="max-h-56 overflow-y-auto rounded-2xl border border-hairline bg-mist divide-y divide-hairline">
           <table class="w-full text-left text-xs font-mono">
             <tbody id="stock-items-list-body">
@@ -1373,6 +1384,13 @@
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-variant-group">กลุ่มตัวเลือก (สินค้าที่ใส่ชื่อกลุ่มเดียวกันจะมีปุ่มสลับในหน้าสินค้า):</label><input id="prod-variant-group" type="text" maxlength="40" placeholder="เช่น ไอดีไก่ชุด A" class="w-full apple-input px-3 py-2 text-xs"></div>
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-variant-label">ชื่อบนปุ่มตัวเลือก:</label><input id="prod-variant-label" type="text" maxlength="24" placeholder="เช่น เลเวล 40" class="w-full apple-input px-3 py-2 text-xs"></div>
+          </div>
+          <div id="game-fields" class="grid grid-cols-2 gap-3">
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-game">เกมของสินค้านี้:</label><select id="prod-game" class="w-full apple-input px-3 py-2 text-xs"></select></div>
+            <div class="flex items-end"><label class="flex items-center gap-2 text-xs"><input id="prod-topup" type="checkbox" class="w-4 h-4"> สินค้าเติมเกม (กรอก Player ID)</label></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-topup-label">ชื่อช่องกรอกของลูกค้า:</label><input id="prod-topup-label" type="text" maxlength="40" placeholder="Player ID" class="w-full apple-input px-3 py-2 text-xs"></div>
+            <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-topup-regex">รูปแบบที่ยอมรับ (regex ไม่บังคับ):</label><input id="prod-topup-regex" type="text" maxlength="100" placeholder="^[0-9]{6,12}$" class="w-full apple-input px-3 py-2 text-xs font-mono"></div>
+            <p class="col-span-2 text-[10px] text-steel">เติมเกม: ใช้ได้กับสินค้าในหมวดบริการ ลูกค้ากรอกแค่ Player ID (ไม่ถามรหัสผ่านหรือ Facebook) ออเดอร์เข้าคิวให้ทีมเติมเอง ตั้ง "ขั้นต่ำ" เป็น 1 (ไม่งั้นใช้ค่าขั้นต่ำของหมวด) และ "ความจุ" ให้สูง เช่น 99999 เพราะระบบหักทีละออเดอร์</p>
           </div>
           <div id="bundle-fields" class="grid grid-cols-2 gap-3">
             <div><label class="block text-[11px] font-medium text-slate mb-1" for="prod-bundle-id">แถมไก่กระสุนจากสินค้า:</label><select id="prod-bundle-id" class="w-full apple-input px-3 py-2 text-xs"></select></div>

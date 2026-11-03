@@ -1,7 +1,7 @@
 import { db, auth } from "../firebase-config.js";
 import { collection, doc, getDoc, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { esc, num, money, toast, callWorker, openModal, closeModal, onSettings, timeAgo, tsDate } from "./ui.js";
+import { SHOP_NAME, esc, num, money, toast, callWorker, openModal, closeModal, onSettings, timeAgo, tsDate } from "./ui.js";
 import { GAMES, playGame, sfx, confetti, icon } from "./minigame.js";
 
 const MIN_COUNT = 1, MAX_COUNT = 10, QUICK = [1, 2, 3, 5, 10];
@@ -97,7 +97,7 @@ function renderBoxes() {
   const b = list.find(x => x.id === FOCUS);
   show($('box-head'), !b);
   if (b) {
-    document.title = `${b.name} — Nugget Hub`;
+    document.title = `${b.name} — ${SHOP_NAME}`;
     const others = list.filter(x => x.id !== b.id);
     wrap.innerHTML = `${GIFT && GIFT.boxId === b.id && giftLeft(GIFT) ? `<div class="bx-gift"><span>🎁 <b>${esc(GIFT.fromName || 'เพื่อน')}</b> ส่งตั๋วเปิดกล่อง <b>${esc(GIFT.boxName)}</b> ให้คุณ ${giftLeft(GIFT)} ใบ</span><button type="button" class="bx-pill" data-giftopen="${esc(GIFT.id)}">เปิดเลย</button></div>` : ''}<section class="bx-hero">
         <div class="bx-hero-art">${artHtml(b)}</div>
@@ -115,7 +115,7 @@ function renderBoxes() {
     refreshBuy();
     return;
   }
-  document.title = 'กล่องสุ่ม — Nugget Hub';
+  document.title = `กล่องสุ่ม — ${SHOP_NAME}`;
   if (!list.length) { wrap.innerHTML = '<div class="text-center text-slate py-16">ตอนนี้ยังไม่มีกล่องให้เปิด เดี๋ยวแอดมินเติมของ แวะมาใหม่นะ</div>'; return; }
   wrap.innerHTML = `<div class="bx-others">${list.map(o => `<a class="bx-mini" href="?id=${encodeURIComponent(o.id)}"><span class="bx-mini-art">${artHtml(o)}</span><span class="font-semibold">${esc(o.name)}</span><span class="text-sm text-slate">฿${money(o.price, 0)} · ${(o.prizes || []).length} รางวัล</span></a>`).join('')}</div>`;
 }

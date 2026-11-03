@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { watchCategories, catVisible, KIND_LABEL, categoryOf, isServiceProduct, minQtyOf, unitOf } from "./categories.js";
-import { esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
+import { applyShopName, esc, num, money, toast, fmtDate, openModal, closeModal, compressImage, maskName } from "./ui.js";
 import { rankTable, rankOf, rankBadge, rankIcon, titleBadge, TITLE_COLORS } from "./rank.js";
 import { ammoRateOf } from "./ammo-rate.js";
 import { dragSort } from "./back/dragsort.js";
@@ -173,7 +173,7 @@ function startListeners() {
   if (ADMIN) onSnapshot(query(collection(db, 'reviews'), where('status', '==', 'pending'), limit(50)), (s) => { REVIEWS_P = s.docs.map(d => ({ id: d.id, ...d.data() })); renderReviewsDash(); }, warn('รีวิว'));
   if (ADMIN) onSnapshot(query(collection(db, 'ammo_claims'), where('status', '==', 'open')), (s) => { ACLAIMS = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDashboard(); }, warn('รายการเคลม'));
   onSnapshot(doc(db, 'stats', 'public'), (s) => { STATS = s.exists() ? s.data() : {}; renderStatHints(); });
-  onSnapshot(doc(db, 'system', 'settings'), (s) => { const first = !Object.keys(SETTINGS).length; SETTINGS = s.exists() ? s.data() : {}; if (first) loadAdminSettings(); });
+  onSnapshot(doc(db, 'system', 'settings'), (s) => { const first = !Object.keys(SETTINGS).length; SETTINGS = s.exists() ? s.data() : {}; applyShopName(SETTINGS.shopName); if (first) loadAdminSettings(); });
   onSnapshot(doc(db, 'system', 'promptpay_qr'), (s) => { const img = s.exists() ? s.data().image : ''; $('qr-preview').src = img || SETTINGS.promptpayQrUrl || ''; $('qr-preview').classList.toggle('hidden', !(img || SETTINGS.promptpayQrUrl)); $('qr-preview-empty').classList.toggle('hidden', !!(img || SETTINGS.promptpayQrUrl)); });
   if (!can('pay') && can('orders')) onSnapshot(query(collection(db, 'orders'), where('productType', '==', 'service')), (s) => { ORDERS = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); renderAdminOrders(); }, warn('ออเดอร์'));
 }
@@ -362,6 +362,7 @@ function ammoPreview() {
 }
 function openProductModal(productId = null) {
   fillProductCategorySelect();
+  $('prod-game').innerHTML = (SETTINGS.games || []).map(g => `<option value="${adminEsc(g.key)}">${adminEsc(g.name)}</option>`).join('') || '<option value="">(ยังไม่ได้ตั้งเกม)</option>';
   $('prod-bundle-id').innerHTML = '<option value="">— ไม่แถม —</option>' + PRODUCTS.filter(x => x.isAmmo === true).map(x => `<option value="${adminEsc(x.id)}">${adminEsc(x.name)}</option>`).join('');
   const p = productId ? PRODUCTS.find(x => x.id === productId) : null;
   $('product-crud-form').reset(); $('spec-fields').innerHTML = ''; // boxes from the previous product must not leak into this one
@@ -392,6 +393,7 @@ function openProductModal(productId = null) {
     set('prod-variant-group', p.variantGroup); set('prod-variant-label', p.variantLabel);
     set('prod-drop-at', msToLocal(p.dropAt)); set('prod-cost', p.cost); set('prod-hide-at', msToLocal(p.hideAt)); $('prod-unlisted').checked = p.unlisted === true;
     set('prod-bundle-id', p.bundleAmmoId); set('prod-bundle-n', p.bundleAmmo);
+    set('prod-game', p.game); $('prod-topup').checked = p.topup === true; set('prod-topup-label', p.topupLabel); set('prod-topup-regex', p.topupRegex);
     $('prod-type').value = isServiceProduct(p, CATS) ? 'service' : 'account';
   } else {
     $('prod-stock').value = 0;
@@ -489,6 +491,8 @@ async function handleProductFormSubmit(e) {
     hideAt: localToMs($('prod-hide-at').value) > Date.now() ? localToMs($('prod-hide-at').value) : deleteField(),
     unlisted: $('prod-unlisted').checked || deleteField(),
     dropAt: !isSrv && localToMs($('prod-drop-at')?.value) > Date.now() ? localToMs($('prod-drop-at').value) : deleteField(),
+    game: $('prod-game').value || deleteField(),
+    topup: isSrv && $('prod-topup').checked ? true : deleteField(), topupLabel: isSrv && $('prod-topup').checked && $('prod-topup-label').value.trim() ? $('prod-topup-label').value.trim() : deleteField(), topupRegex: isSrv && $('prod-topup').checked && $('prod-topup-regex').value.trim() ? $('prod-topup-regex').value.trim() : deleteField(),
     bundleAmmoId: bundleOn ? $('prod-bundle-id').value : deleteField(), bundleAmmo: bundleOn ? bundleN : deleteField(),
     // service: free number (capacity). ID product: never typed, counted from stock_items (new = 0, edit = untouched)
     ...(isSrv ? { stock: Math.max(0, parseInt($('prod-stock').value, 10) || 0) } : editId ? {} : { stock: 0 }),
@@ -532,8 +536,13 @@ function openStockModalQuick() { const p = PRODUCTS.find(x => !isServiceProduct(
 let SHELF = { at: 0, byPid: new Map() }, STOCK_ITEMS = [];
 let currentStockProductId = null, parsedStockItems = [], stockExisting = new Set(), stockOther = new Map(); // usernames already on the shelf (available / reserved) of the open product
 const stockIsAmmo = () => PRODUCTS.find(x => x.id === currentStockProductId)?.isAmmo === true;
+let SOLD = { n: -1, set: new Set() }; // usernames already delivered in any order (needs the orders list, i.e. the pay permission)
+const soldNames = () => {
+  if (SOLD.n !== ORDERS.length) SOLD = { n: ORDERS.length, set: new Set(ORDERS.flatMap(o => (Array.isArray(o.accountsDelivered) ? o.accountsDelivered : []).map(x => String(x?.username || '').toLowerCase())).filter(Boolean)) };
+  return SOLD.set;
+};
 function parseStockLines(text, ammo = stockIsAmmo()) {
-  const items = [], seen = new Set(); let dup = false, bad = 0, inDb = 0, inOther = 0;
+  const items = [], seen = new Set(); let dup = false, bad = 0, inDb = 0, inOther = 0, inSold = 0;
   text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
     let u, p, a = 0;
     if (ammo) { // email|pass|ammo (also ":" or spaces between the three parts)
@@ -548,15 +557,16 @@ function parseStockLines(text, ammo = stockIsAmmo()) {
     if (seen.has(u.toLowerCase())) { dup = true; return; }
     if (stockExisting.has(u.toLowerCase())) { inDb++; return; }
     if (stockOther.has(u.toLowerCase())) { inOther++; return; }
+    if (soldNames().has(u.toLowerCase())) { inSold++; return; }
     seen.add(u.toLowerCase()); items.push(ammo ? { username: u, password: p, ammo: a } : { username: u, password: p });
   });
-  return { items, hasDuplicates: dup, bad, inDb, inOther };
+  return { items, hasDuplicates: dup, bad, inDb, inOther, inSold };
 }
 function handleStockTextareaInput(val) {
-  const { items, hasDuplicates, bad, inDb, inOther } = parseStockLines(val);
+  const { items, hasDuplicates, bad, inDb, inOther, inSold } = parseStockLines(val);
   parsedStockItems = items;
   const ammo = items.reduce((t, it) => t + (it.ammo || 0), 0);
-  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดอ่านไม่ได้ (ข้าม)` : ''}${inDb ? ` · ${inDb} ไอดีซ้ำกับในคลัง (ข้าม)` : ''}${inOther ? ` · ${inOther} ไอดีซ้ำกับสินค้าอื่น (ข้าม)` : ''}`;
+  $('stock-parsed-counter').textContent = `ตรวจพบ: ${items.length} รายการพร้อมนำเข้า${stockIsAmmo() ? ` · รวม ${ammo.toLocaleString('th-TH')} กอง` : ''}${bad ? ` · ${bad} บรรทัดอ่านไม่ได้ (ข้าม)` : ''}${inDb ? ` · ${inDb} ไอดีซ้ำกับในคลัง (ข้าม)` : ''}${inOther ? ` · ${inOther} ไอดีซ้ำกับสินค้าอื่น (ข้าม)` : ''}${inSold ? ` · ${inSold} ไอดีเคยขายแล้ว (ข้าม)` : ''}`;
   $('btn-add-stock-label').textContent = `บันทึกและนำเข้าสต็อก (${items.length} ชิ้น)`;
   $('stock-duplicate-warning').classList.toggle('hidden', !hasDuplicates);
 }
@@ -596,6 +606,7 @@ async function fixStockAll() {
   } catch (e) { console.warn(e); triggerToast('ซ่อมไม่สำเร็จ', 'error'); }
 }
 function openStockModal(id) {
+  $('stock-cost-box').classList.toggle('hidden', !can('profit')); $('stock-cost').value = '';
   currentStockProductId = id; stockExisting = new Set(); stockOther = new Map(); STOCK_ITEMS = []; $('stock-search').value = '';
   $('bulk-stock-textarea').value = ''; handleStockTextareaInput('');
   const p = PRODUCTS.find(x => x.id === id);
@@ -608,15 +619,21 @@ function closeStockModal() { $('stock-management-modal').classList.add('hidden')
 async function submitBulkStockImport() {
   if (!currentStockProductId || !parsedStockItems.length) return triggerToast('กรุณาวางรายการไอดีอย่างน้อย 1 บรรทัด', 'error');
   const btn = $('btn-confirm-add-stock'); btn.disabled = true;
+  const cost = can('profit') ? Math.max(0, Math.round(num($('stock-cost').value) * 100) / 100) : 0; // ฿ per ID, same for the whole paste
+  const p0 = PRODUCTS.find(x => x.id === currentStockProductId), have = Math.max(0, num(p0?.stock)), oldCost = num(p0?.cost); // read before the writes: the live list updates stock a moment later
   try {
     const prodRef = doc(db, 'products', currentStockProductId);
     for (let i = 0; i < parsedStockItems.length; i += 400) {
       const chunk = parsedStockItems.slice(i, i + 400);
       const batch = writeBatch(db);
-      chunk.forEach(it => batch.set(doc(collection(prodRef, 'stock_items')), { username: it.username, password: it.password, ...(it.ammo ? { ammo: it.ammo } : {}), status: 'available', addedAt: serverTimestamp(), addedBy: me?.uid || '' }));
+      chunk.forEach(it => batch.set(doc(collection(prodRef, 'stock_items')), { username: it.username, password: it.password, ...(it.ammo ? { ammo: it.ammo } : {}), ...(cost > 0 ? { cost } : {}), status: 'available', addedAt: serverTimestamp(), addedBy: me?.uid || '' }));
       // ammo products count stock in กอง (sum of ammo), other ID products in IDs
       batch.update(prodRef, { stock: increment(chunk.reduce((t, it) => t + (it.ammo || 1), 0)) });
       await batch.commit();
+    }
+    if (cost > 0) { // moving average: product.cost (฿ per unit, per กอง for ammo) is what the profit card and monthly report use
+      const added = parsedStockItems.reduce((t, it) => t + (it.ammo || 1), 0), unit = cost * parsedStockItems.length / added;
+      await updateDoc(prodRef, { cost: Math.round((oldCost > 0 && have > 0 ? (oldCost * have + unit * added) / (have + added) : unit) * 100) / 100 });
     }
     SHELF.at = 0; audit('นำเข้าสต็อก', PRODUCTS.find(x => x.id === currentStockProductId)?.name || currentStockProductId, `${parsedStockItems.length} ไอดี`);
     triggerToast(`นำเข้าไอดี ${parsedStockItems.length} รายการแล้ว`, 'success');
@@ -650,9 +667,10 @@ function renderStockList() {
   const rows = STOCK_ITEMS.filter(it => !q || String(it.username).toLowerCase().includes(q));
   const held = (it) => it.status === 'reserved' && num(it.reservedUntil) > Date.now();
   $('stock-items-list-body').innerHTML = rows.map((it, i) => `<tr><td class="py-2.5 px-3 w-8">${held(it) ? '' : `<input type="checkbox" class="stock-pick" value="${adminEsc(it.id)}" onchange="syncStockPick()" aria-label="เลือก ${adminEsc(it.username)}">`}</td><td class="py-2.5 px-3 font-semibold select-all">${adminEsc(it.username)}${ammo ? ` <span class="text-slate font-normal">· ${num(it.ammo)} กอง${held(it) ? ' · <span class="text-launchOrange">ลูกค้ากำลังจ่าย</span>' : ''}</span>` : ''}</td><td class="py-2.5 px-3 text-slate">••••••••</td>
-    <td class="py-2.5 px-3 text-right"><button onclick='deleteSingleStockItem(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))}, ${ammo ? num(it.ammo) : 1})' class="text-red-500 text-[11px] hover:underline">ลบออก</button></td></tr>`).join('');
+    <td class="py-2.5 px-3 text-right whitespace-nowrap">${ammo && !held(it) ? `<button onclick='editStockAmmo(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))})' class="text-appleBlue text-[11px] hover:underline mr-2">แก้กอง</button>` : ''}<button onclick='deleteSingleStockItem(${adminEsc(JSON.stringify(id))}, ${adminEsc(JSON.stringify(it.id))}, ${ammo ? num(it.ammo) : 1})' class="text-red-500 text-[11px] hover:underline">ลบออก</button></td></tr>`).join('');
   $('stock-items-empty').classList.toggle('hidden', rows.length > 0);
   $('stock-pick-all').checked = false; syncStockPick();
+  renderAmmoDist();
 }
 const stockPicks = () => [...document.querySelectorAll('#stock-items-list-body .stock-pick:checked')].map(c => c.value);
 function syncStockPick() { const n = stockPicks().length; $('stock-del-picked').textContent = `ลบที่เลือก (${n})`; $('stock-del-picked').disabled = !n; }
@@ -679,6 +697,36 @@ function clearStockAll() {
   if (!rows.length) return triggerToast('ไม่มีไอดีให้เคลียร์', 'error');
   if ((prompt(`เคลียร์สต็อกทั้งหมดของ "${name}" (${rows.length} ไอดี) ย้อนกลับไม่ได้\nพิมพ์คำว่า เคลียร์ เพื่อยืนยัน`) || '').trim() !== 'เคลียร์') return;
   removeStockRows(rows, 'เคลียร์สต็อกทั้งหมด');
+}
+/** Change how many กอง one ID holds (typo, or part of it was used); the product's stock moves by the difference. */
+async function editStockAmmo(pid, itemId) {
+  const it = STOCK_ITEMS.find(x => x.id === itemId); if (!it) return;
+  const v = Math.floor(num(prompt(`จำนวนกองของ ${it.username} (ตอนนี้ ${num(it.ammo)})`, num(it.ammo))));
+  if (!(v > 0) || v === num(it.ammo) || v > 999999) return;
+  try {
+    const b = writeBatch(db);
+    b.update(doc(db, 'products', pid, 'stock_items', itemId), { ammo: v });
+    b.update(doc(db, 'products', pid), { stock: increment(v - num(it.ammo)) });
+    await b.commit();
+    SHELF.at = 0; audit('แก้จำนวนกองของไอดี', PRODUCTS.find(x => x.id === pid)?.name || pid, `${it.username}: ${num(it.ammo)} → ${v}`);
+    triggerToast('แก้จำนวนกองแล้ว', 'success'); loadAvailableStockItems(pid);
+  } catch (e) { console.warn(e); triggerToast('แก้ไม่สำเร็จ', 'error'); }
+}
+/** Ammo products: how many IDs hold each กอง size, and which common order sizes cannot be matched exactly from the free IDs (reserved ones left out). */
+function renderAmmoDist() {
+  const box = $('stock-dist'); if (!box) return;
+  const p = PRODUCTS.find(x => x.id === currentStockProductId), free = STOCK_ITEMS.filter(it => it.status === 'available' && num(it.ammo) > 0).map(it => Math.floor(num(it.ammo)));
+  box.classList.toggle('hidden', !stockIsAmmo() || !free.length);
+  if (box.classList.contains('hidden')) return;
+  const sizes = new Map(); free.forEach(n => sizes.set(n, (sizes.get(n) || 0) + 1));
+  const total = free.reduce((t, n) => t + n, 0), cap = Math.min(total, 20000);
+  const reach = new Uint8Array(cap + 1); reach[0] = 1; // subset sums of the free IDs (cap keeps it fast; shortcut: ignores the per-order ID limit)
+  for (const n of free) for (let s = cap; s >= n; s--) if (reach[s - n]) reach[s] = 1;
+  const tiers = (Array.isArray(p?.ammoTiers) ? p.ammoTiers : []).map(t => num(t.min));
+  const targets = [...new Set([50, 100, 200, 500, 1000, ...tiers])].filter(t => t > 0 && t <= total).sort((a, b) => a - b);
+  const miss = targets.filter(t => t <= cap && !reach[t]).map(t => { let d = 1; while (!((t - d > 0 && reach[t - d]) || reach[t + d]) && d < cap) d++; return `${t.toLocaleString('th-TH')} (ใกล้สุด ${(t - d > 0 && reach[t - d] ? t - d : t + d).toLocaleString('th-TH')})`; });
+  box.innerHTML = `<p class="font-semibold text-ink mb-1">ไอดีว่างแยกตามขนาด</p><p>${[...sizes].sort((a, b) => b[0] - a[0]).map(([n, c]) => `${n.toLocaleString('th-TH')} กอง × ${c}`).join(' · ')}</p>`
+    + (miss.length ? `<p class="text-launchOrange mt-1.5">สั่งยอดนี้แล้วจะไม่ตรง: ${miss.join(', ')} · ควรหาไอดีขนาดอื่นมาเติม</p>` : `<p class="text-[#0a7a3b] mt-1.5">ยอดสั่งยอดนิยม (${targets.join(', ')}) จับคู่ตรงได้ทั้งหมด</p>`);
 }
 async function deleteSingleStockItem(pid, itemId, n = 1) {
   if (!confirm('นำไอดีนี้ออกจากคลัง?')) return;
@@ -959,7 +1007,7 @@ function renderAdminOrders() {
       ${at === undefined ? '' : `<ol class="ord-steps">${steps.map((s, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><i></i>${s}</li>`).join('')}</ol>`}
       <dl class="ord-grid">
         ${cell('ผู้ซื้อ', buyer)}${cell('Facebook', o.buyerFacebook && sel(o.buyerFacebook))}${cell('อีเมล', o.buyerEmail && sel(o.buyerEmail))}
-        ${cell('ชื่อในเกม', o.buyerContact && !o.gameEmail && adminEsc(o.buyerContact))}${cell('เวลาพร้อมเล่น', o.playTime && adminEsc(o.playTime))}${cell('ชำระผ่าน', pay)}
+        ${cell(o.topup ? 'Player ID' : 'ชื่อในเกม', o.buyerContact && !o.gameEmail && adminEsc(o.buyerContact))}${cell('เกม', o.topup && o.game && adminEsc((SETTINGS.games || []).find(g => g.key === o.game)?.name || o.game))}${cell('เวลาพร้อมเล่น', o.playTime && adminEsc(o.playTime))}${cell('ชำระผ่าน', pay)}
       </dl>
       ${o.gameEmail ? `<div class="ord-box"><span>ล็อกอินเกม</span><code class="select-all">${adminEsc(o.gameEmail)}</code><code class="select-all">${adminEsc(o.gamePassword || '(ลบแล้ว)')}</code></div>` : ''}
       ${o.paymentProof && o.paymentMethod === 'truemoney' ? `<div class="ord-box"><span>ซองอั่งเปา</span><a class="text-appleBlue select-all break-all" href="${adminEsc(o.paymentProof)}" target="_blank" rel="noopener">${adminEsc(o.paymentProof)}</a></div>` : ''}
@@ -1555,7 +1603,9 @@ async function loadAdminSettings() {
   renderStatHints();
   renderSpotlightRows(d);
   const fx = d.festival || {};
-  $('fx-on').checked = fx.on === true; $('fx-density').value = fx.density || 'mid';
+  $('shop-name').value = d.shopName || '';
+  $('games-list').value = (d.games || []).map(g => `${g.key}|${g.name}`).join('\n');
+  $('fx-on').checked = fx.on === true; $('fx-density').value = fx.density || 'mid'; $('fx-theme').value = fx.theme || '';
   set('fx-msg', fx.msg); set('fx-link', fx.link);
   $('fx-until').value = fx.until ? new Date(fx.until - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
 }
@@ -1578,11 +1628,24 @@ async function saveSpotlight() {
   try { await setDoc(doc(db, 'system', 'settings'), { spotlight, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกสินค้าแนะนำแล้ว', 'success'); }
   catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
+async function saveGames() {
+  const games = [], seen = new Set();
+  for (const line of $('games-list').value.split('\n')) {
+    const [k, ...n] = line.split('|'), key = (k || '').trim().toLowerCase(), name = n.join('|').trim().slice(0, 40);
+    if (!key && !name) continue;
+    if (!/^[a-z0-9_-]{1,20}$/.test(key) || !name) return triggerToast(`บรรทัดนี้ผิดรูปแบบ: ${line.slice(0, 30)} (รหัสใช้ a-z 0-9 - _ เท่านั้น)`, 'error');
+    if (seen.has(key)) return triggerToast(`รหัสซ้ำ: ${key}`, 'error');
+    seen.add(key); games.push({ key, name });
+  }
+  const shopName = $('shop-name').value.trim().slice(0, 40);
+  try { await setDoc(doc(db, 'system', 'settings'), { games, shopName: shopName || deleteField(), updatedAt: serverTimestamp() }, { merge: true }); audit('ตั้งค่าชื่อร้าน/เกม', shopName, games.map(g => g.name).join(', ')); triggerToast('บันทึกแล้ว', 'success'); }
+  catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
+}
 async function saveFestival() {
   const until = $('fx-until').value ? new Date($('fx-until').value).getTime() : 0;
   const link = $('fx-link').value.trim();
   if (link && safeHref(link) === '#') return triggerToast('ลิงก์ใช้ไม่ได้ ใส่หน้าในเว็บหรือ https://', 'error');
-  const festival = { on: $('fx-on').checked, density: ['low', 'mid', 'high'].includes($('fx-density').value) ? $('fx-density').value : 'mid', msg: $('fx-msg').value.trim().slice(0, 120), link: link.slice(0, 300), until, v: Date.now() };
+  const festival = { on: $('fx-on').checked, density: ['low', 'mid', 'high'].includes($('fx-density').value) ? $('fx-density').value : 'mid', theme: $('fx-theme').value === 'halloween' ? 'halloween' : '', msg: $('fx-msg').value.trim().slice(0, 120), link: link.slice(0, 300), until, v: Date.now() };
   try { await setDoc(doc(db, 'system', 'settings'), { festival, updatedAt: serverTimestamp() }, { merge: true }); triggerToast('บันทึกเทศกาลแล้ว', 'success'); }
   catch (e) { console.warn(e); triggerToast('บันทึกไม่สำเร็จ', 'error'); }
 }
@@ -1683,11 +1746,11 @@ Object.assign(window, {
   parseCsv, duplicateProduct, copyProductLink, exportProductsCsv, importProductsCsv,
   createAuction, removeAuction,
   renderWinback, sendWinback,
-  saveSpotlight, saveFestival,
+  saveSpotlight, saveFestival, saveGames,
   saveHomeQuick,
   renderDashboard, applyTypeUi, setRentalFilter, closeRental, renderAdminRentals,
   handlePinSetupSubmit, handlePinUnlockSubmit, promptResetPin, lockAdminSession, switchAdminTab,
-  openStockModal, closeStockModal, handleStockTextareaInput, submitBulkStockImport, deleteSingleStockItem, openStockModalQuick,
+  editStockAmmo, openStockModal, closeStockModal, handleStockTextareaInput, submitBulkStockImport, deleteSingleStockItem, openStockModalQuick,
   moderateReview, ammoPreview, openProductModal, closeProductModal, handleProductFormSubmit, deleteAdminProduct, setProductType, setKoenLabelPreset, setImagePreset,
   updateImagePreview, filterAdminProducts, toggleFeatured, handleCategoryChange, updateServiceSummary, syncServiceRateToPrice, setServiceUnitPreset,
   applyServiceTemplate, editCategory, resetCategoryForm, toggleCategoryKind, handleCategorySubmit, deleteCategory,

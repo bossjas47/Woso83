@@ -5,6 +5,7 @@ import { loadCategories, isServiceProduct, minQtyOf, unitOf } from "./categories
 import { esc, num, baht, money, toast, callWorker, imgAttrs, workerBase, getSettings } from "./ui.js";
 import { rankDiscount } from "./rank.js";
 import { saveCart } from "./cart-store.js";
+import { ammoRateOf } from "./ammo-rate.js";
 
 /** Cart page: game IDs and services, paid with credit through the Worker (/cart). Buyer details are asked here, never stored in the cart. */
 const FALLBACK = 'https://placehold.co/800x600/f5f5f7/86868b?text=Nugget+Hub';
@@ -19,12 +20,13 @@ const comboOn = () => { const l = items.map(it => info(it)).filter(d => d && !d.
 function info(it) {
   const p = PRODUCTS[it.productId];
   if (!p) return null;
+  if (p.isAmmo) { const rate = ammoRateOf(p, it.quantity); return { p, ammo: true, srv: false, mode: null, rate, min: Math.max(1, Math.floor(num(p.ammoMin)) || 1), max: Math.max(0, Math.floor(num(p.stock))), unit: 'กอง', out: num(p.stock) <= 0, total: Math.round(it.quantity * rate * 100) / 100 }; }
   const srv = isServiceProduct(p, CATS), mode = (p.farmModes || []).find(m => m.key === it.farmMode) || (srv ? (p.farmModes || [])[0] : null) || null; // no mode saved: the first one, same as the Worker
   const rate = mode ? num(mode.price) : srv ? (num(p.serviceRate) || num(p.price)) : num(p.price);
   const min = srv ? minQtyOf(p, CATS) : 1, max = srv ? 99999 : Math.max(0, Math.floor(num(p.stock)));
   return { p, srv, mode, rate, min, max, unit: unitOf(p, CATS), self: srv && mode?.key === 'self', out: num(p.stock) <= 0, total: lineTotal(Math.round(it.quantity * rate * 100) / 100) };
 }
-const live = () => items.map((it, i) => ({ it, i, d: info(it) })).filter(x => x.d && !x.d.out);
+const live = () => items.map((it, i) => ({ it, i, d: info(it) })).filter(x => x.d && !x.d.out && !x.d.ammo); // ammo is not paid here: it needs a 15-minute ID hold on the product page
 
 function render() {
   const el = root(); if (!el || !ready) return;
@@ -40,8 +42,8 @@ function render() {
     return `<article class="apple-card p-4 ${d.out ? 'opacity-60' : ''}">
       <div class="flex gap-3"><img ${imgAttrs(d.p.image || FALLBACK, 160, 160)} alt="" class="w-20 h-20 rounded-2xl object-cover bg-mist shrink-0">
         <div class="min-w-0 flex-1"><h2 class="text-[15px] font-semibold leading-snug line-clamp-2">${esc(d.p.name)}</h2>
-          ${(d.p.farmModes || []).length > 1 ? `<select onchange="cartMode(${i}, this.value)" aria-label="รูปแบบบริการ" class="apple-input px-2 py-1 text-xs mt-1">${d.p.farmModes.map(m => `<option value="${esc(m.key)}" ${m.key === d.mode?.key ? 'selected' : ''}>${esc(m.label)} · ${baht(m.price)}</option>`).join('')}</select>` : ''}<p class="text-xs text-slate mt-0.5">${esc((d.p.farmModes || []).length > 1 ? '' : d.mode ? d.mode.label + ' · ' : '')}${baht(d.rate)}${d.srv ? ' / ' + esc(d.unit) : ''}</p>
-          ${d.out ? '<p class="text-xs text-launchOrange mt-1">สินค้าหมด (ไม่รวมในยอด)</p>' : `<div class="flex items-center justify-between mt-2"><div class="flex items-center bg-mist rounded-full p-0.5"><button onclick="cartQty(${i},-1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="ลด">−</button><span class="w-10 text-center font-semibold">${it.quantity}</span><button onclick="cartQty(${i},1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="เพิ่ม">+</button></div><p class="font-heading font-semibold">${baht(d.total)}</p></div>`}
+          ${(d.p.farmModes || []).length > 1 ? `<select onchange="cartMode(${i}, this.value)" aria-label="รูปแบบบริการ" class="apple-input px-2 py-1 text-xs mt-1">${d.p.farmModes.map(m => `<option value="${esc(m.key)}" ${m.key === d.mode?.key ? 'selected' : ''}>${esc(m.label)} · ${baht(m.price)}</option>`).join('')}</select>` : ''}<p class="text-xs text-slate mt-0.5">${esc((d.p.farmModes || []).length > 1 ? '' : d.mode ? d.mode.label + ' · ' : '')}${baht(d.rate)}${d.srv || d.ammo ? ' / ' + esc(d.unit) : ''}</p>
+          ${d.out ? '<p class="text-xs text-launchOrange mt-1">สินค้าหมด (ไม่รวมในยอด)</p>' : `<div class="flex items-center justify-between mt-2"><div class="flex items-center bg-mist rounded-full p-0.5"><button onclick="cartQty(${i},-1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="ลด">−</button><span class="w-10 text-center font-semibold">${it.quantity}</span><button onclick="cartQty(${i},1)" class="w-9 h-9 rounded-full text-xl leading-none" aria-label="เพิ่ม">+</button></div><p class="font-heading font-semibold">${baht(d.total)}${d.ammo ? '<span class="text-xs text-slate font-normal"> / ' + d.unit + '</span>' : ''}</p></div>${d.ammo ? `<a href="product.html?id=${encodeURIComponent(it.productId)}&qty=${it.quantity}" class="apple-pricing-pill mt-2 h-10 text-[14px] font-semibold">ไปจับคู่ไอดีและชำระ ${it.quantity.toLocaleString('th-TH')} กอง</a>` : ''}`}
         </div><button onclick="cartRemove(${i})" aria-label="ลบ" class="self-start text-slate text-xl leading-none px-1">×</button></div>
       ${!d.out && d.srv ? (d.self ? `<div class="grid gap-2 mt-3"><input data-k="${esc(key(it))}" data-f="contact" value="${esc(f.contact || '')}" maxlength="200" placeholder="ชื่อในเกม / UID" class="apple-input px-4 py-2.5 text-sm"><input data-k="${esc(key(it))}" data-f="time" value="${esc(f.time || '')}" maxlength="200" placeholder="เวลาที่พร้อมเข้าเกม" class="apple-input px-4 py-2.5 text-sm"></div>`
         : `<div class="grid gap-2 mt-3"><input data-k="${esc(key(it))}" data-f="email" value="${esc(f.email || '')}" maxlength="200" placeholder="อีเมลบัญชีเกม" autocomplete="off" class="apple-input px-4 py-2.5 text-sm"><input data-k="${esc(key(it))}" data-f="password" type="password" value="${esc(f.password || '')}" maxlength="200" placeholder="รหัสผ่านบัญชีเกม" autocomplete="off" class="apple-input px-4 py-2.5 text-sm"></div>`) : ''}
@@ -56,7 +58,7 @@ function render() {
 const persist = () => saveCart(user.uid, items).catch(e => { console.warn('cart save:', e); toast('บันทึกตะกร้าไม่สำเร็จ', 'error'); });
 function cartQty(i, d) {
   const it = items[i], x = info(it); if (!x) return;
-  it.quantity = Math.min(x.max || 1, Math.max(x.min, it.quantity + d));
+  it.quantity = Math.min(x.max || 1, Math.max(x.min, it.quantity + d * (x.ammo ? 10 : 1)));
   render(); persist();
 }
 /** Switch the play mode of a line; if the cart already has that product in the new mode the two lines merge. */
